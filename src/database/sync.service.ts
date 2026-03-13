@@ -6,6 +6,10 @@ type LocalPendingStockItemRow = {
   name: string;
   unit: string;
   min_quantity: number;
+  current_stock_quantity: number | null;
+  category: string | null;
+  is_deleted: number;
+  deleted_at: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -15,6 +19,10 @@ type LocalPendingDailyEntryRow = {
   remote_item_id: string;
   date: string;
   quantity: number;
+  movement_type: string | null;
+  stock_after_quantity: number | null;
+  is_deleted: number;
+  deleted_at: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -30,6 +38,10 @@ type RemoteStockItem = {
   name: string;
   unit: string;
   min_quantity: number;
+  current_stock_quantity: number | null;
+  category: string | null;
+  is_deleted: boolean;
+  deleted_at: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -39,6 +51,10 @@ type RemoteDailyEntry = {
   item_id: string;
   date: string;
   quantity: number;
+  movement_type: string | null;
+  stock_after_quantity: number | null;
+  is_deleted: boolean;
+  deleted_at: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -203,6 +219,10 @@ async function pushPendingStockItems(db: SQLiteDatabase): Promise<void> {
         name,
         unit,
         min_quantity,
+        current_stock_quantity,
+        category,
+        is_deleted,
+        deleted_at,
         created_at,
         updated_at
       FROM stock_items
@@ -222,6 +242,10 @@ async function pushPendingStockItems(db: SQLiteDatabase): Promise<void> {
       name: row.name,
       unit: row.unit,
       min_quantity: row.min_quantity,
+      current_stock_quantity: row.current_stock_quantity,
+      category: row.category,
+      is_deleted: row.is_deleted === 1,
+      deleted_at: row.deleted_at ? normalizeTimestamp(row.deleted_at) : null,
       created_at: normalizeTimestamp(row.created_at),
       updated_at: normalizeTimestamp(row.updated_at),
     })),
@@ -241,6 +265,10 @@ async function pushPendingDailyEntries(db: SQLiteDatabase): Promise<void> {
         stock_items.remote_id AS remote_item_id,
         daily_stock_entries.date AS date,
         daily_stock_entries.quantity AS quantity,
+        daily_stock_entries.movement_type AS movement_type,
+        daily_stock_entries.stock_after_quantity AS stock_after_quantity,
+        daily_stock_entries.is_deleted AS is_deleted,
+        daily_stock_entries.deleted_at AS deleted_at,
         daily_stock_entries.created_at AS created_at,
         daily_stock_entries.updated_at AS updated_at
       FROM daily_stock_entries
@@ -261,6 +289,10 @@ async function pushPendingDailyEntries(db: SQLiteDatabase): Promise<void> {
       item_id: row.remote_item_id,
       date: row.date,
       quantity: row.quantity,
+      movement_type: row.movement_type,
+      stock_after_quantity: row.stock_after_quantity,
+      is_deleted: row.is_deleted === 1,
+      deleted_at: row.deleted_at ? normalizeTimestamp(row.deleted_at) : null,
       created_at: normalizeTimestamp(row.created_at),
       updated_at: normalizeTimestamp(row.updated_at),
     })),
@@ -290,22 +322,30 @@ async function mergeRemoteStockItems(db: SQLiteDatabase, remoteItems: RemoteStoc
           `
             INSERT INTO stock_items (
               remote_id,
-              sync_status,
-              name,
-              unit,
-              min_quantity,
-              created_at,
-              updated_at
-            )
-            VALUES (?, 'synced', ?, ?, ?, ?, ?);
-          `,
-          remoteItem.id,
-          remoteItem.name,
-          remoteItem.unit,
-          remoteItem.min_quantity,
-          remoteItem.created_at,
-          remoteItem.updated_at,
-        );
+            sync_status,
+            name,
+            unit,
+            min_quantity,
+            current_stock_quantity,
+            category,
+            is_deleted,
+            deleted_at,
+            created_at,
+            updated_at
+          )
+          VALUES (?, 'synced', ?, ?, ?, ?, ?, ?, ?, ?, ?);
+        `,
+        remoteItem.id,
+        remoteItem.name,
+        remoteItem.unit,
+        remoteItem.min_quantity,
+        remoteItem.current_stock_quantity,
+        remoteItem.category,
+        remoteItem.is_deleted ? 1 : 0,
+        remoteItem.deleted_at,
+        remoteItem.created_at,
+        remoteItem.updated_at,
+      );
         continue;
       }
 
@@ -323,6 +363,10 @@ async function mergeRemoteStockItems(db: SQLiteDatabase, remoteItems: RemoteStoc
             name = ?,
             unit = ?,
             min_quantity = ?,
+            current_stock_quantity = ?,
+            category = ?,
+            is_deleted = ?,
+            deleted_at = ?,
             created_at = ?,
             updated_at = ?,
             sync_status = 'synced'
@@ -331,6 +375,10 @@ async function mergeRemoteStockItems(db: SQLiteDatabase, remoteItems: RemoteStoc
         remoteItem.name,
         remoteItem.unit,
         remoteItem.min_quantity,
+        remoteItem.current_stock_quantity,
+        remoteItem.category,
+        remoteItem.is_deleted ? 1 : 0,
+        remoteItem.deleted_at,
         remoteItem.created_at,
         remoteItem.updated_at,
         local.id,
@@ -375,15 +423,23 @@ async function mergeRemoteDailyEntries(db: SQLiteDatabase, remoteEntries: Remote
               sync_status,
               date,
               quantity,
+              movement_type,
+              stock_after_quantity,
+              is_deleted,
+              deleted_at,
               created_at,
               updated_at
             )
-            VALUES (?, ?, 'synced', ?, ?, ?, ?);
+            VALUES (?, ?, 'synced', ?, ?, ?, ?, ?, ?, ?, ?);
           `,
           localItem.id,
           remoteEntry.id,
           remoteEntry.date,
           remoteEntry.quantity,
+          remoteEntry.movement_type,
+          remoteEntry.stock_after_quantity,
+          remoteEntry.is_deleted ? 1 : 0,
+          remoteEntry.deleted_at,
           remoteEntry.created_at,
           remoteEntry.updated_at,
         );
@@ -404,6 +460,10 @@ async function mergeRemoteDailyEntries(db: SQLiteDatabase, remoteEntries: Remote
             item_id = ?,
             date = ?,
             quantity = ?,
+            movement_type = ?,
+            stock_after_quantity = ?,
+            is_deleted = ?,
+            deleted_at = ?,
             created_at = ?,
             updated_at = ?,
             sync_status = 'synced'
@@ -412,6 +472,10 @@ async function mergeRemoteDailyEntries(db: SQLiteDatabase, remoteEntries: Remote
         localItem.id,
         remoteEntry.date,
         remoteEntry.quantity,
+        remoteEntry.movement_type,
+        remoteEntry.stock_after_quantity,
+        remoteEntry.is_deleted ? 1 : 0,
+        remoteEntry.deleted_at,
         remoteEntry.created_at,
         remoteEntry.updated_at,
         local.id,
@@ -435,12 +499,12 @@ async function performSync(): Promise<boolean> {
     await pushPendingDailyEntries(db);
 
     const remoteItems = await fetchRemote<RemoteStockItem[]>(
-      '/stock_items?select=id,name,unit,min_quantity,created_at,updated_at&order=updated_at.asc',
+      '/stock_items?select=id,name,unit,min_quantity,current_stock_quantity,category,is_deleted,deleted_at,created_at,updated_at&order=updated_at.asc',
     );
     await mergeRemoteStockItems(db, remoteItems);
 
     const remoteEntries = await fetchRemote<RemoteDailyEntry[]>(
-      '/daily_stock_entries?select=id,item_id,date,quantity,created_at,updated_at&order=updated_at.asc',
+      '/daily_stock_entries?select=id,item_id,date,quantity,movement_type,stock_after_quantity,is_deleted,deleted_at,created_at,updated_at&order=updated_at.asc',
     );
     await mergeRemoteDailyEntries(db, remoteEntries);
 

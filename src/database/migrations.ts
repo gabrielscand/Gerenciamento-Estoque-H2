@@ -1,6 +1,6 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 
-const SCHEMA_VERSION = 2;
+const SCHEMA_VERSION = 6;
 
 async function applySchemaV1(db: SQLiteDatabase): Promise<void> {
   await db.execAsync(`
@@ -139,6 +139,110 @@ async function applySchemaV2(db: SQLiteDatabase): Promise<void> {
   `);
 }
 
+async function applySchemaV3(db: SQLiteDatabase): Promise<void> {
+  await db.execAsync(`
+    ALTER TABLE stock_items ADD COLUMN is_deleted INTEGER NOT NULL DEFAULT 0;
+  `).catch(() => {});
+  await db.execAsync(`
+    ALTER TABLE stock_items ADD COLUMN deleted_at TEXT;
+  `).catch(() => {});
+
+  await db.execAsync(`
+    UPDATE stock_items
+    SET
+      is_deleted = COALESCE(is_deleted, 0),
+      deleted_at = CASE
+        WHEN is_deleted = 0 THEN NULL
+        ELSE deleted_at
+      END
+    WHERE is_deleted IS NULL OR (is_deleted = 0 AND deleted_at IS NOT NULL);
+  `);
+
+  await db.execAsync(
+    'CREATE INDEX IF NOT EXISTS idx_stock_items_is_deleted ON stock_items(is_deleted);',
+  );
+}
+
+async function applySchemaV4(db: SQLiteDatabase): Promise<void> {
+  await db.execAsync(`
+    ALTER TABLE stock_items ADD COLUMN category TEXT;
+  `).catch(() => {});
+
+  await db.execAsync(`
+    UPDATE stock_items
+    SET category = NULL
+    WHERE category IS NOT NULL AND TRIM(category) = '';
+  `);
+
+  await db.execAsync(
+    'CREATE INDEX IF NOT EXISTS idx_stock_items_category ON stock_items(category);',
+  );
+}
+
+async function applySchemaV5(db: SQLiteDatabase): Promise<void> {
+  await db.execAsync(`
+    ALTER TABLE daily_stock_entries ADD COLUMN is_deleted INTEGER NOT NULL DEFAULT 0;
+  `).catch(() => {});
+  await db.execAsync(`
+    ALTER TABLE daily_stock_entries ADD COLUMN deleted_at TEXT;
+  `).catch(() => {});
+
+  await db.execAsync(`
+    UPDATE daily_stock_entries
+    SET
+      is_deleted = COALESCE(is_deleted, 0),
+      deleted_at = CASE
+        WHEN is_deleted = 0 THEN NULL
+        ELSE deleted_at
+      END
+    WHERE is_deleted IS NULL OR (is_deleted = 0 AND deleted_at IS NOT NULL);
+  `);
+
+  await db.execAsync(
+    'CREATE INDEX IF NOT EXISTS idx_daily_stock_entries_is_deleted ON daily_stock_entries(is_deleted);',
+  );
+}
+
+async function applySchemaV6(db: SQLiteDatabase): Promise<void> {
+  await db.execAsync(`
+    ALTER TABLE stock_items ADD COLUMN current_stock_quantity REAL;
+  `).catch(() => {});
+
+  await db.execAsync(`
+    ALTER TABLE daily_stock_entries ADD COLUMN movement_type TEXT;
+  `).catch(() => {});
+  await db.execAsync(`
+    ALTER TABLE daily_stock_entries ADD COLUMN stock_after_quantity REAL;
+  `).catch(() => {});
+
+  await db.execAsync(`
+    UPDATE daily_stock_entries
+    SET
+      movement_type = COALESCE(NULLIF(TRIM(movement_type), ''), 'legacy_snapshot'),
+      stock_after_quantity = COALESCE(stock_after_quantity, quantity)
+    WHERE movement_type IS NULL
+      OR TRIM(movement_type) = ''
+      OR stock_after_quantity IS NULL;
+  `);
+
+  await db.execAsync(`
+    UPDATE stock_items
+    SET current_stock_quantity = (
+      SELECT daily_stock_entries.stock_after_quantity
+      FROM daily_stock_entries
+      WHERE daily_stock_entries.item_id = stock_items.id
+        AND COALESCE(daily_stock_entries.is_deleted, 0) = 0
+      ORDER BY daily_stock_entries.date DESC, daily_stock_entries.updated_at DESC, daily_stock_entries.id DESC
+      LIMIT 1
+    )
+    WHERE current_stock_quantity IS NULL;
+  `);
+
+  await db.execAsync(
+    'CREATE INDEX IF NOT EXISTS idx_daily_stock_entries_movement_type ON daily_stock_entries(movement_type);',
+  );
+}
+
 export async function applyMigrations(db: SQLiteDatabase): Promise<void> {
   const row = await db.getFirstAsync<{ user_version: number }>('PRAGMA user_version;');
   const currentVersion = row?.user_version ?? 0;
@@ -154,6 +258,22 @@ export async function applyMigrations(db: SQLiteDatabase): Promise<void> {
 
     if (currentVersion < 2) {
       await applySchemaV2(db);
+    }
+
+    if (currentVersion < 3) {
+      await applySchemaV3(db);
+    }
+
+    if (currentVersion < 4) {
+      await applySchemaV4(db);
+    }
+
+    if (currentVersion < 5) {
+      await applySchemaV5(db);
+    }
+
+    if (currentVersion < 6) {
+      await applySchemaV6(db);
     }
 
     await db.execAsync(`PRAGMA user_version = ${SCHEMA_VERSION};`);

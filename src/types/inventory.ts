@@ -1,8 +1,12 @@
+import type { StockCategory } from '../constants/categories';
+
 export interface StockItem {
   id: number;
   name: string;
   unit: string;
   minQuantity: number;
+  category: StockCategory | null;
+  currentStockQuantity: number | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -11,12 +15,14 @@ export interface CreateStockItemInput {
   name: string;
   unit: string;
   minQuantity: number;
+  category: StockCategory;
 }
 
 export interface UpdateStockItemInput {
   name: string;
   unit: string;
   minQuantity: number;
+  category: StockCategory;
 }
 
 export interface StockItemListRow {
@@ -24,6 +30,8 @@ export interface StockItemListRow {
   name: string;
   unit: string;
   minQuantity: number;
+  category: StockCategory | null;
+  currentStockQuantity: number | null;
 }
 
 export interface DailyInspectionItem {
@@ -31,6 +39,8 @@ export interface DailyInspectionItem {
   name: string;
   unit: string;
   minQuantity: number;
+  category: StockCategory | null;
+  currentStockQuantity: number | null;
   currentQuantity: number | null;
 }
 
@@ -40,13 +50,17 @@ export interface DailyCountUpdateInput {
 }
 
 export interface DailyHistoryEntry {
+  date: string;
   itemId: number;
   name: string;
   unit: string;
   quantity: number;
   minQuantity: number;
+  movementType: 'initial' | 'consumption' | 'legacy_snapshot';
+  stockAfterQuantity: number | null;
   needsPurchase: boolean;
   missingQuantity: number;
+  itemDeleted: boolean;
 }
 
 export interface DailyHistoryGroup {
@@ -66,6 +80,7 @@ export interface PeriodHistoryEntry {
   name: string;
   unit: string;
   totalMissingQuantity: number;
+  consumedQuantityTotal: number;
   countedDays: number;
 }
 
@@ -80,7 +95,19 @@ export interface PeriodHistoryGroup {
   countedEntries: number;
   itemsToBuyCount: number;
   totalMissingQuantity: number;
+  totalConsumedQuantity: number;
   entries: PeriodHistoryEntry[];
+}
+
+export interface StockCurrentOverviewRow {
+  id: number;
+  name: string;
+  unit: string;
+  minQuantity: number;
+  category: StockCategory | null;
+  currentStockQuantity: number | null;
+  needsPurchase: boolean;
+  missingQuantity: number;
 }
 
 export interface DailyStockEntry {

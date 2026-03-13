@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -11,6 +11,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import { STOCK_CATEGORIES, getCategoryLabel, type StockCategory } from '../constants/categories';
 import { listDailyInspectionItems, saveDailyInspection } from '../database/items.repository';
 import { syncAppData } from '../database/sync.service';
 import { SyncStatusCard } from '../components/SyncStatusCard';
@@ -25,6 +26,11 @@ import { DateField } from '../components/DateField';
 
 type QuantityFormMap = Record<string, string>;
 type QuantityErrorMap = Record<string, string>;
+const TOAST_DURATION_MS = 2800;
+const FILTER_ALL = '__all__';
+const FILTER_UNCATEGORIZED = '__uncategorized__';
+
+type CategoryFilterValue = typeof FILTER_ALL | typeof FILTER_UNCATEGORIZED | StockCategory;
 
 function parseDecimalInput(value: string): number | null {
   const normalized = value.trim().replace(',', '.');
@@ -53,21 +59,111 @@ function formatQuantity(value: number): string {
   });
 }
 
+type CategoryFilterSelectProps = {
+  value: CategoryFilterValue;
+  onChange: (nextValue: CategoryFilterValue) => void;
+  isOpen: boolean;
+  onToggle: () => void;
+  onClose: () => void;
+};
+
+function getFilterLabel(value: CategoryFilterValue): string {
+  if (value === FILTER_ALL) {
+    return 'Todas as categorias';
+  }
+
+  if (value === FILTER_UNCATEGORIZED) {
+    return 'Sem categoria';
+  }
+
+  return getCategoryLabel(value);
+}
+
+function CategoryFilterSelect({
+  value,
+  onChange,
+  isOpen,
+  onToggle,
+  onClose,
+}: CategoryFilterSelectProps) {
+  const options: CategoryFilterValue[] = [FILTER_ALL, ...STOCK_CATEGORIES, FILTER_UNCATEGORIZED];
+
+  return (
+    <View style={styles.filterSelectRoot}>
+      <Pressable style={styles.filterSelectTrigger} onPress={onToggle}>
+        <Text style={styles.filterSelectText}>{getFilterLabel(value)}</Text>
+        <Text style={styles.filterSelectArrow}>{isOpen ? '^' : 'v'}</Text>
+      </Pressable>
+
+      {isOpen ? (
+        <View style={styles.filterSelectMenu}>
+          {options.map((option) => {
+            const isSelected = value === option;
+
+            return (
+              <Pressable
+                key={option}
+                style={[styles.filterSelectOption, isSelected ? styles.filterSelectOptionActive : undefined]}
+                onPress={() => {
+                  onChange(option);
+                  onClose();
+                }}
+              >
+                <Text
+                  style={[
+                    styles.filterSelectOptionText,
+                    isSelected ? styles.filterSelectOptionTextActive : undefined,
+                  ]}
+                >
+                  {getFilterLabel(option)}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
 export function DailyScreen() {
   const [selectedDate, setSelectedDate] = useState(getTodayLocalDateString());
   const [selectedDateError, setSelectedDateError] = useState('');
   const [items, setItems] = useState<DailyInspectionItem[]>([]);
+  const [categoryFilter, setCategoryFilter] = useState<CategoryFilterValue>(FILTER_ALL);
+  const [isCategoryFilterOpen, setIsCategoryFilterOpen] = useState(false);
   const [quantities, setQuantities] = useState<QuantityFormMap>({});
   const [fieldErrors, setFieldErrors] = useState<QuantityErrorMap>({});
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [submitError, setSubmitError] = useState('');
-  const [successMessage, setSuccessMessage] = useState('');
+  const [toastMessage, setToastMessage] = useState('');
+  const [isToastVisible, setIsToastVisible] = useState(false);
+  const toastTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  function clearToastTimer() {
+    if (!toastTimeoutRef.current) {
+      return;
+    }
+
+    clearTimeout(toastTimeoutRef.current);
+    toastTimeoutRef.current = null;
+  }
+
+  function showSuccessToast(message: string) {
+    clearToastTimer();
+    setToastMessage(message);
+    setIsToastVisible(true);
+
+    toastTimeoutRef.current = setTimeout(() => {
+      setIsToastVisible(false);
+      toastTimeoutRef.current = null;
+    }, TOAST_DURATION_MS);
+  }
 
   async function loadInspectionItems(date: string, syncFirst: boolean = false) {
     setIsLoading(true);
     setSubmitError('');
-    setSuccessMessage('');
 
     if (!isValidDateString(date)) {
       setItems([]);
@@ -106,40 +202,82 @@ export function DailyScreen() {
     void loadInspectionItems(selectedDate);
   }, [selectedDate]);
 
+  useEffect(() => {
+    return () => {
+      clearToastTimer();
+    };
+  }, []);
+
+  const filteredItems = useMemo(() => {
+    return items.filter((item) => {
+      if (categoryFilter === FILTER_ALL) {
+        return true;
+      }
+
+      if (categoryFilter === FILTER_UNCATEGORIZED) {
+        return item.category === null;
+      }
+
+      return item.category === categoryFilter;
+    });
+  }, [items, categoryFilter]);
+
   const summary = useMemo(() => {
     let needPurchase = 0;
     let okCount = 0;
     let totalMissingQuantity = 0;
+    let evaluatedItems = 0;
 
-    for (const item of items) {
+    for (const item of filteredItems) {
       const parsed = parseDecimalInput(quantities[String(item.id)] ?? '');
-      if (parsed === null) {
+      const currentStock = item.currentStockQuantity;
+      const hasInitialStock = currentStock !== null;
+
+      if (parsed !== null && parsed < 0) {
         continue;
       }
 
-      if (parsed < item.minQuantity) {
+      if (hasInitialStock && currentStock !== null && parsed !== null && parsed > currentStock) {
+        continue;
+      }
+
+      const projectedStock =
+        parsed === null
+          ? currentStock
+          : hasInitialStock && currentStock !== null
+            ? currentStock - parsed
+            : parsed;
+
+      if (projectedStock === null) {
+        continue;
+      }
+
+      evaluatedItems += 1;
+
+      if (projectedStock <= item.minQuantity) {
         needPurchase += 1;
-        totalMissingQuantity += item.minQuantity - parsed;
+        if (projectedStock < item.minQuantity) {
+          totalMissingQuantity += item.minQuantity - projectedStock;
+        }
       } else {
         okCount += 1;
       }
     }
 
-    return { needPurchase, okCount, countedItems: needPurchase + okCount, totalMissingQuantity };
-  }, [items, quantities]);
+    return { needPurchase, okCount, countedItems: evaluatedItems, totalMissingQuantity };
+  }, [filteredItems, quantities]);
 
   function setInspectionDate(value: string) {
     setSelectedDate(value.trim());
+    setIsCategoryFilterOpen(false);
     setSelectedDateError('');
     setSubmitError('');
-    setSuccessMessage('');
   }
 
   function setQuantity(itemId: number, value: string) {
     setQuantities((prev) => ({ ...prev, [String(itemId)]: value }));
     setFieldErrors((prev) => ({ ...prev, [String(itemId)]: '' }));
     setSubmitError('');
-    setSuccessMessage('');
   }
 
   async function confirmFutureDateSave(): Promise<boolean> {
@@ -184,7 +322,7 @@ export function DailyScreen() {
     const nextErrors: QuantityErrorMap = {};
     const updates: DailyCountUpdateInput[] = [];
 
-    for (const item of items) {
+    for (const item of filteredItems) {
       const value = quantities[String(item.id)] ?? '';
 
       if (value.trim().length === 0) {
@@ -203,6 +341,11 @@ export function DailyScreen() {
         continue;
       }
 
+      if (item.currentStockQuantity !== null && parsed > item.currentStockQuantity) {
+        nextErrors[String(item.id)] = 'Consumo maior que o saldo atual.';
+        continue;
+      }
+
       updates.push({ itemId: item.id, quantity: parsed });
     }
 
@@ -212,7 +355,7 @@ export function DailyScreen() {
     }
 
     if (updates.length === 0) {
-      setSubmitError('Preencha ao menos um item para salvar a vistoria.');
+      setSubmitError('Preencha ao menos um item visivel no filtro para salvar a vistoria.');
       return;
     }
 
@@ -229,7 +372,7 @@ export function DailyScreen() {
 
     try {
       await saveDailyInspection(updates, selectedDate);
-      setSuccessMessage(`Vistoria de ${formatDateLabel(selectedDate)} salva com sucesso.`);
+      showSuccessToast(`Vistoria de ${formatDateLabel(selectedDate)} salva com sucesso.`);
       await loadInspectionItems(selectedDate);
     } catch (error) {
       setSubmitError(error instanceof Error ? error.message : 'Nao foi possivel salvar a vistoria.');
@@ -240,8 +383,14 @@ export function DailyScreen() {
 
   return (
     <View style={styles.container}>
+      {isToastVisible ? (
+        <View style={styles.toastContainer}>
+          <Text style={styles.toastText}>{toastMessage}</Text>
+        </View>
+      ) : null}
+
       <FlatList
-        data={items}
+        data={filteredItems}
         keyExtractor={(item) => String(item.id)}
         refreshControl={
           <RefreshControl
@@ -259,10 +408,11 @@ export function DailyScreen() {
               <Text style={styles.title}>Vistoria Diaria</Text>
               <Text style={styles.subtitle}>Data selecionada: {formatDateLabel(selectedDate)}</Text>
               <Text style={styles.description}>
-                Preencha a quantidade atual de cada item para comparar com o minimo necessario.
+                Registre o consumo do dia. Se o item ainda nao tiver saldo inicial, o primeiro valor vira estoque
+                inicial.
               </Text>
               <Text style={styles.summaryText}>
-                {summary.countedItems} contados | {summary.okCount} OK | {summary.needPurchase} comprar | Falta total:{' '}
+                {summary.countedItems} avaliados | {summary.okCount} OK | {summary.needPurchase} comprar | Falta total:{' '}
                 {formatQuantity(summary.totalMissingQuantity)}
               </Text>
             </View>
@@ -282,7 +432,21 @@ export function DailyScreen() {
               </Pressable>
             </View>
 
-            {items.length > 0 ? (
+            <View style={styles.filterCard}>
+              <Text style={styles.filterLabel}>Filtrar por categoria</Text>
+              <CategoryFilterSelect
+                value={categoryFilter}
+                onChange={(nextValue) => {
+                  setCategoryFilter(nextValue);
+                  setSubmitError('');
+                }}
+                isOpen={isCategoryFilterOpen}
+                onToggle={() => setIsCategoryFilterOpen((prev) => !prev)}
+                onClose={() => setIsCategoryFilterOpen(false)}
+              />
+            </View>
+
+            {filteredItems.length > 0 ? (
               <Pressable
                 style={[styles.submitButton, isSaving ? styles.submitButtonDisabled : undefined]}
                 disabled={isSaving}
@@ -293,31 +457,43 @@ export function DailyScreen() {
                 {isSaving ? (
                   <ActivityIndicator color="#FFFFFF" />
                 ) : (
-                  <Text style={styles.submitButtonText}>Salvar vistoria do dia</Text>
+                  <Text style={styles.submitButtonText}>Salvar movimentacoes do dia</Text>
                 )}
               </Pressable>
             ) : null}
 
-            {successMessage ? <Text style={styles.successText}>{successMessage}</Text> : null}
             {submitError ? <Text style={styles.errorText}>{submitError}</Text> : null}
 
-            <Text style={styles.listTitle}>Itens para contagem</Text>
+            <Text style={styles.listTitle}>Itens para movimentar ({filteredItems.length})</Text>
           </View>
         }
         ListEmptyComponent={
           isLoading ? (
             <Text style={styles.emptyText}>Carregando itens...</Text>
-          ) : (
+          ) : items.length === 0 ? (
             <Text style={styles.emptyText}>
               Nenhum item cadastrado. Cadastre itens na aba Itens para iniciar a vistoria.
             </Text>
+          ) : (
+            <Text style={styles.emptyText}>Nenhum item encontrado para o filtro selecionado.</Text>
           )
         }
         renderItem={({ item }) => {
           const parsed = parseDecimalInput(quantities[String(item.id)] ?? '');
-          const needsPurchase = parsed !== null && parsed < item.minQuantity;
-          const hasValue = parsed !== null;
-          const missingQuantity = needsPurchase && parsed !== null ? item.minQuantity - parsed : 0;
+          const currentStock = item.currentStockQuantity;
+          const hasInitialStock = currentStock !== null;
+          const invalidOverConsumption =
+            hasInitialStock && currentStock !== null && parsed !== null && parsed > currentStock;
+          const projectedStock =
+            parsed === null
+              ? currentStock
+              : hasInitialStock && currentStock !== null
+                ? currentStock - parsed
+                : parsed;
+          const hasProjectedStock = projectedStock !== null && !invalidOverConsumption;
+          const needsPurchase = hasProjectedStock && projectedStock <= item.minQuantity;
+          const missingQuantity =
+            hasProjectedStock && projectedStock < item.minQuantity ? item.minQuantity - projectedStock : 0;
 
           return (
             <View style={styles.itemCard}>
@@ -326,18 +502,22 @@ export function DailyScreen() {
                 <View
                   style={[
                     styles.statusBadge,
-                    !hasValue
+                    !hasProjectedStock
                       ? styles.statusPending
-                      : needsPurchase
+                      : invalidOverConsumption || needsPurchase
                         ? styles.statusNeedPurchase
                         : styles.statusOk,
                   ]}
                 >
                   <Text style={styles.statusText}>
-                    {!hasValue
-                      ? 'Sem contagem'
+                    {!hasProjectedStock
+                      ? invalidOverConsumption
+                        ? 'Consumo acima do saldo'
+                        : 'Sem estoque inicial'
                       : needsPurchase
-                        ? `Comprar ${formatQuantity(missingQuantity)} ${item.unit}`
+                        ? missingQuantity > 0
+                          ? `Comprar ${formatQuantity(missingQuantity)} ${item.unit}`
+                          : 'No minimo (comprar)'
                         : 'OK'}
                   </Text>
                 </View>
@@ -345,11 +525,22 @@ export function DailyScreen() {
 
               <Text style={styles.itemMeta}>Unidade: {item.unit}</Text>
               <Text style={styles.itemMeta}>Minimo necessario: {formatQuantity(item.minQuantity)}</Text>
+              <Text style={styles.itemMeta}>
+                Saldo atual: {currentStock === null ? '-' : formatQuantity(currentStock)}
+              </Text>
+              <Text style={styles.itemMeta}>
+                Categoria: {item.category ? getCategoryLabel(item.category) : 'Sem categoria'}
+              </Text>
+              {hasProjectedStock && parsed !== null ? (
+                <Text style={styles.itemMeta}>Saldo apos o dia: {formatQuantity(projectedStock as number)}</Text>
+              ) : null}
+
+              <Text style={styles.inputLabel}>{currentStock === null ? 'Estoque inicial' : 'Consumo do dia'}</Text>
 
               <TextInput
                 value={quantities[String(item.id)] ?? ''}
                 onChangeText={(value) => setQuantity(item.id, value)}
-                placeholder="Quantidade atual"
+                placeholder={currentStock === null ? 'Ex.: 50' : 'Ex.: 3'}
                 keyboardType="decimal-pad"
                 style={[
                   styles.input,
@@ -373,6 +564,25 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#F5F3FF',
+  },
+  toastContainer: {
+    position: 'absolute',
+    top: 12,
+    left: 16,
+    right: 16,
+    zIndex: 10,
+    backgroundColor: '#4C1D95',
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderWidth: 1,
+    borderColor: '#C4B5FD',
+  },
+  toastText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '700',
+    textAlign: 'center',
   },
   listContent: {
     padding: 16,
@@ -417,6 +627,69 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     padding: 12,
     gap: 10,
+  },
+  filterCard: {
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#DDD6FE',
+    borderRadius: 14,
+    padding: 12,
+    gap: 8,
+  },
+  filterLabel: {
+    fontSize: 13,
+    color: '#6D28D9',
+    fontWeight: '700',
+  },
+  filterSelectRoot: {
+    gap: 6,
+  },
+  filterSelectTrigger: {
+    borderWidth: 1,
+    borderColor: '#C4B5FD',
+    backgroundColor: '#FAF5FF',
+    borderRadius: 12,
+    minHeight: 42,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  filterSelectText: {
+    color: '#3B0764',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  filterSelectArrow: {
+    color: '#6D28D9',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  filterSelectMenu: {
+    borderWidth: 1,
+    borderColor: '#DDD6FE',
+    borderRadius: 12,
+    backgroundColor: '#FFFFFF',
+    overflow: 'hidden',
+  },
+  filterSelectOption: {
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3E8FF',
+  },
+  filterSelectOptionActive: {
+    backgroundColor: '#EDE9FE',
+  },
+  filterSelectOptionText: {
+    color: '#4C1D95',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  filterSelectOptionTextActive: {
+    color: '#5B21B6',
+    fontWeight: '700',
   },
   todayButton: {
     borderRadius: 10,
@@ -475,6 +748,11 @@ const styles = StyleSheet.create({
     color: '#5B21B6',
     fontSize: 13,
   },
+  inputLabel: {
+    color: '#6D28D9',
+    fontSize: 12,
+    fontWeight: '700',
+  },
   input: {
     borderWidth: 1,
     borderColor: '#C4B5FD',
@@ -511,15 +789,6 @@ const styles = StyleSheet.create({
     color: '#6D28D9',
     fontSize: 14,
     marginTop: 16,
-  },
-  successText: {
-    backgroundColor: '#EDE9FE',
-    color: '#5B21B6',
-    fontSize: 13,
-    fontWeight: '600',
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    borderRadius: 10,
   },
   errorText: {
     color: '#B91C1C',

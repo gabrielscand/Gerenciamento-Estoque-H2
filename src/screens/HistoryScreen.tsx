@@ -1,13 +1,27 @@
-import { useEffect, useMemo, useState } from 'react';
-import { FlatList, Pressable, RefreshControl, StyleSheet, Text, TextInput, View } from 'react-native';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
+  Alert,
+  FlatList,
+  Modal,
+  Platform,
+  Pressable,
+  RefreshControl,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
+import {
+  archiveDailyHistoryDate,
+  archiveDailyHistoryEntry,
   listDailyHistoryGrouped,
   listFortnightlyHistoryGrouped,
   listMonthlyHistoryGrouped,
+  updateDailyHistoryEntry,
 } from '../database/items.repository';
 import { syncAppData } from '../database/sync.service';
 import { SyncStatusCard } from '../components/SyncStatusCard';
-import type { DailyHistoryGroup, PeriodHistoryGroup } from '../types/inventory';
+import type { DailyHistoryEntry, DailyHistoryGroup, PeriodHistoryGroup } from '../types/inventory';
 import {
   formatDateLabel,
   formatMonthLabel,
@@ -16,12 +30,54 @@ import {
 } from '../utils/date';
 
 type HistoryMode = 'diario' | 'quinzenal' | 'mensal';
+const ADMIN_PASSWORD = 'admin1234';
+
+type FallbackPromptConfig = {
+  title: string;
+  message: string;
+  placeholder: string;
+  secureTextEntry: boolean;
+  keyboardType: 'default' | 'decimal-pad';
+  defaultValue?: string;
+};
 
 function formatQuantity(value: number): string {
   return value.toLocaleString('pt-BR', {
     minimumFractionDigits: Number.isInteger(value) ? 0 : 2,
     maximumFractionDigits: 2,
   });
+}
+
+function getMovementTypeLabel(movementType: DailyHistoryEntry['movementType']): string {
+  if (movementType === 'initial') {
+    return 'Inicial';
+  }
+
+  if (movementType === 'legacy_snapshot') {
+    return 'Registro anterior';
+  }
+
+  return 'Consumo';
+}
+
+function parseDecimalInput(value: string): number | null {
+  const normalized = value.trim().replace(',', '.');
+
+  if (normalized.length === 0) {
+    return null;
+  }
+
+  if (!/^-?\d+(\.\d+)?$/.test(normalized)) {
+    return null;
+  }
+
+  const parsed = Number(normalized);
+
+  if (!Number.isFinite(parsed)) {
+    return null;
+  }
+
+  return parsed;
 }
 
 export function HistoryScreen() {
@@ -34,6 +90,11 @@ export function HistoryScreen() {
   const [periodGroups, setPeriodGroups] = useState<PeriodHistoryGroup[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState('');
+  const [successMessage, setSuccessMessage] = useState('');
+  const [activeActionKey, setActiveActionKey] = useState<string | null>(null);
+  const [fallbackPromptConfig, setFallbackPromptConfig] = useState<FallbackPromptConfig | null>(null);
+  const [fallbackPromptValue, setFallbackPromptValue] = useState('');
+  const fallbackPromptResolverRef = useRef<((value: string | null) => void) | null>(null);
 
   const isDailyMode = mode === 'diario';
 
@@ -77,11 +138,13 @@ export function HistoryScreen() {
   function selectMode(nextMode: HistoryMode) {
     setMode(nextMode);
     setErrorMessage('');
+    setSuccessMessage('');
   }
 
   function handleMonthInputChange(nextValue: string) {
     setMonthInputValue(nextValue);
     setErrorMessage('');
+    setSuccessMessage('');
 
     const parsedMonth = parseDisplayMonthToIso(nextValue);
 
@@ -109,6 +172,238 @@ export function HistoryScreen() {
     setMonthInputValue(formatMonthLabel(currentMonth));
     setMonthInputError('');
     setErrorMessage('');
+    setSuccessMessage('');
+  }
+
+  function openFallbackPrompt(config: FallbackPromptConfig): Promise<string | null> {
+    return new Promise((resolve) => {
+      fallbackPromptResolverRef.current = resolve;
+      setFallbackPromptValue(config.defaultValue ?? '');
+      setFallbackPromptConfig(config);
+    });
+  }
+
+  function closeFallbackPrompt(value: string | null) {
+    const resolver = fallbackPromptResolverRef.current;
+    fallbackPromptResolverRef.current = null;
+    setFallbackPromptConfig(null);
+    setFallbackPromptValue('');
+    resolver?.(value);
+  }
+
+  async function requestTextValue(config: FallbackPromptConfig): Promise<string | null> {
+    if (Platform.OS === 'web') {
+      if (typeof globalThis.prompt === 'function') {
+        const fullMessage = `${config.title}\n${config.message}`;
+        return globalThis.prompt(fullMessage, config.defaultValue ?? '') ?? null;
+      }
+
+      return null;
+    }
+
+    if (Platform.OS === 'ios' && typeof Alert.prompt === 'function') {
+      return new Promise((resolve) => {
+        let settled = false;
+
+        const finish = (value: string | null) => {
+          if (!settled) {
+            settled = true;
+            resolve(value);
+          }
+        };
+
+        Alert.prompt(
+          config.title,
+          config.message,
+          [
+            { text: 'Cancelar', style: 'cancel', onPress: () => finish(null) },
+            {
+              text: 'Confirmar',
+              onPress: (value?: string) => finish(typeof value === 'string' ? value : ''),
+            },
+          ],
+          config.secureTextEntry ? 'secure-text' : 'plain-text',
+          config.defaultValue ?? '',
+          config.keyboardType,
+        );
+      });
+    }
+
+    return openFallbackPrompt(config);
+  }
+
+  async function requestAdminPassword(): Promise<boolean> {
+    const value = await requestTextValue({
+      title: 'Senha admin',
+      message: 'Digite a senha para autorizar esta acao.',
+      placeholder: 'Senha',
+      secureTextEntry: true,
+      keyboardType: 'default',
+    });
+
+    if (value === null) {
+      return false;
+    }
+
+    if (value.trim() !== ADMIN_PASSWORD) {
+      setErrorMessage('Senha admin incorreta.');
+      return false;
+    }
+
+    return true;
+  }
+
+  async function confirmAction(title: string, message: string): Promise<boolean> {
+    if (Platform.OS === 'web') {
+      if (typeof globalThis.confirm === 'function') {
+        return globalThis.confirm(message);
+      }
+
+      return true;
+    }
+
+    return new Promise((resolve) => {
+      let settled = false;
+      const finish = (value: boolean) => {
+        if (!settled) {
+          settled = true;
+          resolve(value);
+        }
+      };
+
+      Alert.alert(
+        title,
+        message,
+        [
+          { text: 'Cancelar', style: 'cancel', onPress: () => finish(false) },
+          { text: 'Confirmar', style: 'destructive', onPress: () => finish(true) },
+        ],
+        { cancelable: true, onDismiss: () => finish(false) },
+      );
+    });
+  }
+
+  async function requestUpdatedQuantity(currentQuantity: number): Promise<number | null> {
+    const value = await requestTextValue({
+      title: 'Editar quantidade',
+      message: 'Informe a nova quantidade desta vistoria.',
+      placeholder: 'Quantidade',
+      secureTextEntry: false,
+      keyboardType: 'decimal-pad',
+      defaultValue: String(currentQuantity),
+    });
+
+    if (value === null) {
+      return null;
+    }
+
+    const parsed = parseDecimalInput(value);
+
+    if (parsed === null || parsed < 0) {
+      setErrorMessage('Informe uma quantidade valida para editar a vistoria.');
+      return null;
+    }
+
+    return parsed;
+  }
+
+  async function handleEditEntry(entry: DailyHistoryEntry) {
+    setErrorMessage('');
+    setSuccessMessage('');
+
+    const unlocked = await requestAdminPassword();
+
+    if (!unlocked) {
+      return;
+    }
+
+    const updatedQuantity = await requestUpdatedQuantity(entry.quantity);
+
+    if (updatedQuantity === null) {
+      return;
+    }
+
+    setActiveActionKey(`edit-${entry.date}-${entry.itemId}`);
+
+    try {
+      await updateDailyHistoryEntry(entry.date, entry.itemId, updatedQuantity);
+      setSuccessMessage(`Vistoria de ${formatDateLabel(entry.date)} atualizada com sucesso.`);
+      await loadHistory('diario', selectedMonth, true);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Falha ao editar vistoria diaria.';
+      await loadHistory('diario', selectedMonth);
+      setErrorMessage(message);
+    } finally {
+      setActiveActionKey(null);
+    }
+  }
+
+  async function handleArchiveEntry(entry: DailyHistoryEntry) {
+    setErrorMessage('');
+    setSuccessMessage('');
+
+    const unlocked = await requestAdminPassword();
+
+    if (!unlocked) {
+      return;
+    }
+
+    const confirmed = await confirmAction(
+      'Excluir item da vistoria',
+      `Deseja excluir ${entry.name} da vistoria de ${formatDateLabel(entry.date)}?`,
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    setActiveActionKey(`delete-entry-${entry.date}-${entry.itemId}`);
+
+    try {
+      await archiveDailyHistoryEntry(entry.date, entry.itemId);
+      setSuccessMessage(`Item removido da vistoria de ${formatDateLabel(entry.date)}.`);
+      await loadHistory('diario', selectedMonth, true);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Falha ao excluir item da vistoria.';
+      await loadHistory('diario', selectedMonth);
+      setErrorMessage(message);
+    } finally {
+      setActiveActionKey(null);
+    }
+  }
+
+  async function handleArchiveDate(date: string) {
+    setErrorMessage('');
+    setSuccessMessage('');
+
+    const unlocked = await requestAdminPassword();
+
+    if (!unlocked) {
+      return;
+    }
+
+    const confirmed = await confirmAction(
+      'Excluir vistoria do dia',
+      `Deseja excluir toda a vistoria de ${formatDateLabel(date)}?`,
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    setActiveActionKey(`delete-date-${date}`);
+
+    try {
+      await archiveDailyHistoryDate(date);
+      setSuccessMessage(`Vistoria de ${formatDateLabel(date)} excluida com sucesso.`);
+      await loadHistory('diario', selectedMonth, true);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Falha ao excluir vistoria do dia.';
+      await loadHistory('diario', selectedMonth);
+      setErrorMessage(message);
+    } finally {
+      setActiveActionKey(null);
+    }
   }
 
   const heroText = useMemo(() => {
@@ -123,14 +418,14 @@ export function HistoryScreen() {
       return {
         title: 'Relatorio Quinzenal',
         description:
-          'Consolidacao por quinzena no mes escolhido, somando os faltantes de cada item nas vistorias.',
+          'Consolidacao por quinzena do mes selecionado, com consumo total e faltante para compra.',
       };
     }
 
     return {
       title: 'Relatorio Mensal',
       description:
-        'Consolidacao mensal do mes selecionado, somando os faltantes de cada item nas vistorias.',
+        'Consolidacao mensal com consumo total e faltante para compra por item.',
     };
   }, [mode]);
 
@@ -200,6 +495,7 @@ export function HistoryScreen() {
               </View>
             ) : null}
 
+            {successMessage ? <Text style={styles.successText}>{successMessage}</Text> : null}
             {errorMessage ? <Text style={styles.errorText}>{errorMessage}</Text> : null}
           </View>
         }
@@ -218,8 +514,22 @@ export function HistoryScreen() {
               <View style={styles.groupCard}>
                 <View style={styles.groupHeader}>
                   <Text style={styles.groupDate}>{formatDateLabel(dailyItem.date)}</Text>
-                  <View style={styles.groupBadge}>
-                    <Text style={styles.groupBadgeText}>{dailyItem.countedItems} contados</Text>
+                  <View style={styles.groupHeaderActions}>
+                    <Pressable
+                      style={[
+                        styles.deleteDayButton,
+                        activeActionKey === `delete-date-${dailyItem.date}` ? styles.actionDisabled : undefined,
+                      ]}
+                      onPress={() => {
+                        void handleArchiveDate(dailyItem.date);
+                      }}
+                      disabled={activeActionKey !== null}
+                    >
+                      <Text style={styles.deleteDayButtonText}>Excluir dia</Text>
+                    </Pressable>
+                    <View style={styles.groupBadge}>
+                      <Text style={styles.groupBadgeText}>{dailyItem.countedItems} contados</Text>
+                    </View>
                   </View>
                 </View>
 
@@ -229,12 +539,53 @@ export function HistoryScreen() {
                 </Text>
 
                 {dailyItem.entries.map((entry) => (
-                  <View key={`${dailyItem.date}-${entry.itemId}`} style={styles.entryRow}>
+                  <View key={`${entry.date}-${entry.itemId}`} style={styles.entryRow}>
                     <View style={styles.entryInfo}>
-                      <Text style={styles.entryName}>{entry.name}</Text>
+                      <View style={styles.entryTitleRow}>
+                        <Text style={styles.entryName}>{entry.name}</Text>
+                        {entry.itemDeleted ? (
+                          <View style={styles.deletedBadge}>
+                            <Text style={styles.deletedBadgeText}>Item arquivado</Text>
+                          </View>
+                        ) : null}
+                      </View>
                       <Text style={styles.entryMeta}>
-                        {formatQuantity(entry.quantity)} {entry.unit} | Min {formatQuantity(entry.minQuantity)}
+                        {getMovementTypeLabel(entry.movementType)}: {formatQuantity(entry.quantity)} {entry.unit} | Min{' '}
+                        {formatQuantity(entry.minQuantity)}
                       </Text>
+                      <Text style={styles.entryMeta}>
+                        Saldo apos: {entry.stockAfterQuantity === null ? '-' : formatQuantity(entry.stockAfterQuantity)}
+                      </Text>
+                      <View style={styles.entryActions}>
+                        <Pressable
+                          style={[
+                            styles.entryActionButton,
+                            activeActionKey === `edit-${entry.date}-${entry.itemId}`
+                              ? styles.actionDisabled
+                              : undefined,
+                          ]}
+                          onPress={() => {
+                            void handleEditEntry(entry);
+                          }}
+                          disabled={activeActionKey !== null}
+                        >
+                          <Text style={styles.entryActionButtonText}>Editar</Text>
+                        </Pressable>
+                        <Pressable
+                          style={[
+                            styles.entryDeleteButton,
+                            activeActionKey === `delete-entry-${entry.date}-${entry.itemId}`
+                              ? styles.actionDisabled
+                              : undefined,
+                          ]}
+                          onPress={() => {
+                            void handleArchiveEntry(entry);
+                          }}
+                          disabled={activeActionKey !== null}
+                        >
+                          <Text style={styles.entryDeleteButtonText}>Excluir item</Text>
+                        </Pressable>
+                      </View>
                     </View>
                     <View
                       style={[
@@ -243,7 +594,11 @@ export function HistoryScreen() {
                       ]}
                     >
                       <Text style={styles.statusText}>
-                        {entry.needsPurchase ? `Comprar ${formatQuantity(entry.missingQuantity)} ${entry.unit}` : 'OK'}
+                        {entry.needsPurchase
+                          ? entry.missingQuantity > 0
+                            ? `Comprar ${formatQuantity(entry.missingQuantity)} ${entry.unit}`
+                            : 'No minimo (comprar)'
+                          : 'OK'}
                       </Text>
                     </View>
                   </View>
@@ -265,7 +620,8 @@ export function HistoryScreen() {
 
               <Text style={styles.groupSummary}>
                 Registros: {periodItem.countedEntries} | Itens para comprar: {periodItem.itemsToBuyCount} | Faltante
-                total: {formatQuantity(periodItem.totalMissingQuantity)}
+                total: {formatQuantity(periodItem.totalMissingQuantity)} | Consumo total:{' '}
+                {formatQuantity(periodItem.totalConsumedQuantity)}
               </Text>
 
               {periodItem.entries.length === 0 ? (
@@ -275,11 +631,21 @@ export function HistoryScreen() {
                   <View key={`${periodItem.id}-${entry.itemId}`} style={styles.entryRow}>
                     <View style={styles.entryInfo}>
                       <Text style={styles.entryName}>{entry.name}</Text>
-                      <Text style={styles.entryMeta}>Apareceu em {entry.countedDays} dia(s) com falta.</Text>
+                      <Text style={styles.entryMeta}>
+                        Consumo: {formatQuantity(entry.consumedQuantityTotal)} {entry.unit} | Registros em{' '}
+                        {entry.countedDays} dia(s).
+                      </Text>
                     </View>
-                    <View style={[styles.statusBadge, styles.statusNeedPurchase]}>
+                    <View
+                      style={[
+                        styles.statusBadge,
+                        entry.totalMissingQuantity > 0 ? styles.statusNeedPurchase : styles.statusOk,
+                      ]}
+                    >
                       <Text style={styles.statusText}>
-                        Comprar {formatQuantity(entry.totalMissingQuantity)} {entry.unit}
+                        {entry.totalMissingQuantity > 0
+                          ? `Comprar ${formatQuantity(entry.totalMissingQuantity)} ${entry.unit}`
+                          : 'Sem falta'}
                       </Text>
                     </View>
                   </View>
@@ -290,6 +656,36 @@ export function HistoryScreen() {
         }}
         contentContainerStyle={styles.listContent}
       />
+
+      {fallbackPromptConfig ? (
+        <Modal visible transparent animationType="fade" onRequestClose={() => closeFallbackPrompt(null)}>
+          <View style={styles.modalBackdrop}>
+            <View style={styles.modalCard}>
+              <Text style={styles.modalTitle}>{fallbackPromptConfig.title}</Text>
+              <Text style={styles.modalMessage}>{fallbackPromptConfig.message}</Text>
+              <TextInput
+                value={fallbackPromptValue}
+                onChangeText={setFallbackPromptValue}
+                placeholder={fallbackPromptConfig.placeholder}
+                secureTextEntry={fallbackPromptConfig.secureTextEntry}
+                keyboardType={fallbackPromptConfig.keyboardType}
+                style={styles.modalInput}
+              />
+              <View style={styles.modalActions}>
+                <Pressable style={styles.modalCancelButton} onPress={() => closeFallbackPrompt(null)}>
+                  <Text style={styles.modalCancelButtonText}>Cancelar</Text>
+                </Pressable>
+                <Pressable
+                  style={styles.modalConfirmButton}
+                  onPress={() => closeFallbackPrompt(fallbackPromptValue)}
+                >
+                  <Text style={styles.modalConfirmButtonText}>Confirmar</Text>
+                </Pressable>
+              </View>
+            </View>
+          </View>
+        </Modal>
+      ) : null}
     </View>
   );
 }
@@ -384,6 +780,15 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     fontSize: 13,
   },
+  successText: {
+    color: '#065F46',
+    backgroundColor: '#D1FAE5',
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    fontSize: 12,
+    fontWeight: '700',
+  },
   inputError: {
     borderColor: '#DC2626',
   },
@@ -418,6 +823,24 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#4C1D95',
   },
+  groupHeaderActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  deleteDayButton: {
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    backgroundColor: '#FEE2E2',
+    borderWidth: 1,
+    borderColor: '#FCA5A5',
+  },
+  deleteDayButtonText: {
+    color: '#991B1B',
+    fontSize: 11,
+    fontWeight: '700',
+  },
   groupBadge: {
     borderRadius: 999,
     backgroundColor: '#EDE9FE',
@@ -449,14 +872,65 @@ const styles = StyleSheet.create({
     flex: 1,
     gap: 2,
   },
+  entryTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flexWrap: 'wrap',
+  },
   entryName: {
     fontSize: 14,
     fontWeight: '700',
     color: '#3B0764',
   },
+  deletedBadge: {
+    backgroundColor: '#FEE2E2',
+    borderRadius: 999,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+  },
+  deletedBadgeText: {
+    color: '#991B1B',
+    fontSize: 10,
+    fontWeight: '700',
+  },
   entryMeta: {
     fontSize: 12,
     color: '#6D28D9',
+  },
+  entryActions: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 6,
+  },
+  entryActionButton: {
+    borderRadius: 8,
+    backgroundColor: '#EDE9FE',
+    borderWidth: 1,
+    borderColor: '#C4B5FD',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  entryActionButtonText: {
+    color: '#5B21B6',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  entryDeleteButton: {
+    borderRadius: 8,
+    backgroundColor: '#FEE2E2',
+    borderWidth: 1,
+    borderColor: '#FCA5A5',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  entryDeleteButtonText: {
+    color: '#991B1B',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  actionDisabled: {
+    opacity: 0.55,
   },
   statusBadge: {
     borderRadius: 999,
@@ -473,5 +947,69 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '700',
     color: '#4C1D95',
+  },
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(17, 24, 39, 0.45)',
+    justifyContent: 'center',
+    paddingHorizontal: 20,
+  },
+  modalCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#DDD6FE',
+    padding: 14,
+    gap: 10,
+  },
+  modalTitle: {
+    color: '#4C1D95',
+    fontSize: 16,
+    fontWeight: '800',
+  },
+  modalMessage: {
+    color: '#6D28D9',
+    fontSize: 13,
+  },
+  modalInput: {
+    borderWidth: 1,
+    borderColor: '#C4B5FD',
+    backgroundColor: '#FAF5FF',
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 9,
+    color: '#3B0764',
+  },
+  modalActions: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  modalCancelButton: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: '#C4B5FD',
+    borderRadius: 10,
+    backgroundColor: '#F5F3FF',
+    minHeight: 40,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalCancelButtonText: {
+    color: '#5B21B6',
+    fontWeight: '700',
+    fontSize: 13,
+  },
+  modalConfirmButton: {
+    flex: 1,
+    borderRadius: 10,
+    backgroundColor: '#7C3AED',
+    minHeight: 40,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalConfirmButtonText: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+    fontSize: 13,
   },
 });

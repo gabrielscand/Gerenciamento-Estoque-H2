@@ -11,7 +11,9 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import { STOCK_CATEGORIES, getCategoryLabel, type StockCategory } from '../constants/categories';
 import {
+  archiveStockItem,
   createStockItem,
   findItemByNormalizedName,
   listStockItems,
@@ -24,6 +26,7 @@ import type { CreateStockItemInput, StockItemListRow } from '../types/inventory'
 type FormState = {
   name: string;
   unit: string;
+  category: StockCategory | '';
   minQuantity: string;
 };
 
@@ -32,6 +35,7 @@ type FormErrors = Partial<Record<keyof FormState | 'submit', string>>;
 const initialFormState: FormState = {
   name: '',
   unit: '',
+  category: '',
   minQuantity: '',
 };
 
@@ -60,6 +64,7 @@ function buildValidationErrors(form: FormState): { errors: FormErrors; parsed?: 
 
   const name = form.name.trim();
   const unit = form.unit.trim();
+  const category = form.category;
   const minQuantity = parseDecimalInput(form.minQuantity);
 
   if (name.length === 0) {
@@ -68,6 +73,10 @@ function buildValidationErrors(form: FormState): { errors: FormErrors; parsed?: 
 
   if (unit.length === 0) {
     errors.unit = 'Informe a unidade de medida.';
+  }
+
+  if (!category) {
+    errors.category = 'Selecione uma categoria.';
   }
 
   if (minQuantity === null) {
@@ -86,6 +95,7 @@ function buildValidationErrors(form: FormState): { errors: FormErrors; parsed?: 
       name,
       unit,
       minQuantity: minQuantity as number,
+      category: category as StockCategory,
     },
   };
 }
@@ -95,6 +105,66 @@ function formatQuantity(value: number): string {
     minimumFractionDigits: Number.isInteger(value) ? 0 : 2,
     maximumFractionDigits: 2,
   });
+}
+
+type CategorySelectProps = {
+  value: StockCategory | '';
+  onChange: (nextValue: StockCategory) => void;
+  isOpen: boolean;
+  onToggle: () => void;
+  onClose: () => void;
+  placeholder: string;
+  error?: string;
+  disabled?: boolean;
+};
+
+function CategorySelect({
+  value,
+  onChange,
+  isOpen,
+  onToggle,
+  onClose,
+  placeholder,
+  error,
+  disabled = false,
+}: CategorySelectProps) {
+  return (
+    <View style={styles.selectRoot}>
+      <Pressable
+        style={[styles.selectTrigger, error ? styles.inputError : undefined, disabled ? styles.selectDisabled : undefined]}
+        onPress={onToggle}
+        disabled={disabled}
+      >
+        <Text style={value ? styles.selectTriggerText : styles.selectPlaceholderText}>
+          {value ? getCategoryLabel(value) : placeholder}
+        </Text>
+        <Text style={styles.selectArrow}>{isOpen ? '▴' : '▾'}</Text>
+      </Pressable>
+
+      {isOpen ? (
+        <View style={styles.selectMenu}>
+          {STOCK_CATEGORIES.map((category) => {
+            const isSelected = value === category;
+
+            return (
+              <Pressable
+                key={category}
+                style={[styles.selectOption, isSelected ? styles.selectOptionActive : undefined]}
+                onPress={() => {
+                  onChange(category);
+                  onClose();
+                }}
+              >
+                <Text style={[styles.selectOptionText, isSelected ? styles.selectOptionTextActive : undefined]}>
+                  {getCategoryLabel(category)}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
+      ) : null}
+    </View>
+  );
 }
 
 async function confirmDuplicateAction(message: string, confirmLabel: string): Promise<boolean> {
@@ -128,15 +198,52 @@ async function confirmDuplicateAction(message: string, confirmLabel: string): Pr
   });
 }
 
+async function confirmArchiveItem(): Promise<boolean> {
+  const message =
+    'Deseja arquivar este item? Ele sera removido de Itens e Diario, mas continuara no Historico e no banco com is_deleted = 1.';
+
+  if (Platform.OS === 'web') {
+    if (typeof globalThis.confirm === 'function') {
+      return globalThis.confirm(message);
+    }
+
+    return true;
+  }
+
+  return new Promise((resolve) => {
+    let settled = false;
+
+    const finish = (value: boolean) => {
+      if (!settled) {
+        settled = true;
+        resolve(value);
+      }
+    };
+
+    Alert.alert(
+      'Arquivar item',
+      message,
+      [
+        { text: 'Cancelar', style: 'cancel', onPress: () => finish(false) },
+        { text: 'Arquivar', style: 'destructive', onPress: () => finish(true) },
+      ],
+      { cancelable: true, onDismiss: () => finish(false) },
+    );
+  });
+}
+
 export function ItemsScreen() {
   const [items, setItems] = useState<StockItemListRow[]>([]);
   const [createForm, setCreateForm] = useState<FormState>(initialFormState);
   const [createErrors, setCreateErrors] = useState<FormErrors>({});
   const [editForm, setEditForm] = useState<FormState>(initialFormState);
   const [editErrors, setEditErrors] = useState<FormErrors>({});
+  const [isCreateCategoryOpen, setIsCreateCategoryOpen] = useState(false);
+  const [isEditCategoryOpen, setIsEditCategoryOpen] = useState(false);
   const [editingItemId, setEditingItemId] = useState<number | null>(null);
   const [isCreating, setIsCreating] = useState(false);
   const [isUpdating, setIsUpdating] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [feedbackMessage, setFeedbackMessage] = useState<string>('');
 
@@ -177,12 +284,15 @@ export function ItemsScreen() {
   }
 
   function startEditing(item: StockItemListRow) {
+    setIsCreateCategoryOpen(false);
     setEditingItemId(item.id);
     setEditForm({
       name: item.name,
       unit: item.unit,
+      category: item.category ?? '',
       minQuantity: String(item.minQuantity),
     });
+    setIsEditCategoryOpen(false);
     setEditErrors({});
     setCreateErrors((prev) => ({ ...prev, submit: undefined }));
     setFeedbackMessage('');
@@ -191,6 +301,7 @@ export function ItemsScreen() {
   function cancelEditing() {
     setEditingItemId(null);
     setEditForm(initialFormState);
+    setIsEditCategoryOpen(false);
     setEditErrors({});
   }
 
@@ -235,6 +346,7 @@ export function ItemsScreen() {
 
       await createStockItem(validationResult.parsed);
       setCreateForm(initialFormState);
+      setIsCreateCategoryOpen(false);
       setCreateErrors({});
       setFeedbackMessage('Item cadastrado com sucesso.');
       await loadItems();
@@ -281,6 +393,32 @@ export function ItemsScreen() {
       }));
     } finally {
       setIsUpdating(false);
+    }
+  }
+
+  async function handleArchive(itemId: number) {
+    const confirmed = await confirmArchiveItem();
+
+    if (!confirmed) {
+      return;
+    }
+
+    setIsDeleting(true);
+    setEditErrors((prev) => ({ ...prev, submit: undefined }));
+    setFeedbackMessage('');
+
+    try {
+      await archiveStockItem(itemId);
+      cancelEditing();
+      setFeedbackMessage('Item arquivado com sucesso.');
+      await loadItems();
+    } catch (error) {
+      setEditErrors((prev) => ({
+        ...prev,
+        submit: error instanceof Error ? error.message : 'Nao foi possivel excluir o item.',
+      }));
+    } finally {
+      setIsDeleting(false);
     }
   }
 
@@ -332,6 +470,24 @@ export function ItemsScreen() {
                   style={[styles.input, createErrors.unit ? styles.inputError : undefined]}
                 />
                 {createErrors.unit ? <Text style={styles.errorText}>{createErrors.unit}</Text> : null}
+              </View>
+
+              <View style={styles.fieldGroup}>
+                <Text style={styles.label}>Categoria</Text>
+                <CategorySelect
+                  value={createForm.category}
+                  onChange={(value) => setCreateField('category', value)}
+                  isOpen={isCreateCategoryOpen}
+                  onToggle={() => {
+                    setIsCreateCategoryOpen((prev) => !prev);
+                    setIsEditCategoryOpen(false);
+                  }}
+                  onClose={() => setIsCreateCategoryOpen(false)}
+                  placeholder="Selecione uma categoria"
+                  error={createErrors.category}
+                  disabled={isCreating}
+                />
+                {createErrors.category ? <Text style={styles.errorText}>{createErrors.category}</Text> : null}
               </View>
 
               <View style={styles.fieldGroup}>
@@ -392,6 +548,17 @@ export function ItemsScreen() {
                 <>
                   <Text style={styles.itemMeta}>Unidade: {item.unit}</Text>
                   <Text style={styles.itemMeta}>Minimo: {formatQuantity(item.minQuantity)}</Text>
+                  <Text style={styles.itemMeta}>
+                    Saldo atual: {item.currentStockQuantity === null ? '-' : formatQuantity(item.currentStockQuantity)}
+                  </Text>
+                  <Text style={styles.itemMeta}>
+                    Categoria: {item.category ? getCategoryLabel(item.category) : 'Categoria pendente'}
+                  </Text>
+                  {!item.category ? (
+                    <View style={styles.pendingCategoryBadge}>
+                      <Text style={styles.pendingCategoryBadgeText}>Categoria pendente</Text>
+                    </View>
+                  ) : null}
                 </>
               ) : (
                 <View style={styles.editCard}>
@@ -418,6 +585,24 @@ export function ItemsScreen() {
                   </View>
 
                   <View style={styles.fieldGroup}>
+                    <Text style={styles.label}>Categoria</Text>
+                    <CategorySelect
+                      value={editForm.category}
+                      onChange={(value) => setEditField('category', value)}
+                      isOpen={isEditCategoryOpen}
+                      onToggle={() => {
+                        setIsEditCategoryOpen((prev) => !prev);
+                        setIsCreateCategoryOpen(false);
+                      }}
+                      onClose={() => setIsEditCategoryOpen(false)}
+                      placeholder="Selecione uma categoria"
+                      error={editErrors.category}
+                      disabled={isUpdating || isDeleting}
+                    />
+                    {editErrors.category ? <Text style={styles.errorText}>{editErrors.category}</Text> : null}
+                  </View>
+
+                  <View style={styles.fieldGroup}>
                     <Text style={styles.label}>Quantidade minima</Text>
                     <TextInput
                       value={editForm.minQuantity}
@@ -432,15 +617,32 @@ export function ItemsScreen() {
                   {editErrors.submit ? <Text style={styles.errorText}>{editErrors.submit}</Text> : null}
 
                   <View style={styles.editActions}>
-                    <Pressable style={styles.cancelButton} onPress={cancelEditing} disabled={isUpdating}>
+                    <Pressable style={styles.cancelButton} onPress={cancelEditing} disabled={isUpdating || isDeleting}>
                       <Text style={styles.cancelButtonText}>Cancelar</Text>
                     </Pressable>
                     <Pressable
-                      style={[styles.submitButton, styles.editSaveButton, isUpdating ? styles.submitButtonDisabled : undefined]}
+                      style={[styles.deleteButton, isDeleting ? styles.submitButtonDisabled : undefined]}
+                      onPress={() => {
+                        void handleArchive(item.id);
+                      }}
+                      disabled={isUpdating || isDeleting}
+                    >
+                      {isDeleting ? (
+                        <ActivityIndicator color="#ffffff" />
+                      ) : (
+                        <Text style={styles.submitButtonText}>Arquivar item</Text>
+                      )}
+                    </Pressable>
+                    <Pressable
+                      style={[
+                        styles.submitButton,
+                        styles.editSaveButton,
+                        isUpdating ? styles.submitButtonDisabled : undefined,
+                      ]}
                       onPress={() => {
                         void handleUpdate(item.id);
                       }}
-                      disabled={isUpdating}
+                      disabled={isUpdating || isDeleting}
                     >
                       {isUpdating ? (
                         <ActivityIndicator color="#ffffff" />
@@ -520,6 +722,63 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     color: '#3B0764',
     fontSize: 15,
+  },
+  selectRoot: {
+    gap: 6,
+  },
+  selectTrigger: {
+    borderWidth: 1,
+    borderColor: '#C4B5FD',
+    backgroundColor: '#FAF5FF',
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    minHeight: 44,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  selectDisabled: {
+    opacity: 0.7,
+  },
+  selectTriggerText: {
+    color: '#3B0764',
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  selectPlaceholderText: {
+    color: '#7C3AED',
+    fontSize: 15,
+  },
+  selectArrow: {
+    color: '#6D28D9',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  selectMenu: {
+    borderWidth: 1,
+    borderColor: '#DDD6FE',
+    borderRadius: 12,
+    backgroundColor: '#FFFFFF',
+    overflow: 'hidden',
+  },
+  selectOption: {
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3E8FF',
+  },
+  selectOptionActive: {
+    backgroundColor: '#EDE9FE',
+  },
+  selectOptionText: {
+    color: '#4C1D95',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  selectOptionTextActive: {
+    color: '#5B21B6',
+    fontWeight: '700',
   },
   inputError: {
     borderColor: '#EF4444',
@@ -607,6 +866,18 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: '#5B21B6',
   },
+  pendingCategoryBadge: {
+    alignSelf: 'flex-start',
+    backgroundColor: '#FDE68A',
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  pendingCategoryBadgeText: {
+    color: '#92400E',
+    fontSize: 12,
+    fontWeight: '700',
+  },
   editCard: {
     gap: 10,
   },
@@ -632,5 +903,15 @@ const styles = StyleSheet.create({
   },
   editSaveButton: {
     flex: 1,
+  },
+  deleteButton: {
+    flex: 1,
+    marginTop: 6,
+    backgroundColor: '#B91C1C',
+    borderRadius: 12,
+    minHeight: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 12,
   },
 });

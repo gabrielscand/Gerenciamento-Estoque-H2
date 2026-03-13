@@ -1,16 +1,28 @@
 import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import { StyleSheet, Text, View } from 'react-native';
 import { DailyScreen } from '../screens/DailyScreen';
 import { HistoryScreen } from '../screens/HistoryScreen';
 import { ItemsScreen } from '../screens/ItemsScreen';
+import { StockScreen } from '../screens/StockScreen';
 
 type RootTabParamList = {
+  Stock: undefined;
   Items: undefined;
   Daily: undefined;
   History: undefined;
 };
 
 const Tab = createBottomTabNavigator<RootTabParamList>();
+
+function TabLabel({ focused, title }: { focused: boolean; title: string }) {
+  return (
+    <View style={[styles.labelContainer, focused ? styles.labelContainerActive : undefined]}>
+      <View style={[styles.indicator, focused ? styles.indicatorActive : undefined]} />
+      <Text style={[styles.labelText, focused ? styles.labelTextActive : undefined]}>{title}</Text>
+    </View>
+  );
+}
 
 export function Tabs() {
   return (
@@ -27,25 +39,105 @@ export function Tabs() {
             color: '#4C1D95',
           },
           tabBarStyle: {
-            height: 64,
-            paddingBottom: 8,
-            paddingTop: 8,
-            backgroundColor: '#FAF5FF',
-            borderTopColor: '#DDD6FE',
+            height: 82,
+            paddingBottom: 12,
+            paddingTop: 12,
+            paddingHorizontal: 12,
+            backgroundColor: '#F3E8FF',
+            borderTopColor: '#E9D5FF',
             borderTopWidth: 1,
           },
-          tabBarActiveTintColor: '#6D28D9',
-          tabBarInactiveTintColor: '#7E22CE',
-          tabBarLabelStyle: {
-            fontSize: 12,
-            fontWeight: '700',
+          tabBarItemStyle: {
+            borderRadius: 16,
+            marginHorizontal: 4,
           },
+          tabBarIcon: () => null,
+          tabBarShowLabel: true,
+          tabBarLabel: ({ focused, children }) => (
+            <TabLabel focused={focused} title={String(children)} />
+          ),
         }}
       >
-        <Tab.Screen name="Items" component={ItemsScreen} options={{ title: 'Itens' }} />
-        <Tab.Screen name="Daily" component={DailyScreen} options={{ title: 'Diario' }} />
-        <Tab.Screen name="History" component={HistoryScreen} options={{ title: 'Historico' }} />
+        <Tab.Screen
+          name="Stock"
+          component={StockScreen}
+          options={{
+            title: 'Estoque',
+            tabBarLabel: ({ focused }) => <TabLabel focused={focused} title="Estoque" />,
+          }}
+        />
+        <Tab.Screen
+          name="Items"
+          component={ItemsScreen}
+          options={{
+            title: 'Itens',
+            tabBarLabel: ({ focused }) => <TabLabel focused={focused} title="Itens" />,
+          }}
+        />
+        <Tab.Screen
+          name="Daily"
+          component={DailyScreen}
+          options={{
+            title: 'Diario',
+            tabBarLabel: ({ focused }) => <TabLabel focused={focused} title="Diario" />,
+          }}
+        />
+        <Tab.Screen
+          name="History"
+          component={HistoryScreen}
+          options={{
+            title: 'Historico',
+            tabBarLabel: ({ focused }) => <TabLabel focused={focused} title="Historico" />,
+          }}
+        />
       </Tab.Navigator>
     </NavigationContainer>
   );
 }
+
+const styles = StyleSheet.create({
+  labelContainer: {
+    minWidth: 94,
+    minHeight: 44,
+    borderRadius: 14,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#EDE9FE',
+    borderWidth: 1,
+    borderColor: '#DDD6FE',
+    gap: 4,
+  },
+  labelContainerActive: {
+    backgroundColor: '#6D28D9',
+    borderColor: '#5B21B6',
+    shadowColor: '#4C1D95',
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    shadowOffset: {
+      width: 0,
+      height: 4,
+    },
+    elevation: 3,
+  },
+  indicator: {
+    width: 16,
+    height: 3,
+    borderRadius: 999,
+    backgroundColor: 'transparent',
+  },
+  indicatorActive: {
+    backgroundColor: '#DDD6FE',
+  },
+  labelText: {
+    color: '#6D28D9',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  labelTextActive: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '800',
+  },
+});
