@@ -6,6 +6,7 @@ import {
   listMonthlyHistoryGrouped,
 } from '../database/items.repository';
 import { syncAppData } from '../database/sync.service';
+import { SyncStatusCard } from '../components/SyncStatusCard';
 import type { DailyHistoryGroup, PeriodHistoryGroup } from '../types/inventory';
 import {
   formatDateLabel,
@@ -148,6 +149,8 @@ export function HistoryScreen() {
         }
         ListHeaderComponent={
           <View style={styles.headerBlock}>
+            <SyncStatusCard />
+
             <View style={styles.heroCard}>
               <Text style={styles.title}>{heroText.title}</Text>
               <Text style={styles.description}>{heroText.description}</Text>

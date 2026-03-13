@@ -13,6 +13,7 @@ import {
 } from 'react-native';
 import { listDailyInspectionItems, saveDailyInspection } from '../database/items.repository';
 import { syncAppData } from '../database/sync.service';
+import { SyncStatusCard } from '../components/SyncStatusCard';
 import type { DailyCountUpdateInput, DailyInspectionItem } from '../types/inventory';
 import {
   formatDateLabel,
@@ -252,6 +253,8 @@ export function DailyScreen() {
         }
         ListHeaderComponent={
           <View style={styles.headerBlock}>
+            <SyncStatusCard />
+
             <View style={styles.heroCard}>
               <Text style={styles.title}>Vistoria Diaria</Text>
               <Text style={styles.subtitle}>Data selecionada: {formatDateLabel(selectedDate)}</Text>

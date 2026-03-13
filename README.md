@@ -1,0 +1,167 @@
+# Gerenciamento de Estoque H2
+
+Aplicativo em Expo + React Native para controlar itens de estoque, registrar a vistoria diaria e acompanhar historicos consolidados. O projeto usa SQLite no aparelho para funcionar offline e Supabase para sincronizar os dados entre maquinas.
+
+## O que o projeto faz
+
+- Cadastra itens com nome, unidade de medida e quantidade minima
+- Permite editar itens ja cadastrados
+- Registra a quantidade atual de cada item na vistoria diaria
+- Mostra resumo automatico do dia com itens OK e itens para comprar
+- Exibe historico diario das vistorias salvas
+- Gera relatorio quinzenal e relatorio mensal
+- Sincroniza itens e vistorias com o Supabase quando o `.env` esta configurado
+- Exibe o status da sincronizacao na interface, com tentativa manual em caso de falha
+
+## Stack do projeto
+
+- Expo
+- React Native
+- TypeScript
+- Expo SQLite
+- Supabase REST API
+- React Navigation
+
+## Estrutura principal
+
+- `src/screens`: telas de itens, vistoria diaria e historico
+- `src/database`: banco local SQLite, migracoes, repositorios e sync com Supabase
+- `src/components`: componentes reutilizaveis da interface, incluindo o card de status do sync
+- `supabase/schema.sql`: schema SQL do banco remoto no Supabase
+
+## Como um novo usuario pode usar
+
+### 1. Clonar o repositorio
+
+```bash
+git clone https://github.com/gabrielscand/Gerenciamento-Estoque-H2.git
+cd Gerenciamento-Estoque-H2
+```
+
+### 2. Instalar as dependencias
+
+```bash
+npm install
+```
+
+### 3. Criar e configurar o `.env`
+
+Use o arquivo de exemplo da raiz:
+
+```bash
+cp .env.example .env
+```
+
+Depois edite o `.env` e preencha com os dados do seu projeto Supabase:
+
+```env
+EXPO_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
+EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY=your-supabase-publishable-key
+```
+
+Observacoes importantes:
+
+- O arquivo `.env` nao sobe para o GitHub
+- Sem o `.env`, o app continua funcionando localmente com SQLite
+- Para sincronizar entre maquinas, todas precisam usar o mesmo projeto Supabase
+
+## Configuracao do Supabase
+
+Se for a primeira vez configurando um banco novo para este projeto:
+
+1. Crie um projeto no Supabase.
+2. Abra o `SQL Editor`.
+3. Rode o arquivo `supabase/schema.sql`.
+4. Configure o `.env`.
+5. Reinicie o Expo, se ele ja estiver aberto.
+
+Se voce ja vai usar o mesmo projeto Supabase que o restante do time, nao precisa rodar o schema novamente. Basta clonar o projeto, instalar as dependencias, configurar o `.env` e iniciar o app.
+
+Observacao:
+
+- O setup atual foi pensado como prototipo funcional de dono unico. Hoje o schema deixa o RLS desabilitado para simplificar. Se esse projeto for publicado para varios usuarios, o proximo passo recomendado e adicionar autenticacao e politicas de acesso no Supabase.
+
+## Como abrir pelo terminal
+
+### Iniciar o ambiente
+
+```bash
+npm run start
+```
+
+Isso abre o Expo/Metro no terminal.
+
+### Abrir no navegador
+
+```bash
+npm run web
+```
+
+### Abrir em outras plataformas
+
+```bash
+npm run android
+npm run ios
+```
+
+## Como fechar pelo terminal
+
+Para encerrar o Expo/Metro que esta rodando no terminal atual:
+
+```bash
+Ctrl + C
+```
+
+Se alguma porta ficar presa por um processo antigo, descubra o PID e finalize manualmente. Exemplo com a porta `8081`:
+
+```bash
+lsof -nP -iTCP:8081 -sTCP:LISTEN
+kill <PID>
+```
+
+Se o processo nao encerrar normalmente:
+
+```bash
+kill -9 <PID>
+```
+
+## Fluxo de uso em maquina nova
+
+Sempre que abrir este projeto em outro computador:
+
+1. Clone o repositorio.
+2. Rode `npm install`.
+3. Rode `cp .env.example .env`.
+4. Preencha o `.env` com a URL e a publishable key do Supabase.
+5. Rode `npm run start` ou `npm run web`.
+
+Se o `.env` apontar para o mesmo projeto Supabase usado nas outras maquinas, os dados serao sincronizados automaticamente.
+
+## Como a persistencia funciona
+
+- O app grava os dados localmente em SQLite
+- O SQLite permite continuar usando o app offline
+- Quando o Supabase esta configurado, os dados locais sao enviados para a nuvem
+- Ao abrir o app, ele tambem busca os dados remotos para manter as maquinas alinhadas
+- A interface mostra o status da ultima sincronizacao e permite tentar novamente manualmente
+
+## Scripts disponiveis
+
+```bash
+npm run start
+npm run web
+npm run android
+npm run ios
+```
+
+## Resumo rapido de onboarding
+
+```bash
+git clone https://github.com/gabrielscand/Gerenciamento-Estoque-H2.git
+cd Gerenciamento-Estoque-H2
+npm install
+cp .env.example .env
+npm run start
+```
+
+Depois disso, basta preencher o `.env` corretamente para ativar a sincronizacao com o Supabase.

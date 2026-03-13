@@ -18,6 +18,7 @@ import {
   updateStockItem,
 } from '../database/items.repository';
 import { syncAppData } from '../database/sync.service';
+import { SyncStatusCard } from '../components/SyncStatusCard';
 import type { CreateStockItemInput, StockItemListRow } from '../types/inventory';
 
 type FormState = {
@@ -298,6 +299,8 @@ export function ItemsScreen() {
         }
         ListHeaderComponent={
           <View style={styles.headerBlock}>
+            <SyncStatusCard />
+
             <View style={styles.heroCard}>
               <Text style={styles.title}>Cadastro de Itens</Text>
               <Text style={styles.subtitle}>

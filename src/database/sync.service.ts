@@ -43,14 +43,50 @@ type RemoteDailyEntry = {
   updated_at: string;
 };
 
+type SyncMetaRow = {
+  key: string;
+  value: string;
+};
+
+export type SyncStateSnapshot = {
+  configured: boolean;
+  isSyncing: boolean;
+  lastSyncStartedAt: string | null;
+  lastSyncCompletedAt: string | null;
+  lastSyncError: string | null;
+};
+
 const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL?.trim() ?? '';
 const SUPABASE_PUBLISHABLE_KEY = process.env.EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY?.trim() ?? '';
 const SUPABASE_REST_URL = SUPABASE_URL ? `${SUPABASE_URL.replace(/\/+$/, '')}/rest/v1` : '';
 
 let activeSync: Promise<boolean> | null = null;
+let syncState: SyncStateSnapshot = {
+  configured: Boolean(SUPABASE_REST_URL && SUPABASE_PUBLISHABLE_KEY),
+  isSyncing: false,
+  lastSyncStartedAt: null,
+  lastSyncCompletedAt: null,
+  lastSyncError: null,
+};
+const syncListeners = new Set<() => void>();
 
 function nowIsoString(): string {
   return new Date().toISOString();
+}
+
+function emitSyncState(): void {
+  for (const listener of syncListeners) {
+    listener();
+  }
+}
+
+function updateSyncState(nextState: Partial<SyncStateSnapshot>): void {
+  syncState = {
+    ...syncState,
+    ...nextState,
+    configured: Boolean(SUPABASE_REST_URL && SUPABASE_PUBLISHABLE_KEY),
+  };
+  emitSyncState();
 }
 
 function normalizeTimestamp(value: string): string {
@@ -386,7 +422,13 @@ async function mergeRemoteDailyEntries(db: SQLiteDatabase, remoteEntries: Remote
 
 async function performSync(): Promise<boolean> {
   const db = await getDatabase();
-  await setSyncMeta(db, 'last_sync_started_at', nowIsoString());
+  const startedAt = nowIsoString();
+  await setSyncMeta(db, 'last_sync_started_at', startedAt);
+  updateSyncState({
+    configured: true,
+    isSyncing: true,
+    lastSyncStartedAt: startedAt,
+  });
 
   try {
     await pushPendingStockItems(db);
@@ -402,12 +444,24 @@ async function performSync(): Promise<boolean> {
     );
     await mergeRemoteDailyEntries(db, remoteEntries);
 
+    const completedAt = nowIsoString();
     await setSyncMeta(db, 'last_sync_error', '');
-    await setSyncMeta(db, 'last_sync_completed_at', nowIsoString());
+    await setSyncMeta(db, 'last_sync_completed_at', completedAt);
+    updateSyncState({
+      configured: true,
+      isSyncing: false,
+      lastSyncCompletedAt: completedAt,
+      lastSyncError: null,
+    });
     return true;
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Erro desconhecido ao sincronizar.';
     await setSyncMeta(db, 'last_sync_error', message);
+    updateSyncState({
+      configured: true,
+      isSyncing: false,
+      lastSyncError: message,
+    });
     throw error;
   }
 }
@@ -416,8 +470,44 @@ export function isRemoteSyncConfigured(): boolean {
   return Boolean(SUPABASE_REST_URL && SUPABASE_PUBLISHABLE_KEY);
 }
 
+export function getSyncStateSnapshot(): SyncStateSnapshot {
+  return syncState;
+}
+
+export function subscribeToSyncState(listener: () => void): () => void {
+  syncListeners.add(listener);
+
+  return () => {
+    syncListeners.delete(listener);
+  };
+}
+
+export async function refreshSyncStateFromDatabase(): Promise<SyncStateSnapshot> {
+  const db = await getDatabase();
+  const rows = await db.getAllAsync<SyncMetaRow>(
+    `
+      SELECT key, value
+      FROM sync_meta
+      WHERE key IN ('last_sync_started_at', 'last_sync_completed_at', 'last_sync_error');
+    `,
+  );
+  const meta = new Map(rows.map((row) => [row.key, row.value]));
+
+  syncState = {
+    configured: isRemoteSyncConfigured(),
+    isSyncing: activeSync !== null,
+    lastSyncStartedAt: meta.get('last_sync_started_at') || null,
+    lastSyncCompletedAt: meta.get('last_sync_completed_at') || null,
+    lastSyncError: meta.get('last_sync_error') || null,
+  };
+  emitSyncState();
+
+  return syncState;
+}
+
 export async function syncAppData(): Promise<boolean> {
   if (!isRemoteSyncConfigured()) {
+    updateSyncState({ configured: false, isSyncing: false });
     return false;
   }
 

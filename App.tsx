@@ -2,7 +2,7 @@ import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Platform, StyleSheet, Text, View } from 'react-native';
 import { initDatabase } from './src/database';
-import { syncAppData } from './src/database/sync.service';
+import { refreshSyncStateFromDatabase, syncAppData } from './src/database/sync.service';
 import { Tabs } from './src/navigation/Tabs';
 
 type InitStatus = 'loading' | 'ready' | 'error';
@@ -38,6 +38,7 @@ export default function App() {
         await runWithTimeout(
           (async () => {
             await initDatabase();
+            await refreshSyncStateFromDatabase();
             await syncAppData();
           })(),
           INIT_TIMEOUT_MS,
