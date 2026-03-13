@@ -5,6 +5,7 @@ import {
   listFortnightlyHistoryGrouped,
   listMonthlyHistoryGrouped,
 } from '../database/items.repository';
+import { syncAppData } from '../database/sync.service';
 import type { DailyHistoryGroup, PeriodHistoryGroup } from '../types/inventory';
 import {
   formatDateLabel,
@@ -35,11 +36,15 @@ export function HistoryScreen() {
 
   const isDailyMode = mode === 'diario';
 
-  async function loadHistory(nextMode: HistoryMode, nextMonth: string) {
+  async function loadHistory(nextMode: HistoryMode, nextMonth: string, syncFirst: boolean = false) {
     setIsLoading(true);
     setErrorMessage('');
 
     try {
+      if (syncFirst) {
+        await syncAppData();
+      }
+
       if (nextMode === 'diario') {
         const dailyData = await listDailyHistoryGrouped();
         setDailyGroups(dailyData);
@@ -137,7 +142,7 @@ export function HistoryScreen() {
           <RefreshControl
             refreshing={isLoading}
             onRefresh={() => {
-              void loadHistory(mode, selectedMonth);
+              void loadHistory(mode, selectedMonth, true);
             }}
           />
         }

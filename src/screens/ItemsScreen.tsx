@@ -17,6 +17,7 @@ import {
   listStockItems,
   updateStockItem,
 } from '../database/items.repository';
+import { syncAppData } from '../database/sync.service';
 import type { CreateStockItemInput, StockItemListRow } from '../types/inventory';
 
 type FormState = {
@@ -138,10 +139,14 @@ export function ItemsScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [feedbackMessage, setFeedbackMessage] = useState<string>('');
 
-  async function loadItems() {
+  async function loadItems(syncFirst: boolean = false) {
     setIsLoading(true);
 
     try {
+      if (syncFirst) {
+        await syncAppData();
+      }
+
       const data = await listStockItems();
       setItems(data);
     } catch (error) {
@@ -287,7 +292,7 @@ export function ItemsScreen() {
           <RefreshControl
             refreshing={isLoading}
             onRefresh={() => {
-              void loadItems();
+              void loadItems(true);
             }}
           />
         }

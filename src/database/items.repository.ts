@@ -1,4 +1,5 @@
 import { getDatabase } from './index';
+import { syncAppDataInBackground } from './sync.service';
 import {
   formatDateLabel,
   getMonthDateRange,
@@ -75,8 +76,25 @@ type PeriodHistoryDetailRow = {
   totalMissingQuantity: number;
 };
 
+type StockItemRemoteRow = {
+  id: number;
+  remote_id: string;
+};
+
 function normalizeItemName(name: string): string {
   return name.trim().toLocaleLowerCase();
+}
+
+function nowIsoString(): string {
+  return new Date().toISOString();
+}
+
+function createRemoteItemId(): string {
+  return `item-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+function buildDailyEntryRemoteId(itemRemoteId: string, date: string): string {
+  return `${itemRemoteId}:${date}`;
 }
 
 export async function listStockItems(): Promise<StockItemListRow[]> {
@@ -192,22 +210,38 @@ export async function createStockItem(input: CreateStockItemInput): Promise<void
   const database = await getDatabase();
   const name = input.name.trim();
   const unit = input.unit.trim();
+  const timestamp = nowIsoString();
+  const remoteId = createRemoteItemId();
 
   await database.runAsync(
     `
-      INSERT INTO stock_items (name, unit, min_quantity)
-      VALUES (?, ?, ?);
+      INSERT INTO stock_items (
+        remote_id,
+        sync_status,
+        name,
+        unit,
+        min_quantity,
+        created_at,
+        updated_at
+      )
+      VALUES (?, 'pending', ?, ?, ?, ?, ?);
     `,
+    remoteId,
     name,
     unit,
     input.minQuantity,
+    timestamp,
+    timestamp,
   );
+
+  syncAppDataInBackground();
 }
 
 export async function updateStockItem(itemId: number, input: UpdateStockItemInput): Promise<void> {
   const database = await getDatabase();
   const name = input.name.trim();
   const unit = input.unit.trim();
+  const timestamp = nowIsoString();
 
   const result = await database.runAsync(
     `
@@ -216,18 +250,22 @@ export async function updateStockItem(itemId: number, input: UpdateStockItemInpu
         name = ?,
         unit = ?,
         min_quantity = ?,
-        updated_at = datetime('now')
+        updated_at = ?,
+        sync_status = 'pending'
       WHERE id = ?;
     `,
     name,
     unit,
     input.minQuantity,
+    timestamp,
     itemId,
   );
 
   if ((result.changes ?? 0) === 0) {
     throw new Error('Item nao encontrado para edicao.');
   }
+
+  syncAppDataInBackground();
 }
 
 export async function saveDailyInspection(
@@ -243,6 +281,17 @@ export async function saveDailyInspection(
   }
 
   const database = await getDatabase();
+  const itemIds = updates.map((update) => update.itemId);
+  const itemIdPlaceholders = itemIds.map(() => '?').join(', ');
+  const itemRows = await database.getAllAsync<StockItemRemoteRow>(
+    `
+      SELECT id, remote_id
+      FROM stock_items
+      WHERE id IN (${itemIdPlaceholders});
+    `,
+    ...itemIds,
+  );
+  const itemRemoteIds = new Map<number, string>(itemRows.map((row) => [row.id, row.remote_id]));
 
   await database.withTransactionAsync(async () => {
     for (const update of updates) {
@@ -250,21 +299,45 @@ export async function saveDailyInspection(
         throw new Error('Quantidade invalida para vistoria diaria.');
       }
 
+      const itemRemoteId = itemRemoteIds.get(update.itemId);
+
+      if (!itemRemoteId) {
+        throw new Error('Item nao encontrado para sincronizacao da vistoria.');
+      }
+
+      const entryRemoteId = buildDailyEntryRemoteId(itemRemoteId, date);
+      const timestamp = nowIsoString();
+
       await database.runAsync(
         `
-          INSERT INTO daily_stock_entries (item_id, date, quantity)
-          VALUES (?, ?, ?)
+          INSERT INTO daily_stock_entries (
+            item_id,
+            remote_id,
+            sync_status,
+            date,
+            quantity,
+            created_at,
+            updated_at
+          )
+          VALUES (?, ?, 'pending', ?, ?, ?, ?)
           ON CONFLICT(item_id, date)
           DO UPDATE SET
+            remote_id = excluded.remote_id,
             quantity = excluded.quantity,
-            updated_at = datetime('now');
+            updated_at = excluded.updated_at,
+            sync_status = 'pending';
         `,
         update.itemId,
+        entryRemoteId,
         date,
         update.quantity,
+        timestamp,
+        timestamp,
       );
     }
   });
+
+  syncAppDataInBackground();
 }
 
 export async function listDailyHistoryGrouped(): Promise<DailyHistoryGroup[]> {

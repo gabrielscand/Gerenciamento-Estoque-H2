@@ -12,6 +12,7 @@ import {
   View,
 } from 'react-native';
 import { listDailyInspectionItems, saveDailyInspection } from '../database/items.repository';
+import { syncAppData } from '../database/sync.service';
 import type { DailyCountUpdateInput, DailyInspectionItem } from '../types/inventory';
 import {
   formatDateLabel,
@@ -62,7 +63,7 @@ export function DailyScreen() {
   const [submitError, setSubmitError] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
 
-  async function loadInspectionItems(date: string) {
+  async function loadInspectionItems(date: string, syncFirst: boolean = false) {
     setIsLoading(true);
     setSubmitError('');
     setSuccessMessage('');
@@ -78,6 +79,10 @@ export function DailyScreen() {
 
     try {
       setSelectedDateError('');
+      if (syncFirst) {
+        await syncAppData();
+      }
+
       const data = await listDailyInspectionItems(date);
       setItems(data);
       const nextQuantities: QuantityFormMap = {};
@@ -241,7 +246,7 @@ export function DailyScreen() {
           <RefreshControl
             refreshing={isLoading}
             onRefresh={() => {
-              void loadInspectionItems(selectedDate);
+              void loadInspectionItems(selectedDate, true);
             }}
           />
         }
