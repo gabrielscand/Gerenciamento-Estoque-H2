@@ -44,19 +44,30 @@ export interface DailyInspectionItem {
   currentQuantity: number | null;
 }
 
+export interface StockMovementItem {
+  id: number;
+  name: string;
+  unit: string;
+  minQuantity: number;
+  category: StockCategory | null;
+  currentStockQuantity: number | null;
+  currentQuantity: number | null;
+}
+
 export interface DailyCountUpdateInput {
   itemId: number;
   quantity: number;
 }
 
 export interface DailyHistoryEntry {
+  id: number;
   date: string;
   itemId: number;
   name: string;
   unit: string;
   quantity: number;
   minQuantity: number;
-  movementType: 'initial' | 'consumption' | 'legacy_snapshot';
+  movementType: 'entry' | 'exit' | 'initial' | 'consumption' | 'legacy_snapshot';
   stockAfterQuantity: number | null;
   needsPurchase: boolean;
   missingQuantity: number;

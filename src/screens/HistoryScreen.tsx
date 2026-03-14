@@ -49,6 +49,14 @@ function formatQuantity(value: number): string {
 }
 
 function getMovementTypeLabel(movementType: DailyHistoryEntry['movementType']): string {
+  if (movementType === 'entry') {
+    return 'Entrada';
+  }
+
+  if (movementType === 'exit') {
+    return 'Saida';
+  }
+
   if (movementType === 'initial') {
     return 'Inicial';
   }
@@ -286,7 +294,7 @@ export function HistoryScreen() {
   async function requestUpdatedQuantity(currentQuantity: number): Promise<number | null> {
     const value = await requestTextValue({
       title: 'Editar quantidade',
-      message: 'Informe a nova quantidade desta vistoria.',
+      message: 'Informe a nova quantidade desta movimentacao.',
       placeholder: 'Quantidade',
       secureTextEntry: false,
       keyboardType: 'decimal-pad',
@@ -300,7 +308,7 @@ export function HistoryScreen() {
     const parsed = parseDecimalInput(value);
 
     if (parsed === null || parsed < 0) {
-      setErrorMessage('Informe uma quantidade valida para editar a vistoria.');
+      setErrorMessage('Informe uma quantidade valida para editar a movimentacao.');
       return null;
     }
 
@@ -323,14 +331,14 @@ export function HistoryScreen() {
       return;
     }
 
-    setActiveActionKey(`edit-${entry.date}-${entry.itemId}`);
+    setActiveActionKey(`edit-${entry.id}`);
 
     try {
-      await updateDailyHistoryEntry(entry.date, entry.itemId, updatedQuantity);
-      setSuccessMessage(`Vistoria de ${formatDateLabel(entry.date)} atualizada com sucesso.`);
+      await updateDailyHistoryEntry(entry.id, updatedQuantity);
+      setSuccessMessage(`Movimentacao de ${formatDateLabel(entry.date)} atualizada com sucesso.`);
       await loadHistory('diario', selectedMonth, true);
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Falha ao editar vistoria diaria.';
+      const message = error instanceof Error ? error.message : 'Falha ao editar movimentacao.';
       await loadHistory('diario', selectedMonth);
       setErrorMessage(message);
     } finally {
@@ -349,22 +357,22 @@ export function HistoryScreen() {
     }
 
     const confirmed = await confirmAction(
-      'Excluir item da vistoria',
-      `Deseja excluir ${entry.name} da vistoria de ${formatDateLabel(entry.date)}?`,
+      'Excluir movimentacao',
+      `Deseja excluir esta movimentacao de ${entry.name} em ${formatDateLabel(entry.date)}?`,
     );
 
     if (!confirmed) {
       return;
     }
 
-    setActiveActionKey(`delete-entry-${entry.date}-${entry.itemId}`);
+    setActiveActionKey(`delete-entry-${entry.id}`);
 
     try {
-      await archiveDailyHistoryEntry(entry.date, entry.itemId);
-      setSuccessMessage(`Item removido da vistoria de ${formatDateLabel(entry.date)}.`);
+      await archiveDailyHistoryEntry(entry.id);
+      setSuccessMessage(`Movimentacao removida de ${formatDateLabel(entry.date)}.`);
       await loadHistory('diario', selectedMonth, true);
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Falha ao excluir item da vistoria.';
+      const message = error instanceof Error ? error.message : 'Falha ao excluir movimentacao.';
       await loadHistory('diario', selectedMonth);
       setErrorMessage(message);
     } finally {
@@ -383,8 +391,8 @@ export function HistoryScreen() {
     }
 
     const confirmed = await confirmAction(
-      'Excluir vistoria do dia',
-      `Deseja excluir toda a vistoria de ${formatDateLabel(date)}?`,
+      'Excluir movimentacoes do dia',
+      `Deseja excluir todas as movimentacoes de ${formatDateLabel(date)}?`,
     );
 
     if (!confirmed) {
@@ -395,10 +403,10 @@ export function HistoryScreen() {
 
     try {
       await archiveDailyHistoryDate(date);
-      setSuccessMessage(`Vistoria de ${formatDateLabel(date)} excluida com sucesso.`);
+      setSuccessMessage(`Movimentacoes de ${formatDateLabel(date)} excluidas com sucesso.`);
       await loadHistory('diario', selectedMonth, true);
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Falha ao excluir vistoria do dia.';
+      const message = error instanceof Error ? error.message : 'Falha ao excluir movimentacoes do dia.';
       await loadHistory('diario', selectedMonth);
       setErrorMessage(message);
     } finally {
@@ -410,7 +418,7 @@ export function HistoryScreen() {
     if (mode === 'diario') {
       return {
         title: 'Historico Diario',
-        description: 'Veja cada vistoria salva por dia, incluindo o quanto faltou comprar por item.',
+        description: 'Veja cada movimentacao salva por dia, incluindo saldo apos cada lancamento.',
       };
     }
 
@@ -503,7 +511,7 @@ export function HistoryScreen() {
           isLoading ? (
             <Text style={styles.emptyText}>Carregando historico...</Text>
           ) : (
-            <Text style={styles.emptyText}>Nenhuma vistoria registrada para este filtro.</Text>
+            <Text style={styles.emptyText}>Nenhuma movimentacao registrada para este filtro.</Text>
           )
         }
         renderItem={({ item }) => {
@@ -534,12 +542,13 @@ export function HistoryScreen() {
                 </View>
 
                 <Text style={styles.groupSummary}>
-                  Total itens: {dailyItem.totalItems} | OK: {dailyItem.okItems} | Comprar:{' '}
-                  {dailyItem.needPurchaseItems} | Faltante total: {formatQuantity(dailyItem.totalMissingQuantity)}
+                  Total itens: {dailyItem.totalItems} | Movimentacoes: {dailyItem.countedItems} | OK: {dailyItem.okItems}{' '}
+                  | Comprar: {dailyItem.needPurchaseItems} | Faltante total:{' '}
+                  {formatQuantity(dailyItem.totalMissingQuantity)}
                 </Text>
 
                 {dailyItem.entries.map((entry) => (
-                  <View key={`${entry.date}-${entry.itemId}`} style={styles.entryRow}>
+                  <View key={String(entry.id)} style={styles.entryRow}>
                     <View style={styles.entryInfo}>
                       <View style={styles.entryTitleRow}>
                         <Text style={styles.entryName}>{entry.name}</Text>
@@ -560,7 +569,7 @@ export function HistoryScreen() {
                         <Pressable
                           style={[
                             styles.entryActionButton,
-                            activeActionKey === `edit-${entry.date}-${entry.itemId}`
+                            activeActionKey === `edit-${entry.id}`
                               ? styles.actionDisabled
                               : undefined,
                           ]}
@@ -574,7 +583,7 @@ export function HistoryScreen() {
                         <Pressable
                           style={[
                             styles.entryDeleteButton,
-                            activeActionKey === `delete-entry-${entry.date}-${entry.itemId}`
+                            activeActionKey === `delete-entry-${entry.id}`
                               ? styles.actionDisabled
                               : undefined,
                           ]}

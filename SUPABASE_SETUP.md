@@ -11,8 +11,9 @@ Observacoes:
 - O app continua funcionando localmente com SQLite mesmo sem configurar o Supabase.
 - Esta configuracao inicial desabilita RLS para simplificar um prototipo de dono unico. Se voce for publicar o app para terceiros, o proximo passo precisa ser adicionar autenticacao e politicas de acesso.
 - Se voce ja tinha rodado um schema antigo, rode novamente `supabase/schema.sql` para aplicar as colunas novas em `stock_items` (`is_deleted`, `deleted_at`, `category`, `current_stock_quantity`) e em `daily_stock_entries` (`is_deleted`, `deleted_at`, `movement_type`, `stock_after_quantity`).
+- O schema mais recente remove a restricao unica de `(item_id, date)` em `daily_stock_entries` para permitir varias movimentacoes no mesmo dia (entrada e saida separadas).
 - Exclusao de item e logica: o registro permanece em `stock_items` com `is_deleted = true` e `deleted_at` preenchido.
-- Exclusao de vistoria no historico diario tambem e logica: o registro permanece em `daily_stock_entries` com `is_deleted = true` e `deleted_at` preenchido.
+- Exclusao de movimentacao no historico diario tambem e logica: o registro permanece em `daily_stock_entries` com `is_deleted = true` e `deleted_at` preenchido.
 - Categoria e obrigatoria no app para novos cadastros, mas itens legados podem ficar com `category = NULL` ate serem editados.
 - Para visualizar apenas itens ativos no painel SQL, prefira a view `public.stock_items_active`.
 - Para consultar itens arquivados, use a view `public.stock_items_archived`.

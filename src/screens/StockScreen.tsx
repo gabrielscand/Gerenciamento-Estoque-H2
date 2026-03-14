@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useIsFocused } from '@react-navigation/native';
 import { FlatList, Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native';
 import { getCategoryLabel } from '../constants/categories';
 import { listStockCurrentOverview } from '../database/items.repository';
@@ -17,6 +18,7 @@ export function StockScreen() {
   const [items, setItems] = useState<StockCurrentOverviewRow[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState('');
+  const isFocused = useIsFocused();
 
   async function loadStock(syncFirst: boolean = false) {
     setIsLoading(true);
@@ -37,8 +39,12 @@ export function StockScreen() {
   }
 
   useEffect(() => {
+    if (!isFocused) {
+      return;
+    }
+
     void loadStock();
-  }, []);
+  }, [isFocused]);
 
   const summary = useMemo(() => {
     let initializedItems = 0;

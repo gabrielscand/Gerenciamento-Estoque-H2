@@ -21,14 +21,13 @@ create table if not exists public.daily_stock_entries (
   quantity double precision not null check (quantity >= 0),
   movement_type text check (
     movement_type is null
-    or movement_type in ('initial', 'consumption', 'legacy_snapshot')
+    or movement_type in ('entry', 'exit', 'initial', 'consumption', 'legacy_snapshot')
   ),
   stock_after_quantity double precision check (stock_after_quantity is null or stock_after_quantity >= 0),
   is_deleted boolean not null default false,
   deleted_at timestamptz,
   created_at timestamptz not null default timezone('utc', now()),
-  updated_at timestamptz not null default timezone('utc', now()),
-  unique (item_id, date)
+  updated_at timestamptz not null default timezone('utc', now())
 );
 
 create index if not exists idx_daily_stock_entries_date
@@ -36,6 +35,9 @@ create index if not exists idx_daily_stock_entries_date
 
 create index if not exists idx_daily_stock_entries_item_id
   on public.daily_stock_entries (item_id);
+
+create index if not exists idx_daily_stock_entries_item_date
+  on public.daily_stock_entries (item_id, date);
 
 create index if not exists idx_daily_stock_entries_is_deleted
   on public.daily_stock_entries (is_deleted);
@@ -66,6 +68,30 @@ alter table public.daily_stock_entries
 
 alter table public.daily_stock_entries
   add column if not exists stock_after_quantity double precision;
+
+do $$
+begin
+  if exists (
+    select 1
+    from pg_constraint
+    where conname = 'daily_stock_entries_item_id_date_key'
+      and conrelid = 'public.daily_stock_entries'::regclass
+  ) then
+    alter table public.daily_stock_entries
+      drop constraint daily_stock_entries_item_id_date_key;
+  end if;
+end
+$$;
+
+alter table public.daily_stock_entries
+  drop constraint if exists daily_stock_entries_movement_type_check;
+
+alter table public.daily_stock_entries
+  add constraint daily_stock_entries_movement_type_check
+  check (
+    movement_type is null
+    or movement_type in ('entry', 'exit', 'initial', 'consumption', 'legacy_snapshot')
+  );
 
 create index if not exists idx_stock_items_category
   on public.stock_items (category);

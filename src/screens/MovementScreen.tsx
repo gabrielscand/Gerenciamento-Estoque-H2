@@ -12,10 +12,14 @@ import {
   View,
 } from 'react-native';
 import { STOCK_CATEGORIES, getCategoryLabel, type StockCategory } from '../constants/categories';
-import { listDailyInspectionItems, saveDailyInspection } from '../database/items.repository';
+import {
+  listStockMovementItems,
+  saveStockEntries,
+  saveStockExits,
+} from '../database/items.repository';
 import { syncAppData } from '../database/sync.service';
 import { SyncStatusCard } from '../components/SyncStatusCard';
-import type { DailyCountUpdateInput, DailyInspectionItem } from '../types/inventory';
+import type { DailyCountUpdateInput, StockMovementItem } from '../types/inventory';
 import {
   formatDateLabel,
   getTodayLocalDateString,
@@ -24,8 +28,10 @@ import {
 } from '../utils/date';
 import { DateField } from '../components/DateField';
 
+type MovementMode = 'entry' | 'exit';
 type QuantityFormMap = Record<string, string>;
 type QuantityErrorMap = Record<string, string>;
+
 const TOAST_DURATION_MS = 2800;
 const FILTER_ALL = '__all__';
 const FILTER_UNCATEGORIZED = '__uncategorized__';
@@ -126,10 +132,34 @@ function CategoryFilterSelect({
   );
 }
 
-export function DailyScreen() {
+function getHeroText(mode: MovementMode): { title: string; description: string; button: string } {
+  if (mode === 'entry') {
+    return {
+      title: 'Entrada',
+      description: 'Registre o estoque inicial e as reposicoes. Toda entrada soma no saldo atual.',
+      button: 'Salvar entradas',
+    };
+  }
+
+  return {
+    title: 'Saida',
+    description: 'Registre as saidas do dia. Toda saida reduz o saldo atual e nunca pode ultrapassar o saldo.',
+    button: 'Salvar saidas',
+  };
+}
+
+export function EntryScreen() {
+  return <StockMovementScreen mode="entry" />;
+}
+
+export function ExitScreen() {
+  return <StockMovementScreen mode="exit" />;
+}
+
+function StockMovementScreen({ mode }: { mode: MovementMode }) {
   const [selectedDate, setSelectedDate] = useState(getTodayLocalDateString());
   const [selectedDateError, setSelectedDateError] = useState('');
-  const [items, setItems] = useState<DailyInspectionItem[]>([]);
+  const [items, setItems] = useState<StockMovementItem[]>([]);
   const [categoryFilter, setCategoryFilter] = useState<CategoryFilterValue>(FILTER_ALL);
   const [isCategoryFilterOpen, setIsCategoryFilterOpen] = useState(false);
   const [quantities, setQuantities] = useState<QuantityFormMap>({});
@@ -140,6 +170,7 @@ export function DailyScreen() {
   const [toastMessage, setToastMessage] = useState('');
   const [isToastVisible, setIsToastVisible] = useState(false);
   const toastTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const heroText = getHeroText(mode);
 
   function clearToastTimer() {
     if (!toastTimeoutRef.current) {
@@ -161,7 +192,7 @@ export function DailyScreen() {
     }, TOAST_DURATION_MS);
   }
 
-  async function loadInspectionItems(date: string, syncFirst: boolean = false) {
+  async function loadMovementItems(date: string, syncFirst: boolean = false) {
     setIsLoading(true);
     setSubmitError('');
 
@@ -180,27 +211,26 @@ export function DailyScreen() {
         await syncAppData();
       }
 
-      const data = await listDailyInspectionItems(date);
+      const data = await listStockMovementItems(mode, date);
       setItems(data);
       const nextQuantities: QuantityFormMap = {};
 
       for (const item of data) {
-        nextQuantities[String(item.id)] =
-          item.currentQuantity === null ? '' : String(item.currentQuantity);
+        nextQuantities[String(item.id)] = '';
       }
 
       setQuantities(nextQuantities);
       setFieldErrors({});
     } catch (error) {
-      setSubmitError(error instanceof Error ? error.message : 'Falha ao carregar vistoria do dia.');
+      setSubmitError(error instanceof Error ? error.message : 'Falha ao carregar movimentacoes.');
     } finally {
       setIsLoading(false);
     }
   }
 
   useEffect(() => {
-    void loadInspectionItems(selectedDate);
-  }, [selectedDate]);
+    void loadMovementItems(selectedDate);
+  }, [selectedDate, mode]);
 
   useEffect(() => {
     return () => {
@@ -231,22 +261,23 @@ export function DailyScreen() {
     for (const item of filteredItems) {
       const parsed = parseDecimalInput(quantities[String(item.id)] ?? '');
       const currentStock = item.currentStockQuantity;
-      const hasInitialStock = currentStock !== null;
 
       if (parsed !== null && parsed < 0) {
         continue;
       }
 
-      if (hasInitialStock && currentStock !== null && parsed !== null && parsed > currentStock) {
+      if (mode === 'exit' && parsed !== null && currentStock !== null && parsed > currentStock) {
         continue;
       }
 
       const projectedStock =
         parsed === null
           ? currentStock
-          : hasInitialStock && currentStock !== null
-            ? currentStock - parsed
-            : parsed;
+          : mode === 'entry'
+            ? (currentStock ?? 0) + parsed
+            : currentStock === null
+              ? null
+              : currentStock - parsed;
 
       if (projectedStock === null) {
         continue;
@@ -265,9 +296,9 @@ export function DailyScreen() {
     }
 
     return { needPurchase, okCount, countedItems: evaluatedItems, totalMissingQuantity };
-  }, [filteredItems, quantities]);
+  }, [filteredItems, quantities, mode]);
 
-  function setInspectionDate(value: string) {
+  function setMovementDate(value: string) {
     setSelectedDate(value.trim());
     setIsCategoryFilterOpen(false);
     setSelectedDateError('');
@@ -282,7 +313,7 @@ export function DailyScreen() {
 
   async function confirmFutureDateSave(): Promise<boolean> {
     const message =
-      'A data escolhida esta no futuro. Deseja salvar a vistoria mesmo assim?';
+      'A data escolhida esta no futuro. Deseja salvar a movimentacao mesmo assim?';
 
     if (Platform.OS === 'web') {
       if (typeof globalThis.confirm === 'function') {
@@ -313,7 +344,7 @@ export function DailyScreen() {
     });
   }
 
-  async function handleSaveInspection() {
+  async function handleSaveMovements() {
     if (!isValidDateString(selectedDate)) {
       setSelectedDateError('Informe uma data valida no formato DD/MM/AAAA.');
       return;
@@ -341,9 +372,16 @@ export function DailyScreen() {
         continue;
       }
 
-      if (item.currentStockQuantity !== null && parsed > item.currentStockQuantity) {
-        nextErrors[String(item.id)] = 'Consumo maior que o saldo atual.';
-        continue;
+      if (mode === 'exit') {
+        if (item.currentStockQuantity === null) {
+          nextErrors[String(item.id)] = 'Item sem estoque inicial. Registre entrada primeiro.';
+          continue;
+        }
+
+        if (parsed > item.currentStockQuantity) {
+          nextErrors[String(item.id)] = 'Saida maior que o saldo atual.';
+          continue;
+        }
       }
 
       updates.push({ itemId: item.id, quantity: parsed });
@@ -355,7 +393,7 @@ export function DailyScreen() {
     }
 
     if (updates.length === 0) {
-      setSubmitError('Preencha ao menos um item visivel no filtro para salvar a vistoria.');
+      setSubmitError('Preencha ao menos um item visivel no filtro para salvar.');
       return;
     }
 
@@ -371,11 +409,16 @@ export function DailyScreen() {
     setSubmitError('');
 
     try {
-      await saveDailyInspection(updates, selectedDate);
-      showSuccessToast(`Vistoria de ${formatDateLabel(selectedDate)} salva com sucesso.`);
-      await loadInspectionItems(selectedDate);
+      if (mode === 'entry') {
+        await saveStockEntries(updates, selectedDate);
+      } else {
+        await saveStockExits(updates, selectedDate);
+      }
+
+      showSuccessToast(`${heroText.title} de ${formatDateLabel(selectedDate)} salva com sucesso.`);
+      await loadMovementItems(selectedDate);
     } catch (error) {
-      setSubmitError(error instanceof Error ? error.message : 'Nao foi possivel salvar a vistoria.');
+      setSubmitError(error instanceof Error ? error.message : 'Nao foi possivel salvar movimentacao.');
     } finally {
       setIsSaving(false);
     }
@@ -396,7 +439,7 @@ export function DailyScreen() {
           <RefreshControl
             refreshing={isLoading}
             onRefresh={() => {
-              void loadInspectionItems(selectedDate, true);
+              void loadMovementItems(selectedDate, true);
             }}
           />
         }
@@ -405,12 +448,9 @@ export function DailyScreen() {
             <SyncStatusCard />
 
             <View style={styles.heroCard}>
-              <Text style={styles.title}>Vistoria Diaria</Text>
+              <Text style={styles.title}>{heroText.title}</Text>
               <Text style={styles.subtitle}>Data selecionada: {formatDateLabel(selectedDate)}</Text>
-              <Text style={styles.description}>
-                Registre o consumo do dia. Se o item ainda nao tiver saldo inicial, o primeiro valor vira estoque
-                inicial.
-              </Text>
+              <Text style={styles.description}>{heroText.description}</Text>
               <Text style={styles.summaryText}>
                 {summary.countedItems} avaliados | {summary.okCount} OK | {summary.needPurchase} comprar | Falta total:{' '}
                 {formatQuantity(summary.totalMissingQuantity)}
@@ -419,14 +459,14 @@ export function DailyScreen() {
 
             <View style={styles.dateCard}>
               <DateField
-                label="Dia da vistoria"
+                label="Dia da movimentacao"
                 value={selectedDate}
-                onChange={setInspectionDate}
+                onChange={setMovementDate}
                 error={selectedDateError}
               />
               <Pressable
                 style={styles.todayButton}
-                onPress={() => setInspectionDate(getTodayLocalDateString())}
+                onPress={() => setMovementDate(getTodayLocalDateString())}
               >
                 <Text style={styles.todayButtonText}>Hoje</Text>
               </Pressable>
@@ -451,13 +491,13 @@ export function DailyScreen() {
                 style={[styles.submitButton, isSaving ? styles.submitButtonDisabled : undefined]}
                 disabled={isSaving}
                 onPress={() => {
-                  void handleSaveInspection();
+                  void handleSaveMovements();
                 }}
               >
                 {isSaving ? (
                   <ActivityIndicator color="#FFFFFF" />
                 ) : (
-                  <Text style={styles.submitButtonText}>Salvar movimentacoes do dia</Text>
+                  <Text style={styles.submitButtonText}>{heroText.button}</Text>
                 )}
               </Pressable>
             ) : null}
@@ -472,7 +512,7 @@ export function DailyScreen() {
             <Text style={styles.emptyText}>Carregando itens...</Text>
           ) : items.length === 0 ? (
             <Text style={styles.emptyText}>
-              Nenhum item cadastrado. Cadastre itens na aba Itens para iniciar a vistoria.
+              Nenhum item cadastrado. Cadastre itens na aba Itens para iniciar a movimentacao.
             </Text>
           ) : (
             <Text style={styles.emptyText}>Nenhum item encontrado para o filtro selecionado.</Text>
@@ -481,16 +521,17 @@ export function DailyScreen() {
         renderItem={({ item }) => {
           const parsed = parseDecimalInput(quantities[String(item.id)] ?? '');
           const currentStock = item.currentStockQuantity;
-          const hasInitialStock = currentStock !== null;
-          const invalidOverConsumption =
-            hasInitialStock && currentStock !== null && parsed !== null && parsed > currentStock;
+          const invalidOverMovement =
+            mode === 'exit' && currentStock !== null && parsed !== null && parsed > currentStock;
           const projectedStock =
             parsed === null
               ? currentStock
-              : hasInitialStock && currentStock !== null
-                ? currentStock - parsed
-                : parsed;
-          const hasProjectedStock = projectedStock !== null && !invalidOverConsumption;
+              : mode === 'entry'
+                ? (currentStock ?? 0) + parsed
+                : currentStock === null
+                  ? null
+                  : currentStock - parsed;
+          const hasProjectedStock = projectedStock !== null && !invalidOverMovement;
           const needsPurchase = hasProjectedStock && projectedStock <= item.minQuantity;
           const missingQuantity =
             hasProjectedStock && projectedStock < item.minQuantity ? item.minQuantity - projectedStock : 0;
@@ -504,15 +545,15 @@ export function DailyScreen() {
                     styles.statusBadge,
                     !hasProjectedStock
                       ? styles.statusPending
-                      : invalidOverConsumption || needsPurchase
+                      : invalidOverMovement || needsPurchase
                         ? styles.statusNeedPurchase
                         : styles.statusOk,
                   ]}
                 >
                   <Text style={styles.statusText}>
                     {!hasProjectedStock
-                      ? invalidOverConsumption
-                        ? 'Consumo acima do saldo'
+                      ? invalidOverMovement
+                        ? 'Saida acima do saldo'
                         : 'Sem estoque inicial'
                       : needsPurchase
                         ? missingQuantity > 0
@@ -531,16 +572,28 @@ export function DailyScreen() {
               <Text style={styles.itemMeta}>
                 Categoria: {item.category ? getCategoryLabel(item.category) : 'Sem categoria'}
               </Text>
+              <Text style={styles.itemMeta}>
+                Total de {mode === 'entry' ? 'entradas' : 'saidas'} no dia:{' '}
+                {item.currentQuantity === null ? '-' : formatQuantity(item.currentQuantity)}
+              </Text>
               {hasProjectedStock && parsed !== null ? (
-                <Text style={styles.itemMeta}>Saldo apos o dia: {formatQuantity(projectedStock as number)}</Text>
+                <Text style={styles.itemMeta}>
+                  Saldo apos {mode === 'entry' ? 'entrada' : 'saida'}: {formatQuantity(projectedStock as number)}
+                </Text>
               ) : null}
 
-              <Text style={styles.inputLabel}>{currentStock === null ? 'Estoque inicial' : 'Consumo do dia'}</Text>
+              <Text style={styles.inputLabel}>
+                {mode === 'entry'
+                  ? currentStock === null
+                    ? 'Estoque inicial'
+                    : 'Entrada do dia'
+                  : 'Saida do dia'}
+              </Text>
 
               <TextInput
                 value={quantities[String(item.id)] ?? ''}
                 onChangeText={(value) => setQuantity(item.id, value)}
-                placeholder={currentStock === null ? 'Ex.: 50' : 'Ex.: 3'}
+                placeholder={mode === 'entry' ? 'Ex.: 50' : 'Ex.: 3'}
                 keyboardType="decimal-pad"
                 style={[
                   styles.input,
@@ -628,6 +681,19 @@ const styles = StyleSheet.create({
     padding: 12,
     gap: 10,
   },
+  todayButton: {
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#C4B5FD',
+    backgroundColor: '#F5F3FF',
+    paddingVertical: 8,
+    alignItems: 'center',
+  },
+  todayButtonText: {
+    color: '#5B21B6',
+    fontWeight: '700',
+    fontSize: 13,
+  },
   filterCard: {
     backgroundColor: '#FFFFFF',
     borderWidth: 1,
@@ -642,21 +708,23 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   filterSelectRoot: {
-    gap: 6,
+    position: 'relative',
   },
   filterSelectTrigger: {
+    minHeight: 42,
+    borderRadius: 10,
     borderWidth: 1,
     borderColor: '#C4B5FD',
     backgroundColor: '#FAF5FF',
-    borderRadius: 12,
-    minHeight: 42,
     paddingHorizontal: 12,
     paddingVertical: 9,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    gap: 10,
   },
   filterSelectText: {
+    flex: 1,
     color: '#3B0764',
     fontSize: 14,
     fontWeight: '600',
@@ -664,52 +732,39 @@ const styles = StyleSheet.create({
   filterSelectArrow: {
     color: '#6D28D9',
     fontSize: 12,
-    fontWeight: '700',
+    fontWeight: '800',
   },
   filterSelectMenu: {
+    marginTop: 6,
+    borderRadius: 10,
     borderWidth: 1,
-    borderColor: '#DDD6FE',
-    borderRadius: 12,
+    borderColor: '#C4B5FD',
     backgroundColor: '#FFFFFF',
     overflow: 'hidden',
   },
   filterSelectOption: {
     paddingHorizontal: 12,
     paddingVertical: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F3E8FF',
   },
   filterSelectOptionActive: {
     backgroundColor: '#EDE9FE',
   },
   filterSelectOptionText: {
     color: '#4C1D95',
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '600',
   },
   filterSelectOptionTextActive: {
     color: '#5B21B6',
     fontWeight: '700',
   },
-  todayButton: {
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: '#C4B5FD',
-    backgroundColor: '#F5F3FF',
-    paddingVertical: 8,
-    alignItems: 'center',
-  },
-  todayButtonText: {
-    color: '#5B21B6',
-    fontWeight: '700',
-    fontSize: 13,
-  },
   submitButton: {
-    backgroundColor: '#7C3AED',
     borderRadius: 12,
     minHeight: 44,
-    justifyContent: 'center',
+    backgroundColor: '#7C3AED',
     alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 12,
   },
   submitButtonDisabled: {
     opacity: 0.7,
@@ -720,9 +775,15 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   listTitle: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: '700',
-    color: '#3B0764',
+    color: '#4C1D95',
+  },
+  emptyText: {
+    textAlign: 'center',
+    color: '#6D28D9',
+    fontSize: 14,
+    marginTop: 16,
   },
   itemCard: {
     backgroundColor: '#FFFFFF',
@@ -745,12 +806,13 @@ const styles = StyleSheet.create({
     color: '#3B0764',
   },
   itemMeta: {
-    color: '#5B21B6',
     fontSize: 13,
+    color: '#5B21B6',
   },
   inputLabel: {
+    marginTop: 6,
+    fontSize: 13,
     color: '#6D28D9',
-    fontSize: 12,
     fontWeight: '700',
   },
   input: {
@@ -761,9 +823,15 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 10,
     color: '#3B0764',
+    fontSize: 15,
   },
   inputError: {
-    borderColor: '#DC2626',
+    borderColor: '#EF4444',
+  },
+  errorText: {
+    color: '#B91C1C',
+    fontSize: 12,
+    lineHeight: 17,
   },
   statusBadge: {
     borderRadius: 999,
@@ -780,19 +848,8 @@ const styles = StyleSheet.create({
     backgroundColor: '#DDD6FE',
   },
   statusText: {
+    color: '#4C1D95',
     fontSize: 12,
     fontWeight: '700',
-    color: '#4C1D95',
-  },
-  emptyText: {
-    textAlign: 'center',
-    color: '#6D28D9',
-    fontSize: 14,
-    marginTop: 16,
-  },
-  errorText: {
-    color: '#B91C1C',
-    fontSize: 12,
-    lineHeight: 17,
   },
 });

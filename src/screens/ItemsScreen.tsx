@@ -200,7 +200,7 @@ async function confirmDuplicateAction(message: string, confirmLabel: string): Pr
 
 async function confirmArchiveItem(): Promise<boolean> {
   const message =
-    'Deseja arquivar este item? Ele sera removido de Itens e Diario, mas continuara no Historico e no banco com is_deleted = 1.';
+    'Deseja arquivar este item? Ele sera removido de Itens, Entrada e Saida, mas continuara no Historico e no banco com is_deleted = 1.';
 
   if (Platform.OS === 'web') {
     if (typeof globalThis.confirm === 'function') {
@@ -442,8 +442,8 @@ export function ItemsScreen() {
             <View style={styles.heroCard}>
               <Text style={styles.title}>Cadastro de Itens</Text>
               <Text style={styles.subtitle}>
-                Cadastre itens com nome, unidade e quantidade minima. A quantidade atual sera informada apenas na
-                vistoria diaria.
+                Cadastre itens com nome, unidade e quantidade minima. O saldo atual sera atualizado pelas abas de
+                Entrada e Saida.
               </Text>
             </View>
 

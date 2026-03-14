@@ -13,9 +13,9 @@ import type {
   DailyCountUpdateInput,
   DailyHistoryEntry,
   DailyHistoryGroup,
-  DailyInspectionItem,
   PeriodHistoryEntry,
   PeriodHistoryGroup,
+  StockMovementItem,
   StockCurrentOverviewRow,
   StockItem,
   StockItemListRow,
@@ -54,7 +54,7 @@ type StockCurrentOverviewQuery = {
   category: string | null;
 };
 
-type DailyInspectionItemQuery = {
+type StockMovementItemQuery = {
   id: number;
   name: string;
   unit: string;
@@ -73,13 +73,14 @@ type DailyHistorySummaryRow = {
 };
 
 type DailyHistoryDetailRow = {
+  id: number;
   date: string;
   itemId: number;
   name: string;
   unit: string;
   quantity: number;
   minQuantity: number;
-  movementType: 'initial' | 'consumption' | 'legacy_snapshot';
+  movementType: 'entry' | 'exit' | 'initial' | 'consumption' | 'legacy_snapshot';
   stockAfterQuantity: number | null;
   missingQuantity: number;
   itemDeleted: number;
@@ -137,19 +138,26 @@ function createRemoteItemId(): string {
   return `item-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
-function buildDailyEntryRemoteId(itemRemoteId: string, date: string): string {
-  return `${itemRemoteId}:${date}`;
+function createMovementRemoteId(itemRemoteId: string, date: string, movementType: 'entry' | 'exit'): string {
+  const uniquePart = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+  return `${itemRemoteId}:${date}:${movementType}:${uniquePart}`;
 }
 
 function isMovementType(
   value: string | null | undefined,
 ): value is DailyHistoryEntry['movementType'] {
-  return value === 'initial' || value === 'consumption' || value === 'legacy_snapshot';
+  return (
+    value === 'entry' ||
+    value === 'exit' ||
+    value === 'initial' ||
+    value === 'consumption' ||
+    value === 'legacy_snapshot'
+  );
 }
 
 function normalizeMovementType(
   value: string | null | undefined,
-  fallback: DailyHistoryEntry['movementType'] = 'consumption',
+  fallback: DailyHistoryEntry['movementType'] = 'exit',
 ): DailyHistoryEntry['movementType'] {
   return isMovementType(value) ? value : fallback;
 }
@@ -162,10 +170,8 @@ function isGreaterThan(a: number, b: number): boolean {
   return a - b > 0.000001;
 }
 
-const DELETE_BASE_BLOCKED_ERROR =
-  'Nao e possivel excluir: este dia e base inicial de lancamentos posteriores.';
 const DELETE_CHAIN_BLOCKED_ERROR =
-  'Nao e possivel excluir: consumo posterior ficaria sem saldo base.';
+  'Nao e possivel excluir: existe saida posterior sem saldo suficiente.';
 
 type RecalculateReason = 'generic' | 'delete';
 
@@ -174,7 +180,7 @@ function createMissingBaseError(reason: RecalculateReason): Error {
     return new Error(DELETE_CHAIN_BLOCKED_ERROR);
   }
 
-  return new Error('Consumo sem saldo base para calculo.');
+  return new Error('Saida sem saldo base para calculo.');
 }
 
 function createInsufficientStockError(
@@ -187,37 +193,8 @@ function createInsufficientStockError(
   }
 
   return new Error(
-    `Consumo de ${itemName} em ${formatDateLabel(date)} maior que o saldo disponivel.`,
+    `Saida de ${itemName} em ${formatDateLabel(date)} maior que o saldo disponivel.`,
   );
-}
-
-async function assertAnchorDeletionAllowed(
-  database: Awaited<ReturnType<typeof getDatabase>>,
-  itemId: number,
-  date: string,
-  movementType: string | null | undefined,
-): Promise<void> {
-  const normalizedType = normalizeMovementType(movementType);
-  if (normalizedType !== 'initial' && normalizedType !== 'legacy_snapshot') {
-    return;
-  }
-
-  const hasLaterRows = await database.getFirstAsync<{ id: number }>(
-    `
-      SELECT id
-      FROM daily_stock_entries
-      WHERE item_id = ?
-        AND date > ?
-        AND is_deleted = 0
-      LIMIT 1;
-    `,
-    itemId,
-    date,
-  );
-
-  if (hasLaterRows) {
-    throw new Error(DELETE_BASE_BLOCKED_ERROR);
-  }
 }
 
 async function syncAfterDailyHistoryMutation(): Promise<void> {
@@ -269,7 +246,7 @@ async function recalculateItemStockTimeline(
       FROM daily_stock_entries
       WHERE item_id = ?
         AND is_deleted = 0
-      ORDER BY date ASC, updated_at ASC, id ASC;
+      ORDER BY date ASC, created_at ASC, id ASC;
     `,
     itemId,
   );
@@ -277,12 +254,18 @@ async function recalculateItemStockTimeline(
   let running: number | null = null;
 
   for (const entry of timeline) {
-    const currentType = normalizeMovementType(entry.movement_type);
-    const nextType: DailyHistoryEntry['movementType'] = currentType;
+    const currentType = normalizeMovementType(entry.movement_type, 'exit');
+    const nextType: DailyHistoryEntry['movementType'] =
+      currentType === 'initial' || currentType === 'legacy_snapshot'
+        ? 'entry'
+        : currentType === 'consumption'
+          ? 'exit'
+          : currentType;
     let nextStockAfter: number;
 
-    if (currentType === 'legacy_snapshot' || currentType === 'initial') {
-      nextStockAfter = roundQuantity(entry.quantity);
+    if (nextType === 'entry') {
+      const base = running ?? 0;
+      nextStockAfter = roundQuantity(base + entry.quantity);
       running = nextStockAfter;
     } else {
       if (running === null) {
@@ -412,16 +395,17 @@ export async function listStockCurrentOverview(): Promise<StockCurrentOverviewRo
   });
 }
 
-export async function listDailyInspectionItems(
+export async function listStockMovementItems(
+  movementType: 'entry' | 'exit',
   date: string = getTodayLocalDateString(),
-): Promise<DailyInspectionItem[]> {
+): Promise<StockMovementItem[]> {
   if (!isValidDateString(date)) {
     throw new Error('Data de vistoria invalida.');
   }
 
   const database = await getDatabase();
 
-  const rows = await database.getAllAsync<DailyInspectionItemQuery>(
+  const rows = await database.getAllAsync<StockMovementItemQuery>(
     `
       SELECT
         stock_items.id AS id,
@@ -430,16 +414,23 @@ export async function listDailyInspectionItems(
         stock_items.min_quantity AS minQuantity,
         stock_items.current_stock_quantity AS currentStockQuantity,
         stock_items.category AS category,
-        daily_stock_entries.quantity AS currentQuantity
+        movement_totals.totalQuantity AS currentQuantity
       FROM stock_items
-      LEFT JOIN daily_stock_entries
-        ON daily_stock_entries.item_id = stock_items.id
-        AND daily_stock_entries.date = ?
-        AND daily_stock_entries.is_deleted = 0
+      LEFT JOIN (
+        SELECT
+          item_id,
+          SUM(quantity) AS totalQuantity
+        FROM daily_stock_entries
+        WHERE date = ?
+          AND movement_type = ?
+          AND is_deleted = 0
+        GROUP BY item_id
+      ) AS movement_totals ON movement_totals.item_id = stock_items.id
       WHERE stock_items.is_deleted = 0
       ORDER BY stock_items.name COLLATE NOCASE ASC;
     `,
     date,
+    movementType,
   );
 
   return rows.map((row) => ({
@@ -654,12 +645,13 @@ export async function archiveStockItem(itemId: number): Promise<void> {
   throw new Error('Nao foi possivel sincronizar a exclusao do item. Tente novamente.');
 }
 
-export async function saveDailyInspection(
+async function saveStockMovements(
   updates: DailyCountUpdateInput[],
+  movementType: 'entry' | 'exit',
   date: string = getTodayLocalDateString(),
 ): Promise<void> {
   if (!isValidDateString(date)) {
-    throw new Error('Data de vistoria invalida.');
+    throw new Error('Data de movimentacao invalida.');
   }
 
   if (updates.length === 0) {
@@ -696,21 +688,21 @@ export async function saveDailyInspection(
         throw new Error('Item nao encontrado para sincronizacao da vistoria.');
       }
 
-      const priorEntry = await database.getFirstAsync<{ id: number }>(
-        `
-          SELECT id
-          FROM daily_stock_entries
-          WHERE item_id = ?
-            AND date < ?
-            AND is_deleted = 0
-          ORDER BY date DESC, updated_at DESC, id DESC
-          LIMIT 1;
-        `,
-        update.itemId,
-        date,
-      );
-      const movementType: DailyHistoryEntry['movementType'] = priorEntry ? 'consumption' : 'initial';
-      const entryRemoteId = buildDailyEntryRemoteId(item.remote_id, date);
+      if (movementType === 'exit') {
+        const currentStock = item.current_stock_quantity;
+
+        if (currentStock === null) {
+          throw new Error(
+            `Nao e possivel registrar saida de ${item.name}: item sem estoque inicial.`,
+          );
+        }
+
+        if (isGreaterThan(update.quantity, currentStock)) {
+          throw createInsufficientStockError('generic', item.name, date);
+        }
+      }
+
+      const entryRemoteId = createMovementRemoteId(item.remote_id, date, movementType);
       const timestamp = nowIsoString();
 
       await database.runAsync(
@@ -728,17 +720,7 @@ export async function saveDailyInspection(
             created_at,
             updated_at
           )
-          VALUES (?, ?, 'pending', ?, ?, ?, NULL, 0, NULL, ?, ?)
-          ON CONFLICT(item_id, date)
-          DO UPDATE SET
-            remote_id = excluded.remote_id,
-            quantity = excluded.quantity,
-            movement_type = excluded.movement_type,
-            stock_after_quantity = NULL,
-            is_deleted = 0,
-            deleted_at = NULL,
-            updated_at = excluded.updated_at,
-            sync_status = 'pending';
+          VALUES (?, ?, 'pending', ?, ?, ?, NULL, 0, NULL, ?, ?);
         `,
         update.itemId,
         entryRemoteId,
@@ -758,21 +740,45 @@ export async function saveDailyInspection(
   syncAppDataInBackground();
 }
 
+export async function saveStockEntries(
+  updates: DailyCountUpdateInput[],
+  date: string = getTodayLocalDateString(),
+): Promise<void> {
+  return saveStockMovements(updates, 'entry', date);
+}
+
+export async function saveStockExits(
+  updates: DailyCountUpdateInput[],
+  date: string = getTodayLocalDateString(),
+): Promise<void> {
+  return saveStockMovements(updates, 'exit', date);
+}
+
 export async function updateDailyHistoryEntry(
-  date: string,
-  itemId: number,
+  entryId: number,
   quantity: number,
 ): Promise<void> {
-  if (!isValidDateString(date)) {
-    throw new Error('Data de vistoria invalida.');
-  }
-
   if (!Number.isFinite(quantity) || quantity < 0) {
-    throw new Error('Quantidade invalida para edicao.');
+    throw new Error('Quantidade invalida para editar movimentacao.');
   }
 
   const database = await getDatabase();
   await database.withTransactionAsync(async () => {
+    const entry = await database.getFirstAsync<{ item_id: number }>(
+      `
+        SELECT item_id
+        FROM daily_stock_entries
+        WHERE id = ?
+          AND is_deleted = 0
+        LIMIT 1;
+      `,
+      entryId,
+    );
+
+    if (!entry) {
+      throw new Error('Movimentacao nao encontrada para edicao.');
+    }
+
     const result = await database.runAsync(
       `
         UPDATE daily_stock_entries
@@ -783,51 +789,41 @@ export async function updateDailyHistoryEntry(
           stock_after_quantity = NULL,
           updated_at = ?,
           sync_status = 'pending'
-        WHERE date = ?
-          AND item_id = ?
+        WHERE id = ?
           AND is_deleted = 0;
       `,
       quantity,
       nowIsoString(),
-      date,
-      itemId,
+      entryId,
     );
 
     if ((result.changes ?? 0) === 0) {
-      throw new Error('Entrada diaria nao encontrada para edicao.');
+      throw new Error('Movimentacao nao encontrada para edicao.');
     }
 
-    await recalculateItemStockTimeline(database, itemId);
+    await recalculateItemStockTimeline(database, entry.item_id);
   });
 
   await syncAfterDailyHistoryMutation();
 }
 
-export async function archiveDailyHistoryEntry(date: string, itemId: number): Promise<void> {
-  if (!isValidDateString(date)) {
-    throw new Error('Data de vistoria invalida.');
-  }
-
+export async function archiveDailyHistoryEntry(entryId: number): Promise<void> {
   const database = await getDatabase();
   await database.withTransactionAsync(async () => {
-    const currentEntry = await database.getFirstAsync<{ movement_type: string | null }>(
+    const currentEntry = await database.getFirstAsync<{ item_id: number }>(
       `
-        SELECT movement_type
+        SELECT item_id
         FROM daily_stock_entries
-        WHERE date = ?
-          AND item_id = ?
+        WHERE id = ?
           AND is_deleted = 0
         LIMIT 1;
       `,
-      date,
-      itemId,
+      entryId,
     );
 
     if (!currentEntry) {
-      throw new Error('Entrada diaria nao encontrada para exclusao.');
+      throw new Error('Movimentacao nao encontrada para exclusao.');
     }
-
-    await assertAnchorDeletionAllowed(database, itemId, date, currentEntry.movement_type);
 
     const timestamp = nowIsoString();
     const result = await database.runAsync(
@@ -838,21 +834,19 @@ export async function archiveDailyHistoryEntry(date: string, itemId: number): Pr
           deleted_at = ?,
           updated_at = ?,
           sync_status = 'pending'
-        WHERE date = ?
-          AND item_id = ?
+        WHERE id = ?
           AND is_deleted = 0;
       `,
       timestamp,
       timestamp,
-      date,
-      itemId,
+      entryId,
     );
 
     if ((result.changes ?? 0) === 0) {
-      throw new Error('Entrada diaria nao encontrada para exclusao.');
+      throw new Error('Movimentacao nao encontrada para exclusao.');
     }
 
-    await recalculateItemStockTimeline(database, itemId, 'delete');
+    await recalculateItemStockTimeline(database, currentEntry.item_id, 'delete');
   });
 
   await syncAfterDailyHistoryMutation();
@@ -865,9 +859,9 @@ export async function archiveDailyHistoryDate(date: string): Promise<void> {
 
   const database = await getDatabase();
   await database.withTransactionAsync(async () => {
-    const affectedRows = await database.getAllAsync<{ item_id: number; movement_type: string | null }>(
+    const affectedRows = await database.getAllAsync<{ item_id: number }>(
       `
-        SELECT item_id, movement_type
+        SELECT item_id
         FROM daily_stock_entries
         WHERE date = ?
           AND is_deleted = 0;
@@ -876,10 +870,6 @@ export async function archiveDailyHistoryDate(date: string): Promise<void> {
     );
     if (affectedRows.length === 0) {
       throw new Error('Vistoria diaria nao encontrada para exclusao.');
-    }
-
-    for (const row of affectedRows) {
-      await assertAnchorDeletionAllowed(database, row.item_id, date, row.movement_type);
     }
 
     const affectedItemIds = Array.from(new Set(affectedRows.map((row) => row.item_id)));
@@ -949,6 +939,7 @@ export async function listDailyHistoryGrouped(): Promise<DailyHistoryGroup[]> {
   const detailRows = await database.getAllAsync<DailyHistoryDetailRow>(
     `
       SELECT
+        daily_stock_entries.id AS id,
         daily_stock_entries.date AS date,
         stock_items.id AS itemId,
         stock_items.name AS name,
@@ -975,13 +966,14 @@ export async function listDailyHistoryGrouped(): Promise<DailyHistoryGroup[]> {
   for (const detail of detailRows) {
     const dateEntries = entriesByDate.get(detail.date) ?? [];
     dateEntries.push({
+      id: detail.id,
       date: detail.date,
       itemId: detail.itemId,
       name: detail.name,
       unit: detail.unit,
       quantity: detail.quantity,
       minQuantity: detail.minQuantity,
-      movementType: normalizeMovementType(detail.movementType, 'legacy_snapshot'),
+      movementType: normalizeMovementType(detail.movementType, 'exit'),
       stockAfterQuantity: detail.stockAfterQuantity,
       needsPurchase: detail.stockAfterQuantity !== null ? detail.stockAfterQuantity <= detail.minQuantity : false,
       missingQuantity: detail.missingQuantity,
@@ -1020,7 +1012,7 @@ async function loadPeriodEntries(
         COUNT(DISTINCT daily_stock_entries.date) AS inspectedDays,
         SUM(
           CASE
-            WHEN daily_stock_entries.movement_type = 'consumption'
+            WHEN daily_stock_entries.movement_type IN ('exit', 'consumption')
               THEN daily_stock_entries.quantity
             ELSE 0
           END
@@ -1050,7 +1042,7 @@ async function loadPeriodEntries(
         COUNT(DISTINCT daily_stock_entries.date) AS countedDays,
         SUM(
           CASE
-            WHEN daily_stock_entries.movement_type = 'consumption'
+            WHEN daily_stock_entries.movement_type IN ('exit', 'consumption')
               THEN daily_stock_entries.quantity
             ELSE 0
           END
@@ -1076,7 +1068,7 @@ async function loadPeriodEntries(
       ) > 0
       OR SUM(
         CASE
-          WHEN daily_stock_entries.movement_type = 'consumption'
+          WHEN daily_stock_entries.movement_type IN ('exit', 'consumption')
             THEN daily_stock_entries.quantity
           ELSE 0
         END

@@ -1,16 +1,17 @@
 # Gerenciamento de Estoque H2
 
-Aplicativo em Expo + React Native para controlar itens de estoque, registrar a vistoria diaria e acompanhar historicos consolidados. O projeto usa SQLite no aparelho para funcionar offline e Supabase para sincronizar os dados entre maquinas.
+Aplicativo em Expo + React Native para controlar itens de estoque, registrar movimentacoes de entrada e saida, e acompanhar historicos consolidados. O projeto usa SQLite no aparelho para funcionar offline e Supabase para sincronizar os dados entre maquinas.
 
 ## O que o projeto faz
 
 - Cadastra itens com nome, unidade de medida e quantidade minima
 - Permite editar itens ja cadastrados
-- Registra a quantidade atual de cada item na vistoria diaria
-- Mostra resumo automatico do dia com itens OK e itens para comprar
-- Exibe historico diario das vistorias salvas
+- Registra entradas de estoque (incluindo estoque inicial)
+- Registra saidas de estoque com validacao de saldo disponivel
+- Atualiza o saldo atual automaticamente na aba Estoque
+- Exibe historico diario das movimentacoes salvas
 - Gera relatorio quinzenal e relatorio mensal
-- Sincroniza itens e vistorias com o Supabase quando o `.env` esta configurado
+- Sincroniza itens e movimentacoes com o Supabase quando o `.env` esta configurado
 - Exibe o status da sincronizacao na interface, com tentativa manual em caso de falha
 
 ## Stack do projeto
@@ -24,7 +25,7 @@ Aplicativo em Expo + React Native para controlar itens de estoque, registrar a v
 
 ## Estrutura principal
 
-- `src/screens`: telas de itens, vistoria diaria e historico
+- `src/screens`: telas de estoque, itens, entrada, saida e historico
 - `src/database`: banco local SQLite, migracoes, repositorios e sync com Supabase
 - `src/components`: componentes reutilizaveis da interface, incluindo o card de status do sync
 - `supabase/schema.sql`: schema SQL do banco remoto no Supabase

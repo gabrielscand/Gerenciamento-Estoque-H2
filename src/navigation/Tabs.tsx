@@ -1,15 +1,16 @@
 import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { StyleSheet, Text, View } from 'react-native';
-import { DailyScreen } from '../screens/DailyScreen';
 import { HistoryScreen } from '../screens/HistoryScreen';
 import { ItemsScreen } from '../screens/ItemsScreen';
+import { EntryScreen, ExitScreen } from '../screens/MovementScreen';
 import { StockScreen } from '../screens/StockScreen';
 
 type RootTabParamList = {
   Stock: undefined;
   Items: undefined;
-  Daily: undefined;
+  Entry: undefined;
+  Exit: undefined;
   History: undefined;
 };
 
@@ -75,11 +76,19 @@ export function Tabs() {
           }}
         />
         <Tab.Screen
-          name="Daily"
-          component={DailyScreen}
+          name="Entry"
+          component={EntryScreen}
           options={{
-            title: 'Diario',
-            tabBarLabel: ({ focused }) => <TabLabel focused={focused} title="Diario" />,
+            title: 'Entrada',
+            tabBarLabel: ({ focused }) => <TabLabel focused={focused} title="Entrada" />,
+          }}
+        />
+        <Tab.Screen
+          name="Exit"
+          component={ExitScreen}
+          options={{
+            title: 'Saida',
+            tabBarLabel: ({ focused }) => <TabLabel focused={focused} title="Saida" />,
           }}
         />
         <Tab.Screen
@@ -97,7 +106,7 @@ export function Tabs() {
 
 const styles = StyleSheet.create({
   labelContainer: {
-    minWidth: 94,
+    minWidth: 82,
     minHeight: 44,
     borderRadius: 14,
     paddingHorizontal: 12,
