@@ -86,13 +86,26 @@ export interface DailyHistoryGroup {
 
 export type HistoryPeriodType = 'quinzenal' | 'mensal';
 
-export interface PeriodHistoryEntry {
+export interface PeriodHistoryDayEntry {
+  id: number;
+  date: string;
   itemId: number;
   name: string;
   unit: string;
-  totalMissingQuantity: number;
-  consumedQuantityTotal: number;
-  countedDays: number;
+  quantity: number;
+  minQuantity: number;
+  movementType: 'entry' | 'exit' | 'initial' | 'consumption' | 'legacy_snapshot';
+  stockAfterQuantity: number | null;
+  needsPurchase: boolean;
+  missingQuantity: number;
+  itemDeleted: boolean;
+}
+
+export interface PeriodHistoryDay {
+  date: string;
+  hasEntry: boolean;
+  hasExit: boolean;
+  entries: PeriodHistoryDayEntry[];
 }
 
 export interface PeriodHistoryGroup {
@@ -107,7 +120,59 @@ export interface PeriodHistoryGroup {
   itemsToBuyCount: number;
   totalMissingQuantity: number;
   totalConsumedQuantity: number;
-  entries: PeriodHistoryEntry[];
+  days: PeriodHistoryDay[];
+}
+
+export type DashboardAbcMetric = 'movement' | 'entry' | 'exit';
+export type DashboardAbcClass = 'A' | 'B' | 'C';
+
+export interface DashboardItemAnalyticsRow {
+  itemId: number;
+  name: string;
+  unit: string;
+  category: StockCategory | null;
+  entryQuantity: number;
+  exitQuantity: number;
+  movementTotal: number;
+}
+
+export interface DashboardDailySeriesPoint {
+  date: string;
+  dayLabel: string;
+  entryQuantity: number;
+  exitQuantity: number;
+  movementTotal: number;
+}
+
+export interface DashboardAnalyticsTotals {
+  entryQuantity: number;
+  exitQuantity: number;
+  movementTotal: number;
+  activeItems: number;
+  movementEntries: number;
+}
+
+export interface DashboardAnalyticsData {
+  month: string;
+  startDate: string;
+  endDate: string;
+  totals: DashboardAnalyticsTotals;
+  items: DashboardItemAnalyticsRow[];
+  dailySeries: DashboardDailySeriesPoint[];
+}
+
+export interface DashboardAbcPoint {
+  rank: number;
+  itemId: number;
+  name: string;
+  unit: string;
+  entryQuantity: number;
+  exitQuantity: number;
+  movementTotal: number;
+  metricValue: number;
+  sharePercent: number;
+  cumulativePercent: number;
+  abcClass: DashboardAbcClass;
 }
 
 export interface StockCurrentOverviewRow {

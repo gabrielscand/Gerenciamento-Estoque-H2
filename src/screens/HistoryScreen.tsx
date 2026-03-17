@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useIsFocused } from '@react-navigation/native';
 import {
   Alert,
   FlatList,
@@ -31,6 +32,7 @@ import {
 
 type HistoryMode = 'diario' | 'quinzenal' | 'mensal';
 type DailyMovementFilter = 'entry' | 'exit';
+type PeriodDayMovementFilter = 'all' | DailyMovementFilter;
 const ADMIN_PASSWORD = 'admin1234';
 
 type FallbackPromptConfig = {
@@ -103,6 +105,7 @@ function parseDecimalInput(value: string): number | null {
 
 export function HistoryScreen() {
   const initialMonth = getCurrentMonthString();
+  const isFocused = useIsFocused();
   const [mode, setMode] = useState<HistoryMode>('diario');
   const [dailyMovementFilter, setDailyMovementFilter] = useState<DailyMovementFilter>('entry');
   const [selectedMonth, setSelectedMonth] = useState(initialMonth);
@@ -114,9 +117,12 @@ export function HistoryScreen() {
   const [errorMessage, setErrorMessage] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
   const [activeActionKey, setActiveActionKey] = useState<string | null>(null);
+  const [expandedPeriodDays, setExpandedPeriodDays] = useState<Record<string, boolean>>({});
+  const [periodDayFilters, setPeriodDayFilters] = useState<Record<string, PeriodDayMovementFilter>>({});
   const [fallbackPromptConfig, setFallbackPromptConfig] = useState<FallbackPromptConfig | null>(null);
   const [fallbackPromptValue, setFallbackPromptValue] = useState('');
   const fallbackPromptResolverRef = useRef<((value: string | null) => void) | null>(null);
+  const skipNextModeMonthLoadRef = useRef(false);
 
   const isDailyMode = mode === 'diario';
 
@@ -126,7 +132,15 @@ export function HistoryScreen() {
 
     try {
       if (syncFirst) {
-        await syncAppData();
+        const syncOk = await syncAppData();
+
+        if (!syncOk) {
+          setDailyGroups([]);
+          setPeriodGroups([]);
+          throw new Error(
+            'Falha ao sincronizar com o Supabase. Conecte-se e tente novamente para carregar o historico.',
+          );
+        }
       }
 
       if (nextMode === 'diario') {
@@ -143,6 +157,8 @@ export function HistoryScreen() {
         setDailyGroups([]);
       }
     } catch (error) {
+      setDailyGroups([]);
+      setPeriodGroups([]);
       setErrorMessage(error instanceof Error ? error.message : 'Falha ao carregar historico.');
     } finally {
       setIsLoading(false);
@@ -150,12 +166,35 @@ export function HistoryScreen() {
   }
 
   useEffect(() => {
-    void loadHistory(mode, selectedMonth);
-  }, [mode, selectedMonth]);
+    if (!isFocused) {
+      return;
+    }
+
+    skipNextModeMonthLoadRef.current = true;
+    void loadHistory(mode, selectedMonth, true);
+  }, [isFocused]);
+
+  useEffect(() => {
+    if (!isFocused) {
+      return;
+    }
+
+    if (skipNextModeMonthLoadRef.current) {
+      skipNextModeMonthLoadRef.current = false;
+      return;
+    }
+
+    void loadHistory(mode, selectedMonth, true);
+  }, [mode, selectedMonth, isFocused]);
 
   useEffect(() => {
     setMonthInputValue(formatMonthLabel(selectedMonth));
   }, [selectedMonth]);
+
+  useEffect(() => {
+    setExpandedPeriodDays({});
+    setPeriodDayFilters({});
+  }, [mode, selectedMonth]);
 
   function selectMode(nextMode: HistoryMode) {
     setMode(nextMode);
@@ -440,14 +479,14 @@ export function HistoryScreen() {
       return {
         title: 'Relatorio Quinzenal',
         description:
-          'Consolidacao por quinzena do mes selecionado, com consumo total e faltante para compra.',
+          'Acompanhe os dias com movimentacao em cada quinzena e abra os lancamentos para ver detalhes.',
       };
     }
 
     return {
       title: 'Relatorio Mensal',
       description:
-        'Consolidacao mensal com consumo total e faltante para compra por item.',
+        'Visualize os dias com entrada e saida no mes, com todos os itens movimentados e status de compra.',
     };
   }, [mode]);
 
@@ -704,32 +743,173 @@ export function HistoryScreen() {
                 {formatQuantity(periodItem.totalConsumedQuantity)}
               </Text>
 
-              {periodItem.entries.length === 0 ? (
-                <Text style={styles.entryMeta}>Sem itens abaixo do minimo neste periodo.</Text>
+              {periodItem.days.length === 0 ? (
+                <Text style={styles.entryMeta}>Sem movimentacoes neste periodo.</Text>
               ) : (
-                periodItem.entries.map((entry) => (
-                  <View key={`${periodItem.id}-${entry.itemId}`} style={styles.entryRow}>
-                    <View style={styles.entryInfo}>
-                      <Text style={styles.entryName}>{entry.name}</Text>
-                      <Text style={styles.entryMeta}>
-                        Consumo: {formatQuantity(entry.consumedQuantityTotal)} {entry.unit} | Registros em{' '}
-                        {entry.countedDays} dia(s).
-                      </Text>
-                    </View>
-                    <View
-                      style={[
-                        styles.statusBadge,
-                        entry.totalMissingQuantity > 0 ? styles.statusNeedPurchase : styles.statusOk,
-                      ]}
-                    >
-                      <Text style={styles.statusText}>
-                        {entry.totalMissingQuantity > 0
-                          ? `Comprar ${formatQuantity(entry.totalMissingQuantity)} ${entry.unit}`
-                          : 'Sem falta'}
-                      </Text>
-                    </View>
-                  </View>
-                ))
+                <View style={styles.periodDaysContainer}>
+                  {periodItem.days.map((day) => {
+                    const dayKey = `${periodItem.id}-${day.date}`;
+                    const isExpanded = expandedPeriodDays[dayKey] === true;
+                    const selectedDayFilter = periodDayFilters[dayKey] ?? 'all';
+                    const filteredDayEntries =
+                      selectedDayFilter === 'all'
+                        ? day.entries
+                        : day.entries.filter(
+                            (entry) => resolveMovementFilter(entry.movementType) === selectedDayFilter,
+                          );
+                    const movementCount =
+                      selectedDayFilter === 'all' ? day.entries.length : filteredDayEntries.length;
+
+                    return (
+                      <View key={dayKey} style={styles.periodDayCard}>
+                        <Pressable
+                          style={styles.periodDayHeader}
+                          onPress={() => {
+                            const nextExpanded = !isExpanded;
+
+                            setExpandedPeriodDays((previousState) => ({
+                              ...previousState,
+                              [dayKey]: nextExpanded,
+                            }));
+
+                            if (nextExpanded) {
+                              setPeriodDayFilters((previousState) => ({
+                                ...previousState,
+                                [dayKey]: 'all',
+                              }));
+                            }
+                          }}
+                        >
+                          <View style={styles.periodDayHeaderLeft}>
+                            <Text style={styles.periodDayDate}>{formatDateLabel(day.date)}</Text>
+                          </View>
+                          <View style={styles.periodDayHeaderRight}>
+                            <View style={styles.groupBadge}>
+                              <Text style={styles.groupBadgeText}>{movementCount} mov.</Text>
+                            </View>
+                            <Text style={styles.periodExpandText}>{isExpanded ? 'Ocultar' : 'Ver itens'}</Text>
+                          </View>
+                        </Pressable>
+                        <View style={styles.periodDayTypeBadges}>
+                          {day.hasEntry ? (
+                            <Pressable
+                              style={[
+                                styles.periodMovementBadge,
+                                selectedDayFilter === 'entry'
+                                  ? styles.periodMovementEntryActive
+                                  : styles.periodMovementEntryInactive,
+                              ]}
+                              onPress={() => {
+                                setExpandedPeriodDays((previousState) => ({
+                                  ...previousState,
+                                  [dayKey]: true,
+                                }));
+                                setPeriodDayFilters((previousState) => ({
+                                  ...previousState,
+                                  [dayKey]: 'entry',
+                                }));
+                              }}
+                            >
+                              <Text
+                                style={[
+                                  styles.periodMovementBadgeText,
+                                  selectedDayFilter === 'entry'
+                                    ? styles.periodMovementEntryTextActive
+                                    : styles.periodMovementEntryTextInactive,
+                                ]}
+                              >
+                                Entrada
+                              </Text>
+                            </Pressable>
+                          ) : null}
+                          {day.hasExit ? (
+                            <Pressable
+                              style={[
+                                styles.periodMovementBadge,
+                                selectedDayFilter === 'exit'
+                                  ? styles.periodMovementExitActive
+                                  : styles.periodMovementExitInactive,
+                              ]}
+                              onPress={() => {
+                                setExpandedPeriodDays((previousState) => ({
+                                  ...previousState,
+                                  [dayKey]: true,
+                                }));
+                                setPeriodDayFilters((previousState) => ({
+                                  ...previousState,
+                                  [dayKey]: 'exit',
+                                }));
+                              }}
+                            >
+                              <Text
+                                style={[
+                                  styles.periodMovementBadgeText,
+                                  selectedDayFilter === 'exit'
+                                    ? styles.periodMovementExitTextActive
+                                    : styles.periodMovementExitTextInactive,
+                                ]}
+                              >
+                                Saida
+                              </Text>
+                            </Pressable>
+                          ) : null}
+                        </View>
+
+                        {isExpanded ? (
+                          filteredDayEntries.length === 0 ? (
+                            <Text style={styles.entryMeta}>
+                              {selectedDayFilter === 'entry'
+                                ? 'Sem movimentacoes de Entrada neste dia.'
+                                : selectedDayFilter === 'exit'
+                                  ? 'Sem movimentacoes de Saida neste dia.'
+                                  : 'Sem movimentacoes neste dia.'}
+                            </Text>
+                          ) : (
+                            filteredDayEntries.map((entry) => (
+                              <View key={`${dayKey}-${entry.id}`} style={styles.entryRow}>
+                                <View style={styles.entryInfo}>
+                                  <View style={styles.entryTitleRow}>
+                                    <Text style={styles.entryName}>{entry.name}</Text>
+                                    {entry.itemDeleted ? (
+                                      <View style={styles.deletedBadge}>
+                                        <Text style={styles.deletedBadgeText}>Item arquivado</Text>
+                                      </View>
+                                    ) : null}
+                                  </View>
+                                  <Text style={styles.entryMeta}>
+                                    {getDailyMovementFilterLabel(resolveMovementFilter(entry.movementType))}:{' '}
+                                    {formatQuantity(entry.quantity)} {entry.unit} | Min{' '}
+                                    {formatQuantity(entry.minQuantity)}
+                                  </Text>
+                                  <Text style={styles.entryMeta}>
+                                    Saldo apos:{' '}
+                                    {entry.stockAfterQuantity === null
+                                      ? '-'
+                                      : formatQuantity(entry.stockAfterQuantity)}
+                                  </Text>
+                                </View>
+                                <View
+                                  style={[
+                                    styles.statusBadge,
+                                    entry.needsPurchase ? styles.statusNeedPurchase : styles.statusOk,
+                                  ]}
+                                >
+                                  <Text style={styles.statusText}>
+                                    {entry.needsPurchase
+                                      ? entry.missingQuantity > 0
+                                        ? `Comprar ${formatQuantity(entry.missingQuantity)} ${entry.unit}`
+                                        : 'No minimo (comprar)'
+                                      : 'OK'}
+                                  </Text>
+                                </View>
+                              </View>
+                            ))
+                          )
+                        ) : null}
+                      </View>
+                    );
+                  })}
+                </View>
               )}
             </View>
           );
@@ -961,6 +1141,88 @@ const styles = StyleSheet.create({
   },
   groupSummary: {
     fontSize: 13,
+    color: '#6D28D9',
+  },
+  periodDaysContainer: {
+    gap: 8,
+  },
+  periodDayCard: {
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#E9D5FF',
+    backgroundColor: '#F8F5FF',
+    padding: 10,
+    gap: 8,
+  },
+  periodDayHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: 8,
+  },
+  periodDayHeaderLeft: {
+    flex: 1,
+    gap: 6,
+  },
+  periodDayDate: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#4C1D95',
+  },
+  periodDayTypeBadges: {
+    flexDirection: 'row',
+    gap: 8,
+    flexWrap: 'wrap',
+  },
+  periodMovementBadge: {
+    flex: 1,
+    minHeight: 44,
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  periodMovementEntryActive: {
+    backgroundColor: '#16A34A',
+    borderColor: '#15803D',
+  },
+  periodMovementExitActive: {
+    backgroundColor: '#DC2626',
+    borderColor: '#B91C1C',
+  },
+  periodMovementEntryInactive: {
+    backgroundColor: '#ECFDF5',
+    borderColor: '#86EFAC',
+  },
+  periodMovementExitInactive: {
+    backgroundColor: '#FEF2F2',
+    borderColor: '#FCA5A5',
+  },
+  periodMovementBadgeText: {
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  periodMovementEntryTextActive: {
+    color: '#FFFFFF',
+  },
+  periodMovementExitTextActive: {
+    color: '#FFFFFF',
+  },
+  periodMovementEntryTextInactive: {
+    color: '#166534',
+  },
+  periodMovementExitTextInactive: {
+    color: '#991B1B',
+  },
+  periodDayHeaderRight: {
+    alignItems: 'flex-end',
+    gap: 4,
+  },
+  periodExpandText: {
+    fontSize: 11,
+    fontWeight: '700',
     color: '#6D28D9',
   },
   entryRow: {

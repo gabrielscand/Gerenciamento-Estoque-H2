@@ -1,12 +1,14 @@
 import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { StyleSheet, Text, View } from 'react-native';
+import { DashboardScreen } from '../screens/DashboardScreen';
 import { HistoryScreen } from '../screens/HistoryScreen';
 import { ItemsScreen } from '../screens/ItemsScreen';
 import { EntryScreen, ExitScreen } from '../screens/MovementScreen';
 import { StockScreen } from '../screens/StockScreen';
 
 type RootTabParamList = {
+  Dashboard: undefined;
   Stock: undefined;
   Items: undefined;
   Entry: undefined;
@@ -29,6 +31,7 @@ export function Tabs() {
   return (
     <NavigationContainer>
       <Tab.Navigator
+        initialRouteName="Stock"
         screenOptions={{
           headerTitleAlign: 'center',
           headerStyle: {
@@ -59,6 +62,14 @@ export function Tabs() {
           ),
         }}
       >
+        <Tab.Screen
+          name="Dashboard"
+          component={DashboardScreen}
+          options={{
+            title: 'Dashboard',
+            tabBarLabel: ({ focused }) => <TabLabel focused={focused} title="Dashboard" />,
+          }}
+        />
         <Tab.Screen
           name="Stock"
           component={StockScreen}
@@ -106,10 +117,10 @@ export function Tabs() {
 
 const styles = StyleSheet.create({
   labelContainer: {
-    minWidth: 82,
+    minWidth: 68,
     minHeight: 44,
     borderRadius: 14,
-    paddingHorizontal: 12,
+    paddingHorizontal: 8,
     paddingVertical: 7,
     alignItems: 'center',
     justifyContent: 'center',
@@ -141,12 +152,12 @@ const styles = StyleSheet.create({
   },
   labelText: {
     color: '#6D28D9',
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '700',
   },
   labelTextActive: {
     color: '#FFFFFF',
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '800',
   },
 });

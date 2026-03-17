@@ -10,10 +10,14 @@ import {
 } from '../utils/date';
 import type {
   CreateStockItemInput,
+  DashboardAnalyticsData,
+  DashboardDailySeriesPoint,
+  DashboardItemAnalyticsRow,
   DailyCountUpdateInput,
   DailyHistoryEntry,
   DailyHistoryGroup,
-  PeriodHistoryEntry,
+  PeriodHistoryDay,
+  PeriodHistoryDayEntry,
   PeriodHistoryGroup,
   StockMovementItem,
   StockCurrentOverviewRow,
@@ -93,13 +97,39 @@ type PeriodHistorySummaryRow = {
   totalConsumedQuantity: number;
 };
 
-type PeriodHistoryDetailRow = {
+type PeriodHistoryDayDetailRow = {
+  id: number;
+  date: string;
   itemId: number;
   name: string;
   unit: string;
-  countedDays: number;
-  totalMissingQuantity: number;
-  consumedQuantityTotal: number;
+  quantity: number;
+  minQuantity: number;
+  movementType: string | null;
+  stockAfterQuantity: number | null;
+  missingQuantity: number;
+  itemDeleted: number;
+};
+
+type DashboardSummaryRow = {
+  totalEntryQuantity: number | null;
+  totalExitQuantity: number | null;
+  movementEntries: number | null;
+};
+
+type DashboardItemTotalsRow = {
+  itemId: number;
+  name: string;
+  unit: string;
+  category: string | null;
+  entryQuantity: number | null;
+  exitQuantity: number | null;
+};
+
+type DashboardDailySeriesRow = {
+  date: string;
+  entryQuantity: number | null;
+  exitQuantity: number | null;
 };
 
 type StockItemRemoteRow = {
@@ -162,8 +192,44 @@ function normalizeMovementType(
   return isMovementType(value) ? value : fallback;
 }
 
+function isEntryLikeMovementType(movementType: DailyHistoryEntry['movementType']): boolean {
+  return (
+    movementType === 'entry' || movementType === 'initial' || movementType === 'legacy_snapshot'
+  );
+}
+
+function isExitLikeMovementType(movementType: DailyHistoryEntry['movementType']): boolean {
+  return movementType === 'exit' || movementType === 'consumption';
+}
+
 function roundQuantity(value: number): number {
   return Math.round(value * 1000) / 1000;
+}
+
+function toSafeNumber(value: number | null | undefined): number {
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    return 0;
+  }
+
+  return value;
+}
+
+function buildDateRangeList(startDate: string, endDate: string): string[] {
+  const [startYear, startMonth, startDay] = startDate.split('-').map(Number);
+  const [endYear, endMonth, endDay] = endDate.split('-').map(Number);
+  const current = new Date(startYear, startMonth - 1, startDay);
+  const final = new Date(endYear, endMonth - 1, endDay);
+  const result: string[] = [];
+
+  while (current.getTime() <= final.getTime()) {
+    const year = current.getFullYear();
+    const month = String(current.getMonth() + 1).padStart(2, '0');
+    const day = String(current.getDate()).padStart(2, '0');
+    result.push(`${year}-${month}-${day}`);
+    current.setDate(current.getDate() + 1);
+  }
+
+  return result;
 }
 
 function isGreaterThan(a: number, b: number): boolean {
@@ -999,7 +1065,8 @@ async function loadPeriodEntries(
 ): Promise<{
   countedEntries: number;
   inspectedDays: number;
-  entries: PeriodHistoryEntry[];
+  itemsToBuyCount: number;
+  days: PeriodHistoryDay[];
   totalMissingQuantity: number;
   totalConsumedQuantity: number;
 }> {
@@ -1033,65 +1100,91 @@ async function loadPeriodEntries(
     endDate,
   );
 
-  const detailRows = await database.getAllAsync<PeriodHistoryDetailRow>(
+  const detailRows = await database.getAllAsync<PeriodHistoryDayDetailRow>(
     `
       SELECT
+        daily_stock_entries.id AS id,
+        daily_stock_entries.date AS date,
         stock_items.id AS itemId,
         stock_items.name AS name,
         stock_items.unit AS unit,
-        COUNT(DISTINCT daily_stock_entries.date) AS countedDays,
-        SUM(
-          CASE
-            WHEN daily_stock_entries.movement_type IN ('exit', 'consumption')
-              THEN daily_stock_entries.quantity
-            ELSE 0
-          END
-        ) AS consumedQuantityTotal,
-        SUM(
-          CASE
-            WHEN daily_stock_entries.stock_after_quantity < stock_items.min_quantity
-              THEN stock_items.min_quantity - daily_stock_entries.stock_after_quantity
-            ELSE 0
-          END
-        ) AS totalMissingQuantity
-      FROM daily_stock_entries
-      INNER JOIN stock_items ON stock_items.id = daily_stock_entries.item_id
-      WHERE daily_stock_entries.date BETWEEN ? AND ?
-        AND daily_stock_entries.is_deleted = 0
-      GROUP BY stock_items.id, stock_items.name, stock_items.unit
-      HAVING SUM(
+        daily_stock_entries.quantity AS quantity,
+        stock_items.min_quantity AS minQuantity,
+        daily_stock_entries.movement_type AS movementType,
+        daily_stock_entries.stock_after_quantity AS stockAfterQuantity,
+        stock_items.is_deleted AS itemDeleted,
         CASE
           WHEN daily_stock_entries.stock_after_quantity < stock_items.min_quantity
             THEN stock_items.min_quantity - daily_stock_entries.stock_after_quantity
           ELSE 0
-        END
-      ) > 0
-      OR SUM(
-        CASE
-          WHEN daily_stock_entries.movement_type IN ('exit', 'consumption')
-            THEN daily_stock_entries.quantity
-          ELSE 0
-        END
-      ) > 0
-      ORDER BY stock_items.name COLLATE NOCASE ASC;
+        END AS missingQuantity
+      FROM daily_stock_entries
+      INNER JOIN stock_items ON stock_items.id = daily_stock_entries.item_id
+      WHERE daily_stock_entries.date BETWEEN ? AND ?
+        AND daily_stock_entries.is_deleted = 0
+      ORDER BY daily_stock_entries.date DESC, daily_stock_entries.created_at ASC, daily_stock_entries.id ASC;
     `,
     startDate,
     endDate,
   );
 
+  const daysByDate = new Map<string, PeriodHistoryDay>();
+  const itemsToBuyIds = new Set<number>();
+
+  for (const detailRow of detailRows) {
+    const movementType = normalizeMovementType(detailRow.movementType, 'exit');
+    const needsPurchase =
+      detailRow.stockAfterQuantity !== null ? detailRow.stockAfterQuantity <= detailRow.minQuantity : false;
+
+    if (needsPurchase) {
+      itemsToBuyIds.add(detailRow.itemId);
+    }
+
+    const dayEntries = daysByDate.get(detailRow.date) ?? {
+      date: detailRow.date,
+      hasEntry: false,
+      hasExit: false,
+      entries: [],
+    };
+
+    if (isEntryLikeMovementType(movementType)) {
+      dayEntries.hasEntry = true;
+    }
+
+    if (isExitLikeMovementType(movementType)) {
+      dayEntries.hasExit = true;
+    }
+
+    const nextEntry: PeriodHistoryDayEntry = {
+      id: detailRow.id,
+      date: detailRow.date,
+      itemId: detailRow.itemId,
+      name: detailRow.name,
+      unit: detailRow.unit,
+      quantity: detailRow.quantity,
+      minQuantity: detailRow.minQuantity,
+      movementType,
+      stockAfterQuantity: detailRow.stockAfterQuantity,
+      needsPurchase,
+      missingQuantity: detailRow.missingQuantity,
+      itemDeleted: detailRow.itemDeleted === 1,
+    };
+
+    dayEntries.entries.push(nextEntry);
+    daysByDate.set(detailRow.date, dayEntries);
+  }
+
+  const days = Array.from(daysByDate.values()).sort((left, right) =>
+    right.date.localeCompare(left.date),
+  );
+
   return {
     countedEntries: summaryRow?.countedEntries ?? 0,
     inspectedDays: summaryRow?.inspectedDays ?? 0,
+    itemsToBuyCount: itemsToBuyIds.size,
     totalConsumedQuantity: summaryRow?.totalConsumedQuantity ?? 0,
     totalMissingQuantity: summaryRow?.totalMissingQuantity ?? 0,
-    entries: detailRows.map((row) => ({
-      itemId: row.itemId,
-      name: row.name,
-      unit: row.unit,
-      countedDays: row.countedDays,
-      consumedQuantityTotal: row.consumedQuantityTotal ?? 0,
-      totalMissingQuantity: row.totalMissingQuantity,
-    })),
+    days,
   };
 }
 
@@ -1124,10 +1217,10 @@ export async function listFortnightlyHistoryGrouped(month: string): Promise<Peri
       endDate: firstHalfEnd,
       inspectedDays: firstHalfData.inspectedDays,
       countedEntries: firstHalfData.countedEntries,
-      itemsToBuyCount: firstHalfData.entries.filter((entry) => entry.totalMissingQuantity > 0).length,
+      itemsToBuyCount: firstHalfData.itemsToBuyCount,
       totalConsumedQuantity: firstHalfData.totalConsumedQuantity,
       totalMissingQuantity: firstHalfData.totalMissingQuantity,
-      entries: firstHalfData.entries,
+      days: firstHalfData.days,
     },
     {
       id: `${month}-Q2`,
@@ -1138,10 +1231,10 @@ export async function listFortnightlyHistoryGrouped(month: string): Promise<Peri
       endDate: secondHalfEnd,
       inspectedDays: secondHalfData.inspectedDays,
       countedEntries: secondHalfData.countedEntries,
-      itemsToBuyCount: secondHalfData.entries.filter((entry) => entry.totalMissingQuantity > 0).length,
+      itemsToBuyCount: secondHalfData.itemsToBuyCount,
       totalConsumedQuantity: secondHalfData.totalConsumedQuantity,
       totalMissingQuantity: secondHalfData.totalMissingQuantity,
-      entries: secondHalfData.entries,
+      days: secondHalfData.days,
     },
   ];
 }
@@ -1169,10 +1262,194 @@ export async function listMonthlyHistoryGrouped(month: string): Promise<PeriodHi
       endDate: monthRange.endDate,
       inspectedDays: monthlyData.inspectedDays,
       countedEntries: monthlyData.countedEntries,
-      itemsToBuyCount: monthlyData.entries.filter((entry) => entry.totalMissingQuantity > 0).length,
+      itemsToBuyCount: monthlyData.itemsToBuyCount,
       totalConsumedQuantity: monthlyData.totalConsumedQuantity,
       totalMissingQuantity: monthlyData.totalMissingQuantity,
-      entries: monthlyData.entries,
+      days: monthlyData.days,
     },
   ];
+}
+
+export async function getDashboardAnalytics(month: string): Promise<DashboardAnalyticsData> {
+  if (!isValidMonthString(month)) {
+    throw new Error('Mes invalido para dashboard.');
+  }
+
+  const monthRange = getMonthDateRange(month);
+
+  if (!monthRange) {
+    throw new Error('Mes invalido para dashboard.');
+  }
+
+  const { startDate, endDate } = monthRange;
+  const database = await getDatabase();
+
+  const summaryRow = await database.getFirstAsync<DashboardSummaryRow>(
+    `
+      SELECT
+        SUM(
+          CASE
+            WHEN movement_type IN ('entry', 'initial', 'legacy_snapshot')
+              THEN quantity
+            ELSE 0
+          END
+        ) AS totalEntryQuantity,
+        SUM(
+          CASE
+            WHEN movement_type IN ('exit', 'consumption')
+              THEN quantity
+            ELSE 0
+          END
+        ) AS totalExitQuantity,
+        COUNT(*) AS movementEntries
+      FROM daily_stock_entries
+      WHERE is_deleted = 0
+        AND date BETWEEN ? AND ?;
+    `,
+    startDate,
+    endDate,
+  );
+
+  const itemRows = await database.getAllAsync<DashboardItemTotalsRow>(
+    `
+      SELECT
+        stock_items.id AS itemId,
+        stock_items.name AS name,
+        stock_items.unit AS unit,
+        stock_items.category AS category,
+        SUM(
+          CASE
+            WHEN daily_stock_entries.movement_type IN ('entry', 'initial', 'legacy_snapshot')
+              THEN daily_stock_entries.quantity
+            ELSE 0
+          END
+        ) AS entryQuantity,
+        SUM(
+          CASE
+            WHEN daily_stock_entries.movement_type IN ('exit', 'consumption')
+              THEN daily_stock_entries.quantity
+            ELSE 0
+          END
+        ) AS exitQuantity
+      FROM daily_stock_entries
+      INNER JOIN stock_items ON stock_items.id = daily_stock_entries.item_id
+      WHERE daily_stock_entries.is_deleted = 0
+        AND daily_stock_entries.date BETWEEN ? AND ?
+      GROUP BY stock_items.id, stock_items.name, stock_items.unit, stock_items.category
+      ORDER BY
+        (
+          SUM(
+            CASE
+              WHEN daily_stock_entries.movement_type IN ('entry', 'initial', 'legacy_snapshot')
+                THEN daily_stock_entries.quantity
+              ELSE 0
+            END
+          ) +
+          SUM(
+            CASE
+              WHEN daily_stock_entries.movement_type IN ('exit', 'consumption')
+                THEN daily_stock_entries.quantity
+              ELSE 0
+            END
+          )
+        ) DESC,
+        stock_items.name COLLATE NOCASE ASC;
+    `,
+    startDate,
+    endDate,
+  );
+
+  const dailyRows = await database.getAllAsync<DashboardDailySeriesRow>(
+    `
+      SELECT
+        date AS date,
+        SUM(
+          CASE
+            WHEN movement_type IN ('entry', 'initial', 'legacy_snapshot')
+              THEN quantity
+            ELSE 0
+          END
+        ) AS entryQuantity,
+        SUM(
+          CASE
+            WHEN movement_type IN ('exit', 'consumption')
+              THEN quantity
+            ELSE 0
+          END
+        ) AS exitQuantity
+      FROM daily_stock_entries
+      WHERE is_deleted = 0
+        AND date BETWEEN ? AND ?
+      GROUP BY date
+      ORDER BY date ASC;
+    `,
+    startDate,
+    endDate,
+  );
+
+  const items: DashboardItemAnalyticsRow[] = itemRows
+    .map((row) => {
+      const entryQuantity = roundQuantity(toSafeNumber(row.entryQuantity));
+      const exitQuantity = roundQuantity(toSafeNumber(row.exitQuantity));
+      const movementTotal = roundQuantity(entryQuantity + exitQuantity);
+
+      return {
+        itemId: row.itemId,
+        name: row.name,
+        unit: row.unit,
+        category: normalizeCategory(row.category),
+        entryQuantity,
+        exitQuantity,
+        movementTotal,
+      };
+    })
+    .filter((item) => item.movementTotal > 0)
+    .sort(
+      (left, right) =>
+        right.movementTotal - left.movementTotal ||
+        left.name.localeCompare(right.name, 'pt-BR', { sensitivity: 'base' }),
+    );
+
+  const dailyByDate = new Map<string, { entryQuantity: number; exitQuantity: number }>();
+
+  for (const row of dailyRows) {
+    const entryQuantity = roundQuantity(toSafeNumber(row.entryQuantity));
+    const exitQuantity = roundQuantity(toSafeNumber(row.exitQuantity));
+    dailyByDate.set(row.date, { entryQuantity, exitQuantity });
+  }
+
+  const dailySeries: DashboardDailySeriesPoint[] = buildDateRangeList(startDate, endDate).map((date) => {
+    const dailyPoint = dailyByDate.get(date);
+    const entryQuantity = dailyPoint?.entryQuantity ?? 0;
+    const exitQuantity = dailyPoint?.exitQuantity ?? 0;
+    const movementTotal = roundQuantity(entryQuantity + exitQuantity);
+    const [, , day] = date.split('-');
+
+    return {
+      date,
+      dayLabel: day,
+      entryQuantity,
+      exitQuantity,
+      movementTotal,
+    };
+  });
+
+  const totalEntryQuantity = roundQuantity(toSafeNumber(summaryRow?.totalEntryQuantity));
+  const totalExitQuantity = roundQuantity(toSafeNumber(summaryRow?.totalExitQuantity));
+  const movementEntries = Math.max(0, Math.trunc(toSafeNumber(summaryRow?.movementEntries)));
+
+  return {
+    month,
+    startDate,
+    endDate,
+    totals: {
+      entryQuantity: totalEntryQuantity,
+      exitQuantity: totalExitQuantity,
+      movementTotal: roundQuantity(totalEntryQuantity + totalExitQuantity),
+      activeItems: items.length,
+      movementEntries,
+    },
+    items,
+    dailySeries,
+  };
 }
