@@ -30,6 +30,7 @@ import {
 } from '../utils/date';
 
 type HistoryMode = 'diario' | 'quinzenal' | 'mensal';
+type DailyMovementFilter = 'entry' | 'exit';
 const ADMIN_PASSWORD = 'admin1234';
 
 type FallbackPromptConfig = {
@@ -68,6 +69,18 @@ function getMovementTypeLabel(movementType: DailyHistoryEntry['movementType']): 
   return 'Consumo';
 }
 
+function resolveMovementFilter(movementType: DailyHistoryEntry['movementType']): DailyMovementFilter {
+  if (movementType === 'entry' || movementType === 'initial' || movementType === 'legacy_snapshot') {
+    return 'entry';
+  }
+
+  return 'exit';
+}
+
+function getDailyMovementFilterLabel(filter: DailyMovementFilter): string {
+  return filter === 'entry' ? 'Entrada' : 'Saida';
+}
+
 function parseDecimalInput(value: string): number | null {
   const normalized = value.trim().replace(',', '.');
 
@@ -91,6 +104,7 @@ function parseDecimalInput(value: string): number | null {
 export function HistoryScreen() {
   const initialMonth = getCurrentMonthString();
   const [mode, setMode] = useState<HistoryMode>('diario');
+  const [dailyMovementFilter, setDailyMovementFilter] = useState<DailyMovementFilter>('entry');
   const [selectedMonth, setSelectedMonth] = useState(initialMonth);
   const [monthInputValue, setMonthInputValue] = useState(formatMonthLabel(initialMonth));
   const [monthInputError, setMonthInputError] = useState('');
@@ -486,6 +500,43 @@ export function HistoryScreen() {
               </Pressable>
             </View>
 
+            {isDailyMode ? (
+              <View style={styles.dailyFilterSwitcher}>
+                <Pressable
+                  style={[
+                    styles.dailyFilterButton,
+                    dailyMovementFilter === 'entry' ? styles.dailyFilterButtonActive : undefined,
+                  ]}
+                  onPress={() => setDailyMovementFilter('entry')}
+                >
+                  <Text
+                    style={[
+                      styles.dailyFilterText,
+                      dailyMovementFilter === 'entry' ? styles.dailyFilterTextActive : undefined,
+                    ]}
+                  >
+                    Entrada
+                  </Text>
+                </Pressable>
+                <Pressable
+                  style={[
+                    styles.dailyFilterButton,
+                    dailyMovementFilter === 'exit' ? styles.dailyFilterButtonActive : undefined,
+                  ]}
+                  onPress={() => setDailyMovementFilter('exit')}
+                >
+                  <Text
+                    style={[
+                      styles.dailyFilterText,
+                      dailyMovementFilter === 'exit' ? styles.dailyFilterTextActive : undefined,
+                    ]}
+                  >
+                    Saida
+                  </Text>
+                </Pressable>
+              </View>
+            ) : null}
+
             {!isDailyMode ? (
               <View style={styles.monthCard}>
                 <Text style={styles.monthLabel}>Mes do relatorio</Text>
@@ -511,12 +562,26 @@ export function HistoryScreen() {
           isLoading ? (
             <Text style={styles.emptyText}>Carregando historico...</Text>
           ) : (
-            <Text style={styles.emptyText}>Nenhuma movimentacao registrada para este filtro.</Text>
+            <Text style={styles.emptyText}>
+              {isDailyMode
+                ? `Nenhuma movimentacao de ${getDailyMovementFilterLabel(dailyMovementFilter)} registrada para este filtro.`
+                : 'Nenhuma movimentacao registrada para este filtro.'}
+            </Text>
           )
         }
         renderItem={({ item }) => {
           if ('date' in item) {
             const dailyItem = item;
+            const filteredEntries = dailyItem.entries.filter(
+              (entry) => resolveMovementFilter(entry.movementType) === dailyMovementFilter,
+            );
+            const filteredCountedItems = filteredEntries.length;
+            const filteredOkItems = filteredEntries.filter((entry) => !entry.needsPurchase).length;
+            const filteredNeedPurchaseItems = filteredEntries.filter((entry) => entry.needsPurchase).length;
+            const filteredTotalMissingQuantity = filteredEntries.reduce(
+              (sum, entry) => sum + entry.missingQuantity,
+              0,
+            );
 
             return (
               <View style={styles.groupCard}>
@@ -536,82 +601,88 @@ export function HistoryScreen() {
                       <Text style={styles.deleteDayButtonText}>Excluir dia</Text>
                     </Pressable>
                     <View style={styles.groupBadge}>
-                      <Text style={styles.groupBadgeText}>{dailyItem.countedItems} contados</Text>
+                      <Text style={styles.groupBadgeText}>{filteredCountedItems} mov.</Text>
                     </View>
                   </View>
                 </View>
 
                 <Text style={styles.groupSummary}>
-                  Total itens: {dailyItem.totalItems} | Movimentacoes: {dailyItem.countedItems} | OK: {dailyItem.okItems}{' '}
-                  | Comprar: {dailyItem.needPurchaseItems} | Faltante total:{' '}
-                  {formatQuantity(dailyItem.totalMissingQuantity)}
+                  Total itens: {dailyItem.totalItems} | Movimentacoes: {filteredCountedItems} | OK:{' '}
+                  {filteredOkItems} | Comprar: {filteredNeedPurchaseItems} | Faltante total:{' '}
+                  {formatQuantity(filteredTotalMissingQuantity)}
                 </Text>
 
-                {dailyItem.entries.map((entry) => (
-                  <View key={String(entry.id)} style={styles.entryRow}>
-                    <View style={styles.entryInfo}>
-                      <View style={styles.entryTitleRow}>
-                        <Text style={styles.entryName}>{entry.name}</Text>
-                        {entry.itemDeleted ? (
-                          <View style={styles.deletedBadge}>
-                            <Text style={styles.deletedBadgeText}>Item arquivado</Text>
-                          </View>
-                        ) : null}
+                {filteredEntries.length === 0 ? (
+                  <Text style={styles.entryMeta}>
+                    Sem movimentacoes de {getDailyMovementFilterLabel(dailyMovementFilter)} neste dia.
+                  </Text>
+                ) : (
+                  filteredEntries.map((entry) => (
+                    <View key={String(entry.id)} style={styles.entryRow}>
+                      <View style={styles.entryInfo}>
+                        <View style={styles.entryTitleRow}>
+                          <Text style={styles.entryName}>{entry.name}</Text>
+                          {entry.itemDeleted ? (
+                            <View style={styles.deletedBadge}>
+                              <Text style={styles.deletedBadgeText}>Item arquivado</Text>
+                            </View>
+                          ) : null}
+                        </View>
+                        <Text style={styles.entryMeta}>
+                          {getMovementTypeLabel(entry.movementType)}: {formatQuantity(entry.quantity)} {entry.unit} | Min{' '}
+                          {formatQuantity(entry.minQuantity)}
+                        </Text>
+                        <Text style={styles.entryMeta}>
+                          Saldo apos: {entry.stockAfterQuantity === null ? '-' : formatQuantity(entry.stockAfterQuantity)}
+                        </Text>
+                        <View style={styles.entryActions}>
+                          <Pressable
+                            style={[
+                              styles.entryActionButton,
+                              activeActionKey === `edit-${entry.id}`
+                                ? styles.actionDisabled
+                                : undefined,
+                            ]}
+                            onPress={() => {
+                              void handleEditEntry(entry);
+                            }}
+                            disabled={activeActionKey !== null}
+                          >
+                            <Text style={styles.entryActionButtonText}>Editar</Text>
+                          </Pressable>
+                          <Pressable
+                            style={[
+                              styles.entryDeleteButton,
+                              activeActionKey === `delete-entry-${entry.id}`
+                                ? styles.actionDisabled
+                                : undefined,
+                            ]}
+                            onPress={() => {
+                              void handleArchiveEntry(entry);
+                            }}
+                            disabled={activeActionKey !== null}
+                          >
+                            <Text style={styles.entryDeleteButtonText}>Excluir item</Text>
+                          </Pressable>
+                        </View>
                       </View>
-                      <Text style={styles.entryMeta}>
-                        {getMovementTypeLabel(entry.movementType)}: {formatQuantity(entry.quantity)} {entry.unit} | Min{' '}
-                        {formatQuantity(entry.minQuantity)}
-                      </Text>
-                      <Text style={styles.entryMeta}>
-                        Saldo apos: {entry.stockAfterQuantity === null ? '-' : formatQuantity(entry.stockAfterQuantity)}
-                      </Text>
-                      <View style={styles.entryActions}>
-                        <Pressable
-                          style={[
-                            styles.entryActionButton,
-                            activeActionKey === `edit-${entry.id}`
-                              ? styles.actionDisabled
-                              : undefined,
-                          ]}
-                          onPress={() => {
-                            void handleEditEntry(entry);
-                          }}
-                          disabled={activeActionKey !== null}
-                        >
-                          <Text style={styles.entryActionButtonText}>Editar</Text>
-                        </Pressable>
-                        <Pressable
-                          style={[
-                            styles.entryDeleteButton,
-                            activeActionKey === `delete-entry-${entry.id}`
-                              ? styles.actionDisabled
-                              : undefined,
-                          ]}
-                          onPress={() => {
-                            void handleArchiveEntry(entry);
-                          }}
-                          disabled={activeActionKey !== null}
-                        >
-                          <Text style={styles.entryDeleteButtonText}>Excluir item</Text>
-                        </Pressable>
+                      <View
+                        style={[
+                          styles.statusBadge,
+                          entry.needsPurchase ? styles.statusNeedPurchase : styles.statusOk,
+                        ]}
+                      >
+                        <Text style={styles.statusText}>
+                          {entry.needsPurchase
+                            ? entry.missingQuantity > 0
+                              ? `Comprar ${formatQuantity(entry.missingQuantity)} ${entry.unit}`
+                              : 'No minimo (comprar)'
+                            : 'OK'}
+                        </Text>
                       </View>
                     </View>
-                    <View
-                      style={[
-                        styles.statusBadge,
-                        entry.needsPurchase ? styles.statusNeedPurchase : styles.statusOk,
-                      ]}
-                    >
-                      <Text style={styles.statusText}>
-                        {entry.needsPurchase
-                          ? entry.missingQuantity > 0
-                            ? `Comprar ${formatQuantity(entry.missingQuantity)} ${entry.unit}`
-                            : 'No minimo (comprar)'
-                          : 'OK'}
-                      </Text>
-                    </View>
-                  </View>
-                ))}
+                  ))
+                )}
               </View>
             );
           }
@@ -752,6 +823,33 @@ const styles = StyleSheet.create({
     fontSize: 12,
   },
   modeTextActive: {
+    color: '#FFFFFF',
+  },
+  dailyFilterSwitcher: {
+    flexDirection: 'row',
+    backgroundColor: '#F3E8FF',
+    borderRadius: 12,
+    padding: 4,
+    gap: 6,
+    borderWidth: 1,
+    borderColor: '#DDD6FE',
+  },
+  dailyFilterButton: {
+    flex: 1,
+    borderRadius: 10,
+    paddingVertical: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  dailyFilterButtonActive: {
+    backgroundColor: '#6D28D9',
+  },
+  dailyFilterText: {
+    color: '#6D28D9',
+    fontWeight: '700',
+    fontSize: 12,
+  },
+  dailyFilterTextActive: {
     color: '#FFFFFF',
   },
   monthCard: {
