@@ -35,6 +35,7 @@ type QuantityErrorMap = Record<string, string>;
 const TOAST_DURATION_MS = 2800;
 const FILTER_ALL = '__all__';
 const FILTER_UNCATEGORIZED = '__uncategorized__';
+const MAX_AUTOCOMPLETE_SUGGESTIONS = 6;
 
 type CategoryFilterValue = typeof FILTER_ALL | typeof FILTER_UNCATEGORIZED | StockCategory;
 
@@ -63,6 +64,14 @@ function formatQuantity(value: number): string {
     minimumFractionDigits: Number.isInteger(value) ? 0 : 2,
     maximumFractionDigits: 2,
   });
+}
+
+function normalizeSearchValue(value: string): string {
+  return value
+    .trim()
+    .toLocaleLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '');
 }
 
 type CategoryFilterSelectProps = {
@@ -162,6 +171,7 @@ function StockMovementScreen({ mode }: { mode: MovementMode }) {
   const [items, setItems] = useState<StockMovementItem[]>([]);
   const [categoryFilter, setCategoryFilter] = useState<CategoryFilterValue>(FILTER_ALL);
   const [isCategoryFilterOpen, setIsCategoryFilterOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
   const [quantities, setQuantities] = useState<QuantityFormMap>({});
   const [fieldErrors, setFieldErrors] = useState<QuantityErrorMap>({});
   const [isLoading, setIsLoading] = useState(true);
@@ -238,8 +248,16 @@ function StockMovementScreen({ mode }: { mode: MovementMode }) {
     };
   }, []);
 
-  const filteredItems = useMemo(() => {
-    return items.filter((item) => {
+  const modeVisibleItems = useMemo(() => {
+    if (mode === 'entry') {
+      return items;
+    }
+
+    return items.filter((item) => item.currentStockQuantity !== null && item.currentStockQuantity > 0);
+  }, [items, mode]);
+
+  const categoryFilteredItems = useMemo(() => {
+    return modeVisibleItems.filter((item) => {
       if (categoryFilter === FILTER_ALL) {
         return true;
       }
@@ -250,7 +268,43 @@ function StockMovementScreen({ mode }: { mode: MovementMode }) {
 
       return item.category === categoryFilter;
     });
-  }, [items, categoryFilter]);
+  }, [modeVisibleItems, categoryFilter]);
+
+  const normalizedSearchQuery = useMemo(() => normalizeSearchValue(searchQuery), [searchQuery]);
+
+  const filteredItems = useMemo(() => {
+    if (!normalizedSearchQuery) {
+      return categoryFilteredItems;
+    }
+
+    return categoryFilteredItems.filter((item) =>
+      normalizeSearchValue(item.name).includes(normalizedSearchQuery),
+    );
+  }, [categoryFilteredItems, normalizedSearchQuery]);
+
+  const searchSuggestions = useMemo(() => {
+    if (!normalizedSearchQuery) {
+      return [];
+    }
+
+    const startsWithMatches: StockMovementItem[] = [];
+    const containsMatches: StockMovementItem[] = [];
+
+    for (const item of categoryFilteredItems) {
+      const normalizedName = normalizeSearchValue(item.name);
+
+      if (normalizedName.startsWith(normalizedSearchQuery)) {
+        startsWithMatches.push(item);
+        continue;
+      }
+
+      if (normalizedName.includes(normalizedSearchQuery)) {
+        containsMatches.push(item);
+      }
+    }
+
+    return [...startsWithMatches, ...containsMatches].slice(0, MAX_AUTOCOMPLETE_SUGGESTIONS);
+  }, [categoryFilteredItems, normalizedSearchQuery]);
 
   const summary = useMemo(() => {
     let needPurchase = 0;
@@ -302,6 +356,11 @@ function StockMovementScreen({ mode }: { mode: MovementMode }) {
     setSelectedDate(value.trim());
     setIsCategoryFilterOpen(false);
     setSelectedDateError('');
+    setSubmitError('');
+  }
+
+  function setSearchValue(value: string) {
+    setSearchQuery(value);
     setSubmitError('');
   }
 
@@ -486,6 +545,46 @@ function StockMovementScreen({ mode }: { mode: MovementMode }) {
               />
             </View>
 
+            <View style={styles.searchCard}>
+              <View style={styles.searchHeader}>
+                <Text style={styles.searchLabel}>Buscar item</Text>
+                {searchQuery.trim().length > 0 ? (
+                  <Pressable
+                    style={styles.clearSearchButton}
+                    onPress={() => {
+                      setSearchValue('');
+                    }}
+                  >
+                    <Text style={styles.clearSearchButtonText}>Limpar</Text>
+                  </Pressable>
+                ) : null}
+              </View>
+              <TextInput
+                value={searchQuery}
+                onChangeText={setSearchValue}
+                placeholder="Digite o nome do item"
+                style={styles.searchInput}
+              />
+              {searchSuggestions.length > 0 ? (
+                <View style={styles.searchSuggestionsContainer}>
+                  {searchSuggestions.map((suggestion, index) => (
+                    <Pressable
+                      key={`suggestion-${suggestion.id}`}
+                      style={[
+                        styles.searchSuggestionButton,
+                        index === searchSuggestions.length - 1 ? styles.searchSuggestionButtonLast : undefined,
+                      ]}
+                      onPress={() => {
+                        setSearchValue(suggestion.name);
+                      }}
+                    >
+                      <Text style={styles.searchSuggestionText}>{suggestion.name}</Text>
+                    </Pressable>
+                  ))}
+                </View>
+              ) : null}
+            </View>
+
             {filteredItems.length > 0 ? (
               <Pressable
                 style={[styles.submitButton, isSaving ? styles.submitButtonDisabled : undefined]}
@@ -514,8 +613,12 @@ function StockMovementScreen({ mode }: { mode: MovementMode }) {
             <Text style={styles.emptyText}>
               Nenhum item cadastrado. Cadastre itens na aba Itens para iniciar a movimentacao.
             </Text>
+          ) : mode === 'exit' && modeVisibleItems.length === 0 ? (
+            <Text style={styles.emptyText}>
+              Nenhum item com estoque disponivel para registrar saida.
+            </Text>
           ) : (
-            <Text style={styles.emptyText}>Nenhum item encontrado para o filtro selecionado.</Text>
+            <Text style={styles.emptyText}>Nenhum item encontrado para a categoria/busca selecionada.</Text>
           )
         }
         renderItem={({ item }) => {
@@ -757,6 +860,69 @@ const styles = StyleSheet.create({
   filterSelectOptionTextActive: {
     color: '#5B21B6',
     fontWeight: '700',
+  },
+  searchCard: {
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#DDD6FE',
+    borderRadius: 14,
+    padding: 12,
+    gap: 8,
+  },
+  searchHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  searchLabel: {
+    fontSize: 13,
+    color: '#6D28D9',
+    fontWeight: '700',
+  },
+  clearSearchButton: {
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: '#C4B5FD',
+    backgroundColor: '#F5F3FF',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+  },
+  clearSearchButtonText: {
+    color: '#5B21B6',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  searchInput: {
+    borderWidth: 1,
+    borderColor: '#C4B5FD',
+    backgroundColor: '#FAF5FF',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    color: '#3B0764',
+    fontSize: 14,
+  },
+  searchSuggestionsContainer: {
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#DDD6FE',
+    overflow: 'hidden',
+    backgroundColor: '#FFFFFF',
+  },
+  searchSuggestionButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3E8FF',
+  },
+  searchSuggestionButtonLast: {
+    borderBottomWidth: 0,
+  },
+  searchSuggestionText: {
+    color: '#4C1D95',
+    fontSize: 13,
+    fontWeight: '600',
   },
   submitButton: {
     borderRadius: 12,
