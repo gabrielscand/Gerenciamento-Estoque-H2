@@ -153,6 +153,9 @@ npm run start
 npm run web
 npm run android
 npm run ios
+npm run build:android:preview
+npm run update:preview
+npm run update:production
 ```
 
 ## Como gerar APK para o tablet
@@ -194,7 +197,26 @@ Quando o build terminar:
 
 ## Como atualizar o app no tablet depois de mudar o codigo
 
-Sempre que voce alterar o codigo e quiser ver a nova versao no tablet, faca este fluxo:
+Agora o projeto tambem esta configurado com `EAS Update`.
+
+Importante:
+
+- A versao do app que ja estava instalada antes dessa configuracao ainda nao recebe updates OTA.
+- Para ativar esse fluxo no tablet, voce precisa instalar **mais um APK novo** gerado depois da configuracao do `EAS Update`.
+
+### 0. Fazer a primeira instalacao compativel com EAS Update
+
+Rode:
+
+```bash
+npm run build:android:preview
+```
+
+Depois baixe e instale esse APK no tablet. A partir dessa versao, o app passa a aceitar updates OTA do canal `preview`.
+
+### Depois disso: atualizacao sem reinstalar APK
+
+Sempre que voce alterar o codigo e quiser mandar a nova versao para o tablet, faca este fluxo:
 
 ### 1. Salvar as mudancas do projeto
 
@@ -206,48 +228,53 @@ git commit -m "sua mensagem"
 git push
 ```
 
-### 2. Gerar um novo APK
+### 2. Publicar o update OTA
 
 ```bash
-eas build --platform android --profile preview
+npm run update:preview -- --message "sua mensagem"
 ```
 
-### 3. Instalar a nova versao por cima da antiga
+Esse comando envia a nova versao JavaScript para o canal `preview`, que e o mesmo canal usado pelo APK do tablet.
 
-Depois que a Expo terminar o build:
+### 3. Abrir o app no tablet
 
-1. Abra o link do build.
-2. Baixe o novo `.apk`.
-3. Instale no tablet.
+No tablet:
 
-Se o nome do pacote continuar o mesmo, o Android atualiza o app por cima da versao anterior.
+1. Feche o app completamente.
+2. Abra o app de novo.
+3. Aguarde alguns segundos.
+4. Feche e abra novamente, se necessario.
+
+Normalmente o update aparece apos reabrir o aplicativo.
 
 ## Quando precisa gerar um novo APK
 
-No estado atual do projeto, sempre que voce quiser levar uma nova versao para o tablet, o caminho garantido e gerar um novo APK com:
+Depois de instalar o APK compativel com `EAS Update`, voce **nao precisa reinstalar APK para toda mudanca**.
+
+Mesmo assim, ainda existem casos em que o caminho certo continua sendo gerar um novo APK:
 
 ```bash
-eas build --platform android --profile preview
+npm run build:android:preview
 ```
 
 Isso vale para:
 
+- primeira instalacao com suporte a `EAS Update`
+- mudancas nativas ou de configuracao do Expo
+- alteracoes em plugins
+- mudancas que afetem o binario Android
+- quando quiser reinstalar uma versao completa do app
+
+## Quando o `EAS Update` e suficiente
+
+Depois da nova instalacao do APK, o `EAS Update` funciona muito bem para:
+
 - ajustes de layout
-- novas telas
-- mudancas de regras de estoque
-- alteracoes no sync com Supabase
-- mudancas em graficos e dashboard
-
-## Observacao sobre atualizacoes futuras
-
-Existe um fluxo chamado `EAS Update`, que permite publicar algumas alteracoes sem reinstalar APK toda vez. Ele ainda nao esta configurado neste projeto.
-
-Enquanto isso, o fluxo recomendado para voce e:
-
-1. alterar o codigo
-2. rodar `eas build --platform android --profile preview`
-3. baixar o novo APK
-4. instalar no tablet
+- textos
+- telas
+- regras de negocio em TypeScript/JavaScript
+- mudancas de dashboard
+- melhorias de fluxo no app
 
 ## Resumo rapido de onboarding
 

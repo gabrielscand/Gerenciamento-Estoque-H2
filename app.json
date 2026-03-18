@@ -22,7 +22,10 @@
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "runtimeVersion": {
+        "policy": "appVersion"
+      }
     },
     "web": {
       "favicon": "./assets/favicon.png"
@@ -36,6 +39,9 @@
         "projectId": "45fdcaea-c320-4f89-ad5f-716f04489ac4"
       }
     },
-    "owner": "yscand"
+    "owner": "yscand",
+    "updates": {
+      "url": "https://u.expo.dev/45fdcaea-c320-4f89-ad5f-716f04489ac4"
+    }
   }
 }
