@@ -1,5 +1,13 @@
 import { useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import {
+  ActivityIndicator,
+  Platform,
+  Pressable,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
 import { login } from '../database/auth.repository';
 import type { AppUser } from '../types/inventory';
 
@@ -14,6 +22,10 @@ export function LoginScreen({ onLoginSuccess }: LoginScreenProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   async function handleSubmit() {
+    if (isSubmitting) {
+      return;
+    }
+
     setErrorMessage('');
     setIsSubmitting(true);
 
@@ -25,6 +37,12 @@ export function LoginScreen({ onLoginSuccess }: LoginScreenProps) {
       setErrorMessage(error instanceof Error ? error.message : 'Falha ao entrar.');
     } finally {
       setIsSubmitting(false);
+    }
+  }
+
+  function handlePasswordKeyPress(key: string) {
+    if (Platform.OS === 'web' && key === 'Enter') {
+      void handleSubmit();
     }
   }
 
@@ -53,10 +71,17 @@ export function LoginScreen({ onLoginSuccess }: LoginScreenProps) {
           <TextInput
             value={password}
             onChangeText={setPassword}
+            onSubmitEditing={() => {
+              void handleSubmit();
+            }}
+            onKeyPress={(event) => {
+              handlePasswordKeyPress(event.nativeEvent.key);
+            }}
             secureTextEntry
             autoCapitalize="none"
             autoCorrect={false}
             placeholder="Digite sua senha"
+            returnKeyType="done"
             style={styles.input}
           />
         </View>

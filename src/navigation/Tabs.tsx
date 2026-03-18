@@ -161,14 +161,25 @@ export function Tabs({ currentUser, onLogout, onUsersChanged }: TabsProps) {
             <TabLabel focused={focused} title={String(children)} />
           ),
           headerRight: () => (
-            <Pressable
-              style={styles.logoutButton}
-              onPress={() => {
-                void onLogout();
-              }}
-            >
-              <Text style={styles.logoutButtonText}>Sair</Text>
-            </Pressable>
+            <View style={styles.headerUserActions}>
+              <View style={styles.currentUserBadge}>
+                <Text
+                  style={styles.currentUserText}
+                  numberOfLines={1}
+                  ellipsizeMode="tail"
+                >
+                  Usuario: {currentUser.username}
+                </Text>
+              </View>
+              <Pressable
+                style={styles.logoutButton}
+                onPress={() => {
+                  void onLogout();
+                }}
+              >
+                <Text style={styles.logoutButtonText}>Sair</Text>
+              </Pressable>
+            </View>
           ),
         }}
       >
@@ -235,7 +246,6 @@ const styles = StyleSheet.create({
     fontWeight: '800',
   },
   logoutButton: {
-    marginRight: 12,
     borderRadius: 999,
     borderWidth: 1,
     borderColor: '#C4B5FD',
@@ -244,6 +254,27 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
   },
   logoutButtonText: {
+    color: '#5B21B6',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  headerUserActions: {
+    marginRight: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    maxWidth: 250,
+  },
+  currentUserBadge: {
+    maxWidth: 160,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: '#DDD6FE',
+    backgroundColor: '#FFFFFF',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  currentUserText: {
     color: '#5B21B6',
     fontSize: 12,
     fontWeight: '700',
