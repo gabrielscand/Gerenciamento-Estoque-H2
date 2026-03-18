@@ -14,6 +14,26 @@ create table if not exists public.stock_items (
   updated_at timestamptz not null default timezone('utc', now())
 );
 
+create table if not exists public.app_users (
+  id text primary key,
+  username text not null check (char_length(trim(username)) > 0),
+  username_normalized text not null check (char_length(trim(username_normalized)) > 0),
+  function_name text,
+  password_hash text not null,
+  password_salt text not null,
+  is_admin boolean not null default false,
+  can_access_dashboard boolean not null default false,
+  can_access_stock boolean not null default false,
+  can_access_items boolean not null default false,
+  can_access_entry boolean not null default false,
+  can_access_exit boolean not null default false,
+  can_access_history boolean not null default false,
+  is_deleted boolean not null default false,
+  deleted_at timestamptz,
+  created_at timestamptz not null default timezone('utc', now()),
+  updated_at timestamptz not null default timezone('utc', now())
+);
+
 create table if not exists public.daily_stock_entries (
   id text primary key,
   item_id text not null references public.stock_items(id) on delete cascade,
@@ -45,6 +65,16 @@ create index if not exists idx_daily_stock_entries_is_deleted
 create index if not exists idx_stock_items_is_deleted
   on public.stock_items (is_deleted);
 
+create index if not exists idx_stock_items_category
+  on public.stock_items (category);
+
+create index if not exists idx_app_users_is_deleted
+  on public.app_users (is_deleted);
+
+create unique index if not exists idx_app_users_username_normalized_active
+  on public.app_users (username_normalized)
+  where is_deleted = false;
+
 alter table public.stock_items
   add column if not exists is_deleted boolean not null default false;
 
@@ -56,6 +86,45 @@ alter table public.stock_items
 
 alter table public.stock_items
   add column if not exists current_stock_quantity double precision;
+
+alter table public.app_users
+  add column if not exists username_normalized text;
+
+alter table public.app_users
+  add column if not exists function_name text;
+
+alter table public.app_users
+  add column if not exists password_hash text;
+
+alter table public.app_users
+  add column if not exists password_salt text;
+
+alter table public.app_users
+  add column if not exists is_admin boolean not null default false;
+
+alter table public.app_users
+  add column if not exists can_access_dashboard boolean not null default false;
+
+alter table public.app_users
+  add column if not exists can_access_stock boolean not null default false;
+
+alter table public.app_users
+  add column if not exists can_access_items boolean not null default false;
+
+alter table public.app_users
+  add column if not exists can_access_entry boolean not null default false;
+
+alter table public.app_users
+  add column if not exists can_access_exit boolean not null default false;
+
+alter table public.app_users
+  add column if not exists can_access_history boolean not null default false;
+
+alter table public.app_users
+  add column if not exists is_deleted boolean not null default false;
+
+alter table public.app_users
+  add column if not exists deleted_at timestamptz;
 
 alter table public.daily_stock_entries
   add column if not exists is_deleted boolean not null default false;
@@ -93,9 +162,6 @@ alter table public.daily_stock_entries
     or movement_type in ('entry', 'exit', 'initial', 'consumption', 'legacy_snapshot')
   );
 
-create index if not exists idx_stock_items_category
-  on public.stock_items (category);
-
 create or replace view public.stock_items_active as
 select *
 from public.stock_items
@@ -105,6 +171,11 @@ create or replace view public.stock_items_archived as
 select *
 from public.stock_items
 where is_deleted = true;
+
+create or replace view public.app_users_active as
+select *
+from public.app_users
+where is_deleted = false;
 
 create or replace function public.set_updated_at()
 returns trigger
@@ -122,6 +193,12 @@ before update on public.stock_items
 for each row
 execute function public.set_updated_at();
 
+drop trigger if exists trg_app_users_updated_at on public.app_users;
+create trigger trg_app_users_updated_at
+before update on public.app_users
+for each row
+execute function public.set_updated_at();
+
 drop trigger if exists trg_daily_stock_entries_updated_at on public.daily_stock_entries;
 create trigger trg_daily_stock_entries_updated_at
 before update on public.daily_stock_entries
@@ -129,4 +206,5 @@ for each row
 execute function public.set_updated_at();
 
 alter table public.stock_items disable row level security;
+alter table public.app_users disable row level security;
 alter table public.daily_stock_entries disable row level security;

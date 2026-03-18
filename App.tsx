@@ -2,8 +2,15 @@ import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Platform, StyleSheet, Text, View } from 'react-native';
 import { initDatabase } from './src/database';
+import {
+  ensureDefaultAdminUser,
+  getCurrentSessionUser,
+  logout,
+} from './src/database/auth.repository';
 import { refreshSyncStateFromDatabase, syncAppData } from './src/database/sync.service';
 import { Tabs } from './src/navigation/Tabs';
+import { LoginScreen } from './src/screens/LoginScreen';
+import type { AppUser } from './src/types/inventory';
 
 type InitStatus = 'loading' | 'ready' | 'error';
 const INIT_TIMEOUT_MS = Platform.OS === 'web' ? 30000 : 20000;
@@ -29,22 +36,28 @@ async function runWithTimeout<T>(task: Promise<T>, timeoutMs: number): Promise<T
 export default function App() {
   const [initStatus, setInitStatus] = useState<InitStatus>('loading');
   const [errorMessage, setErrorMessage] = useState<string>('');
+  const [sessionUser, setSessionUser] = useState<AppUser | null>(null);
 
   useEffect(() => {
     let isMounted = true;
 
     async function bootstrap() {
       try {
+        let loggedUser: AppUser | null = null;
+
         await runWithTimeout(
           (async () => {
             await initDatabase();
             await refreshSyncStateFromDatabase();
             await syncAppData();
+            await ensureDefaultAdminUser();
+            loggedUser = await getCurrentSessionUser();
           })(),
           INIT_TIMEOUT_MS,
         );
 
         if (isMounted) {
+          setSessionUser(loggedUser);
           setInitStatus('ready');
         }
       } catch (error) {
@@ -86,10 +99,37 @@ export default function App() {
     );
   }
 
+  async function handleLogout() {
+    await logout();
+    setSessionUser(null);
+  }
+
+  async function refreshSessionUser() {
+    const user = await getCurrentSessionUser();
+    setSessionUser(user);
+  }
+
+  if (!sessionUser) {
+    return (
+      <>
+        <StatusBar style="dark" />
+        <LoginScreen
+          onLoginSuccess={(user) => {
+            setSessionUser(user);
+          }}
+        />
+      </>
+    );
+  }
+
   return (
     <>
       <StatusBar style="dark" />
-      <Tabs />
+      <Tabs
+        currentUser={sessionUser}
+        onLogout={handleLogout}
+        onUsersChanged={refreshSessionUser}
+      />
     </>
   );
 }

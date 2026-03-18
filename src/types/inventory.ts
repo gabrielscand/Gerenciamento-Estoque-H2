@@ -1,5 +1,48 @@
 import type { StockCategory } from '../constants/categories';
 
+export type AppTabPermissionKey =
+  | 'dashboard'
+  | 'stock'
+  | 'items'
+  | 'entry'
+  | 'exit'
+  | 'history';
+
+export interface AppUserPermissions {
+  dashboard: boolean;
+  stock: boolean;
+  items: boolean;
+  entry: boolean;
+  exit: boolean;
+  history: boolean;
+}
+
+export interface AppUser {
+  id: number;
+  remoteId: string;
+  username: string;
+  functionName: string;
+  isAdmin: boolean;
+  permissions: AppUserPermissions;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateUserInput {
+  username: string;
+  password: string;
+  functionName: string;
+  isAdmin: boolean;
+  permissions: AppUserPermissions;
+}
+
+export interface UpdateUserInput {
+  username: string;
+  functionName: string;
+  isAdmin: boolean;
+  permissions: AppUserPermissions;
+}
+
 export interface StockItem {
   id: number;
   name: string;

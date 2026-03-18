@@ -27,6 +27,26 @@ type LocalPendingDailyEntryRow = {
   updated_at: string;
 };
 
+type LocalPendingAppUserRow = {
+  remote_id: string;
+  username: string;
+  username_normalized: string;
+  function_name: string | null;
+  password_hash: string;
+  password_salt: string;
+  is_admin: number;
+  can_access_dashboard: number;
+  can_access_stock: number;
+  can_access_items: number;
+  can_access_entry: number;
+  can_access_exit: number;
+  can_access_history: number;
+  is_deleted: number;
+  deleted_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
 type LocalSyncLookupRow = {
   id: number;
   updated_at: string;
@@ -53,6 +73,26 @@ type RemoteDailyEntry = {
   quantity: number;
   movement_type: string | null;
   stock_after_quantity: number | null;
+  is_deleted: boolean;
+  deleted_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+type RemoteAppUser = {
+  id: string;
+  username: string;
+  username_normalized: string;
+  function_name: string | null;
+  password_hash: string;
+  password_salt: string;
+  is_admin: boolean;
+  can_access_dashboard: boolean;
+  can_access_stock: boolean;
+  can_access_items: boolean;
+  can_access_entry: boolean;
+  can_access_exit: boolean;
+  can_access_history: boolean;
   is_deleted: boolean;
   deleted_at: string | null;
   created_at: string;
@@ -211,6 +251,22 @@ async function markDailyEntriesAsSynced(db: SQLiteDatabase, remoteIds: string[])
   );
 }
 
+async function markAppUsersAsSynced(db: SQLiteDatabase, remoteIds: string[]): Promise<void> {
+  if (remoteIds.length === 0) {
+    return;
+  }
+
+  const clause = buildInClause(remoteIds);
+  await db.runAsync(
+    `
+      UPDATE app_users
+      SET sync_status = 'synced'
+      WHERE remote_id IN (${clause});
+    `,
+    ...remoteIds,
+  );
+}
+
 async function pushPendingStockItems(db: SQLiteDatabase): Promise<void> {
   const rows = await db.getAllAsync<LocalPendingStockItemRow>(
     `
@@ -299,6 +355,68 @@ async function pushPendingDailyEntries(db: SQLiteDatabase): Promise<void> {
   );
 
   await markDailyEntriesAsSynced(
+    db,
+    rows.map((row) => row.remote_id),
+  );
+}
+
+async function pushPendingAppUsers(db: SQLiteDatabase): Promise<void> {
+  const rows = await db.getAllAsync<LocalPendingAppUserRow>(
+    `
+      SELECT
+        remote_id,
+        username,
+        username_normalized,
+        function_name,
+        password_hash,
+        password_salt,
+        is_admin,
+        can_access_dashboard,
+        can_access_stock,
+        can_access_items,
+        can_access_entry,
+        can_access_exit,
+        can_access_history,
+        is_deleted,
+        deleted_at,
+        created_at,
+        updated_at
+      FROM app_users
+      WHERE sync_status <> 'synced'
+        AND remote_id IS NOT NULL
+        AND TRIM(remote_id) <> ''
+      ORDER BY updated_at ASC, id ASC;
+    `,
+  );
+
+  if (rows.length === 0) {
+    return;
+  }
+
+  await upsertRemote(
+    '/app_users?on_conflict=id',
+    rows.map((row) => ({
+      id: row.remote_id,
+      username: row.username,
+      username_normalized: row.username_normalized,
+      function_name: row.function_name,
+      password_hash: row.password_hash,
+      password_salt: row.password_salt,
+      is_admin: row.is_admin === 1,
+      can_access_dashboard: row.can_access_dashboard === 1,
+      can_access_stock: row.can_access_stock === 1,
+      can_access_items: row.can_access_items === 1,
+      can_access_entry: row.can_access_entry === 1,
+      can_access_exit: row.can_access_exit === 1,
+      can_access_history: row.can_access_history === 1,
+      is_deleted: row.is_deleted === 1,
+      deleted_at: row.deleted_at ? normalizeTimestamp(row.deleted_at) : null,
+      created_at: normalizeTimestamp(row.created_at),
+      updated_at: normalizeTimestamp(row.updated_at),
+    })),
+  );
+
+  await markAppUsersAsSynced(
     db,
     rows.map((row) => row.remote_id),
   );
@@ -484,6 +602,117 @@ async function mergeRemoteDailyEntries(db: SQLiteDatabase, remoteEntries: Remote
   });
 }
 
+async function mergeRemoteAppUsers(db: SQLiteDatabase, remoteUsers: RemoteAppUser[]): Promise<void> {
+  await db.withTransactionAsync(async () => {
+    for (const remoteUser of remoteUsers) {
+      const local = await db.getFirstAsync<LocalSyncLookupRow>(
+        `
+          SELECT id, updated_at, sync_status
+          FROM app_users
+          WHERE remote_id = ?
+          LIMIT 1;
+        `,
+        remoteUser.id,
+      );
+
+      if (!local) {
+        await db.runAsync(
+          `
+            INSERT INTO app_users (
+              remote_id,
+              sync_status,
+              username,
+              username_normalized,
+              function_name,
+              password_hash,
+              password_salt,
+              is_admin,
+              can_access_dashboard,
+              can_access_stock,
+              can_access_items,
+              can_access_entry,
+              can_access_exit,
+              can_access_history,
+              is_deleted,
+              deleted_at,
+              created_at,
+              updated_at
+            )
+            VALUES (?, 'synced', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+          `,
+          remoteUser.id,
+          remoteUser.username,
+          remoteUser.username_normalized,
+          remoteUser.function_name,
+          remoteUser.password_hash,
+          remoteUser.password_salt,
+          remoteUser.is_admin ? 1 : 0,
+          remoteUser.can_access_dashboard ? 1 : 0,
+          remoteUser.can_access_stock ? 1 : 0,
+          remoteUser.can_access_items ? 1 : 0,
+          remoteUser.can_access_entry ? 1 : 0,
+          remoteUser.can_access_exit ? 1 : 0,
+          remoteUser.can_access_history ? 1 : 0,
+          remoteUser.is_deleted ? 1 : 0,
+          remoteUser.deleted_at,
+          remoteUser.created_at,
+          remoteUser.updated_at,
+        );
+        continue;
+      }
+
+      const shouldKeepLocal =
+        local.sync_status !== 'synced' && toTimestamp(local.updated_at) > toTimestamp(remoteUser.updated_at);
+
+      if (shouldKeepLocal) {
+        continue;
+      }
+
+      await db.runAsync(
+        `
+          UPDATE app_users
+          SET
+            username = ?,
+            username_normalized = ?,
+            function_name = ?,
+            password_hash = ?,
+            password_salt = ?,
+            is_admin = ?,
+            can_access_dashboard = ?,
+            can_access_stock = ?,
+            can_access_items = ?,
+            can_access_entry = ?,
+            can_access_exit = ?,
+            can_access_history = ?,
+            is_deleted = ?,
+            deleted_at = ?,
+            created_at = ?,
+            updated_at = ?,
+            sync_status = 'synced'
+          WHERE id = ?;
+        `,
+        remoteUser.username,
+        remoteUser.username_normalized,
+        remoteUser.function_name,
+        remoteUser.password_hash,
+        remoteUser.password_salt,
+        remoteUser.is_admin ? 1 : 0,
+        remoteUser.can_access_dashboard ? 1 : 0,
+        remoteUser.can_access_stock ? 1 : 0,
+        remoteUser.can_access_items ? 1 : 0,
+        remoteUser.can_access_entry ? 1 : 0,
+        remoteUser.can_access_exit ? 1 : 0,
+        remoteUser.can_access_history ? 1 : 0,
+        remoteUser.is_deleted ? 1 : 0,
+        remoteUser.deleted_at,
+        remoteUser.created_at,
+        remoteUser.updated_at,
+        local.id,
+      );
+    }
+  });
+}
+
 async function performSync(): Promise<boolean> {
   const db = await getDatabase();
   const startedAt = nowIsoString();
@@ -495,8 +724,14 @@ async function performSync(): Promise<boolean> {
   });
 
   try {
+    await pushPendingAppUsers(db);
     await pushPendingStockItems(db);
     await pushPendingDailyEntries(db);
+
+    const remoteUsers = await fetchRemote<RemoteAppUser[]>(
+      '/app_users?select=id,username,username_normalized,function_name,password_hash,password_salt,is_admin,can_access_dashboard,can_access_stock,can_access_items,can_access_entry,can_access_exit,can_access_history,is_deleted,deleted_at,created_at,updated_at&order=updated_at.asc',
+    );
+    await mergeRemoteAppUsers(db, remoteUsers);
 
     const remoteItems = await fetchRemote<RemoteStockItem[]>(
       '/stock_items?select=id,name,unit,min_quantity,current_stock_quantity,category,is_deleted,deleted_at,created_at,updated_at&order=updated_at.asc',

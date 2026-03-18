@@ -5,6 +5,7 @@ import { getCategoryLabel } from '../constants/categories';
 import { listStockCurrentOverview } from '../database/items.repository';
 import { syncAppData } from '../database/sync.service';
 import { SyncStatusCard } from '../components/SyncStatusCard';
+import { StockEmphasis } from '../components/StockEmphasis';
 import type { StockCurrentOverviewRow } from '../types/inventory';
 
 function formatQuantity(value: number): string {
@@ -132,12 +133,21 @@ export function StockScreen() {
                 </View>
               </View>
 
+              <StockEmphasis
+                label="Estoque atual"
+                value={hasStock ? `${formatQuantity(item.currentStockQuantity as number)} ${item.unit}` : '-'}
+                tone={!hasStock ? 'empty' : item.needsPurchase ? 'warning' : 'normal'}
+                helperText={
+                  !hasStock
+                    ? 'Sem estoque inicial'
+                    : item.needsPurchase
+                      ? 'No minimo ou abaixo do minimo'
+                      : undefined
+                }
+              />
               <Text style={styles.itemMeta}>Categoria: {item.category ? getCategoryLabel(item.category) : 'Sem categoria'}</Text>
               <Text style={styles.itemMeta}>Unidade: {item.unit}</Text>
               <Text style={styles.itemMeta}>Minimo: {formatQuantity(item.minQuantity)}</Text>
-              <Text style={styles.itemMeta}>
-                Saldo atual: {hasStock ? formatQuantity(item.currentStockQuantity as number) : '-'}
-              </Text>
               {item.needsPurchase && item.missingQuantity > 0 ? (
                 <Pressable style={styles.purchaseHint}>
                   <Text style={styles.purchaseHintText}>

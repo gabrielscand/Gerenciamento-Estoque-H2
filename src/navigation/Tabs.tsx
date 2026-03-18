@@ -1,6 +1,10 @@
 import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
+import type { ReactNode } from 'react';
+import { canAccessTab } from '../database/auth.repository';
+import type { AppUser, AppTabPermissionKey } from '../types/inventory';
+import { AdminPanelScreen } from '../screens/AdminPanelScreen';
 import { DashboardScreen } from '../screens/DashboardScreen';
 import { HistoryScreen } from '../screens/HistoryScreen';
 import { ItemsScreen } from '../screens/ItemsScreen';
@@ -8,15 +12,23 @@ import { EntryScreen, ExitScreen } from '../screens/MovementScreen';
 import { StockScreen } from '../screens/StockScreen';
 
 type RootTabParamList = {
+  Admin: undefined;
   Dashboard: undefined;
   Stock: undefined;
   Items: undefined;
   Entry: undefined;
   Exit: undefined;
   History: undefined;
+  NoAccess: undefined;
 };
 
 const Tab = createBottomTabNavigator<RootTabParamList>();
+
+type TabsProps = {
+  currentUser: AppUser;
+  onLogout: () => Promise<void> | void;
+  onUsersChanged?: () => Promise<void> | void;
+};
 
 function TabLabel({ focused, title }: { focused: boolean; title: string }) {
   return (
@@ -27,11 +39,99 @@ function TabLabel({ focused, title }: { focused: boolean; title: string }) {
   );
 }
 
-export function Tabs() {
+function NoAccessScreen() {
+  return (
+    <View style={styles.noAccessContainer}>
+      <Text style={styles.noAccessTitle}>Sem abas liberadas</Text>
+      <Text style={styles.noAccessText}>
+        Sua conta ainda nao tem permissao para visualizar abas do sistema.
+      </Text>
+    </View>
+  );
+}
+
+type ScreenConfig = {
+  name: keyof RootTabParamList;
+  title: string;
+  permission?: AppTabPermissionKey;
+  render: () => ReactNode;
+};
+
+export function Tabs({ currentUser, onLogout, onUsersChanged }: TabsProps) {
+  const screenConfigs: ScreenConfig[] = [];
+
+  if (currentUser.isAdmin) {
+    screenConfigs.push({
+      name: 'Admin',
+      title: 'Painel ADM',
+      render: () => (
+        <AdminPanelScreen
+          currentUser={currentUser}
+          onUsersChanged={onUsersChanged}
+        />
+      ),
+    });
+  }
+
+  const operationalScreens: ScreenConfig[] = [
+    {
+      name: 'Dashboard',
+      title: 'Dashboard',
+      permission: 'dashboard',
+      render: () => <DashboardScreen />,
+    },
+    {
+      name: 'Stock',
+      title: 'Estoque',
+      permission: 'stock',
+      render: () => <StockScreen />,
+    },
+    {
+      name: 'Items',
+      title: 'Itens',
+      permission: 'items',
+      render: () => <ItemsScreen />,
+    },
+    {
+      name: 'Entry',
+      title: 'Entrada',
+      permission: 'entry',
+      render: () => <EntryScreen />,
+    },
+    {
+      name: 'Exit',
+      title: 'Saida',
+      permission: 'exit',
+      render: () => <ExitScreen />,
+    },
+    {
+      name: 'History',
+      title: 'Historico',
+      permission: 'history',
+      render: () => <HistoryScreen canManageHistoryActions={currentUser.isAdmin} />,
+    },
+  ];
+
+  for (const config of operationalScreens) {
+    if (config.permission && canAccessTab(currentUser, config.permission)) {
+      screenConfigs.push(config);
+    }
+  }
+
+  if (screenConfigs.length === 0) {
+    screenConfigs.push({
+      name: 'NoAccess',
+      title: 'Sem acesso',
+      render: () => <NoAccessScreen />,
+    });
+  }
+
+  const initialRouteName = screenConfigs[0]?.name ?? 'NoAccess';
+
   return (
     <NavigationContainer>
       <Tab.Navigator
-        initialRouteName="Stock"
+        initialRouteName={initialRouteName}
         screenOptions={{
           headerTitleAlign: 'center',
           headerStyle: {
@@ -60,56 +160,30 @@ export function Tabs() {
           tabBarLabel: ({ focused, children }) => (
             <TabLabel focused={focused} title={String(children)} />
           ),
+          headerRight: () => (
+            <Pressable
+              style={styles.logoutButton}
+              onPress={() => {
+                void onLogout();
+              }}
+            >
+              <Text style={styles.logoutButtonText}>Sair</Text>
+            </Pressable>
+          ),
         }}
       >
-        <Tab.Screen
-          name="Dashboard"
-          component={DashboardScreen}
-          options={{
-            title: 'Dashboard',
-            tabBarLabel: ({ focused }) => <TabLabel focused={focused} title="Dashboard" />,
-          }}
-        />
-        <Tab.Screen
-          name="Stock"
-          component={StockScreen}
-          options={{
-            title: 'Estoque',
-            tabBarLabel: ({ focused }) => <TabLabel focused={focused} title="Estoque" />,
-          }}
-        />
-        <Tab.Screen
-          name="Items"
-          component={ItemsScreen}
-          options={{
-            title: 'Itens',
-            tabBarLabel: ({ focused }) => <TabLabel focused={focused} title="Itens" />,
-          }}
-        />
-        <Tab.Screen
-          name="Entry"
-          component={EntryScreen}
-          options={{
-            title: 'Entrada',
-            tabBarLabel: ({ focused }) => <TabLabel focused={focused} title="Entrada" />,
-          }}
-        />
-        <Tab.Screen
-          name="Exit"
-          component={ExitScreen}
-          options={{
-            title: 'Saida',
-            tabBarLabel: ({ focused }) => <TabLabel focused={focused} title="Saida" />,
-          }}
-        />
-        <Tab.Screen
-          name="History"
-          component={HistoryScreen}
-          options={{
-            title: 'Historico',
-            tabBarLabel: ({ focused }) => <TabLabel focused={focused} title="Historico" />,
-          }}
-        />
+        {screenConfigs.map((screen) => (
+          <Tab.Screen
+            key={screen.name}
+            name={screen.name}
+            options={{
+              title: screen.title,
+              tabBarLabel: ({ focused }) => <TabLabel focused={focused} title={screen.title} />,
+            }}
+          >
+            {() => screen.render()}
+          </Tab.Screen>
+        ))}
       </Tab.Navigator>
     </NavigationContainer>
   );
@@ -159,5 +233,38 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 12,
     fontWeight: '800',
+  },
+  logoutButton: {
+    marginRight: 12,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: '#C4B5FD',
+    backgroundColor: '#F5F3FF',
+    paddingHorizontal: 11,
+    paddingVertical: 6,
+  },
+  logoutButtonText: {
+    color: '#5B21B6',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  noAccessContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    paddingHorizontal: 24,
+    gap: 10,
+    backgroundColor: '#F5F3FF',
+  },
+  noAccessTitle: {
+    color: '#4C1D95',
+    fontSize: 22,
+    fontWeight: '800',
+    textAlign: 'center',
+  },
+  noAccessText: {
+    color: '#6D28D9',
+    fontSize: 14,
+    lineHeight: 20,
+    textAlign: 'center',
   },
 });

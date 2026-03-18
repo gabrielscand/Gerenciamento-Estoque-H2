@@ -21,6 +21,7 @@ import {
 } from '../database/items.repository';
 import { syncAppData } from '../database/sync.service';
 import { SyncStatusCard } from '../components/SyncStatusCard';
+import { StockEmphasis } from '../components/StockEmphasis';
 import type { CreateStockItemInput, StockItemListRow } from '../types/inventory';
 
 type FormState = {
@@ -532,6 +533,9 @@ export function ItemsScreen() {
         }
         renderItem={({ item }) => {
           const isEditing = editingItemId === item.id;
+          const hasStock = item.currentStockQuantity !== null;
+          const needsPurchaseByCurrentStock =
+            hasStock && (item.currentStockQuantity as number) <= item.minQuantity;
 
           return (
             <View style={styles.itemCard}>
@@ -546,11 +550,20 @@ export function ItemsScreen() {
 
               {!isEditing ? (
                 <>
+                  <StockEmphasis
+                    label="Estoque atual"
+                    value={hasStock ? `${formatQuantity(item.currentStockQuantity as number)} ${item.unit}` : '-'}
+                    tone={!hasStock ? 'empty' : needsPurchaseByCurrentStock ? 'warning' : 'normal'}
+                    helperText={
+                      !hasStock
+                        ? 'Sem estoque inicial'
+                        : needsPurchaseByCurrentStock
+                          ? 'No minimo ou abaixo do minimo'
+                          : undefined
+                    }
+                  />
                   <Text style={styles.itemMeta}>Unidade: {item.unit}</Text>
                   <Text style={styles.itemMeta}>Minimo: {formatQuantity(item.minQuantity)}</Text>
-                  <Text style={styles.itemMeta}>
-                    Saldo atual: {item.currentStockQuantity === null ? '-' : formatQuantity(item.currentStockQuantity)}
-                  </Text>
                   <Text style={styles.itemMeta}>
                     Categoria: {item.category ? getCategoryLabel(item.category) : 'Categoria pendente'}
                   </Text>

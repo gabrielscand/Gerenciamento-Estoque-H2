@@ -22,6 +22,7 @@ import {
 } from '../database/items.repository';
 import { syncAppData } from '../database/sync.service';
 import { SyncStatusCard } from '../components/SyncStatusCard';
+import { StockEmphasis } from '../components/StockEmphasis';
 import type { DailyHistoryEntry, DailyHistoryGroup, PeriodHistoryGroup } from '../types/inventory';
 import {
   formatDateLabel,
@@ -33,7 +34,10 @@ import {
 type HistoryMode = 'diario' | 'quinzenal' | 'mensal';
 type DailyMovementFilter = 'entry' | 'exit';
 type PeriodDayMovementFilter = 'all' | DailyMovementFilter;
-const ADMIN_PASSWORD = 'admin1234';
+
+type HistoryScreenProps = {
+  canManageHistoryActions?: boolean;
+};
 
 type FallbackPromptConfig = {
   title: string;
@@ -103,7 +107,7 @@ function parseDecimalInput(value: string): number | null {
   return parsed;
 }
 
-export function HistoryScreen() {
+export function HistoryScreen({ canManageHistoryActions = false }: HistoryScreenProps) {
   const initialMonth = getCurrentMonthString();
   const isFocused = useIsFocused();
   const [mode, setMode] = useState<HistoryMode>('diario');
@@ -293,27 +297,6 @@ export function HistoryScreen() {
     return openFallbackPrompt(config);
   }
 
-  async function requestAdminPassword(): Promise<boolean> {
-    const value = await requestTextValue({
-      title: 'Senha admin',
-      message: 'Digite a senha para autorizar esta acao.',
-      placeholder: 'Senha',
-      secureTextEntry: true,
-      keyboardType: 'default',
-    });
-
-    if (value === null) {
-      return false;
-    }
-
-    if (value.trim() !== ADMIN_PASSWORD) {
-      setErrorMessage('Senha admin incorreta.');
-      return false;
-    }
-
-    return true;
-  }
-
   async function confirmAction(title: string, message: string): Promise<boolean> {
     if (Platform.OS === 'web') {
       if (typeof globalThis.confirm === 'function') {
@@ -369,14 +352,12 @@ export function HistoryScreen() {
   }
 
   async function handleEditEntry(entry: DailyHistoryEntry) {
-    setErrorMessage('');
-    setSuccessMessage('');
-
-    const unlocked = await requestAdminPassword();
-
-    if (!unlocked) {
+    if (!canManageHistoryActions) {
       return;
     }
+
+    setErrorMessage('');
+    setSuccessMessage('');
 
     const updatedQuantity = await requestUpdatedQuantity(entry.quantity);
 
@@ -400,14 +381,12 @@ export function HistoryScreen() {
   }
 
   async function handleArchiveEntry(entry: DailyHistoryEntry) {
-    setErrorMessage('');
-    setSuccessMessage('');
-
-    const unlocked = await requestAdminPassword();
-
-    if (!unlocked) {
+    if (!canManageHistoryActions) {
       return;
     }
+
+    setErrorMessage('');
+    setSuccessMessage('');
 
     const confirmed = await confirmAction(
       'Excluir movimentacao',
@@ -434,14 +413,12 @@ export function HistoryScreen() {
   }
 
   async function handleArchiveDate(date: string) {
-    setErrorMessage('');
-    setSuccessMessage('');
-
-    const unlocked = await requestAdminPassword();
-
-    if (!unlocked) {
+    if (!canManageHistoryActions) {
       return;
     }
+
+    setErrorMessage('');
+    setSuccessMessage('');
 
     const confirmed = await confirmAction(
       'Excluir movimentacoes do dia',
@@ -627,18 +604,20 @@ export function HistoryScreen() {
                 <View style={styles.groupHeader}>
                   <Text style={styles.groupDate}>{formatDateLabel(dailyItem.date)}</Text>
                   <View style={styles.groupHeaderActions}>
-                    <Pressable
-                      style={[
-                        styles.deleteDayButton,
-                        activeActionKey === `delete-date-${dailyItem.date}` ? styles.actionDisabled : undefined,
-                      ]}
-                      onPress={() => {
-                        void handleArchiveDate(dailyItem.date);
-                      }}
-                      disabled={activeActionKey !== null}
-                    >
-                      <Text style={styles.deleteDayButtonText}>Excluir dia</Text>
-                    </Pressable>
+                    {canManageHistoryActions ? (
+                      <Pressable
+                        style={[
+                          styles.deleteDayButton,
+                          activeActionKey === `delete-date-${dailyItem.date}` ? styles.actionDisabled : undefined,
+                        ]}
+                        onPress={() => {
+                          void handleArchiveDate(dailyItem.date);
+                        }}
+                        disabled={activeActionKey !== null}
+                      >
+                        <Text style={styles.deleteDayButtonText}>Excluir dia</Text>
+                      </Pressable>
+                    ) : null}
                     <View style={styles.groupBadge}>
                       <Text style={styles.groupBadgeText}>{filteredCountedItems} mov.</Text>
                     </View>
@@ -671,39 +650,54 @@ export function HistoryScreen() {
                           {getMovementTypeLabel(entry.movementType)}: {formatQuantity(entry.quantity)} {entry.unit} | Min{' '}
                           {formatQuantity(entry.minQuantity)}
                         </Text>
-                        <Text style={styles.entryMeta}>
-                          Saldo apos: {entry.stockAfterQuantity === null ? '-' : formatQuantity(entry.stockAfterQuantity)}
-                        </Text>
-                        <View style={styles.entryActions}>
-                          <Pressable
-                            style={[
-                              styles.entryActionButton,
-                              activeActionKey === `edit-${entry.id}`
-                                ? styles.actionDisabled
-                                : undefined,
-                            ]}
-                            onPress={() => {
-                              void handleEditEntry(entry);
-                            }}
-                            disabled={activeActionKey !== null}
-                          >
-                            <Text style={styles.entryActionButtonText}>Editar</Text>
-                          </Pressable>
-                          <Pressable
-                            style={[
-                              styles.entryDeleteButton,
-                              activeActionKey === `delete-entry-${entry.id}`
-                                ? styles.actionDisabled
-                                : undefined,
-                            ]}
-                            onPress={() => {
-                              void handleArchiveEntry(entry);
-                            }}
-                            disabled={activeActionKey !== null}
-                          >
-                            <Text style={styles.entryDeleteButtonText}>Excluir item</Text>
-                          </Pressable>
-                        </View>
+                        <StockEmphasis
+                          label="Saldo apos"
+                          value={
+                            entry.stockAfterQuantity === null
+                              ? '-'
+                              : `${formatQuantity(entry.stockAfterQuantity)} ${entry.unit}`
+                          }
+                          tone={
+                            entry.stockAfterQuantity === null
+                              ? 'empty'
+                              : entry.needsPurchase
+                                ? 'warning'
+                                : 'normal'
+                          }
+                          helperText={entry.stockAfterQuantity === null ? 'Sem saldo registrado' : undefined}
+                        />
+                        {canManageHistoryActions ? (
+                          <View style={styles.entryActions}>
+                            <Pressable
+                              style={[
+                                styles.entryActionButton,
+                                activeActionKey === `edit-${entry.id}`
+                                  ? styles.actionDisabled
+                                  : undefined,
+                              ]}
+                              onPress={() => {
+                                void handleEditEntry(entry);
+                              }}
+                              disabled={activeActionKey !== null}
+                            >
+                              <Text style={styles.entryActionButtonText}>Editar</Text>
+                            </Pressable>
+                            <Pressable
+                              style={[
+                                styles.entryDeleteButton,
+                                activeActionKey === `delete-entry-${entry.id}`
+                                  ? styles.actionDisabled
+                                  : undefined,
+                              ]}
+                              onPress={() => {
+                                void handleArchiveEntry(entry);
+                              }}
+                              disabled={activeActionKey !== null}
+                            >
+                              <Text style={styles.entryDeleteButtonText}>Excluir item</Text>
+                            </Pressable>
+                          </View>
+                        ) : null}
                       </View>
                       <View
                         style={[
@@ -881,12 +875,22 @@ export function HistoryScreen() {
                                     {formatQuantity(entry.quantity)} {entry.unit} | Min{' '}
                                     {formatQuantity(entry.minQuantity)}
                                   </Text>
-                                  <Text style={styles.entryMeta}>
-                                    Saldo apos:{' '}
-                                    {entry.stockAfterQuantity === null
-                                      ? '-'
-                                      : formatQuantity(entry.stockAfterQuantity)}
-                                  </Text>
+                                  <StockEmphasis
+                                    label="Saldo apos"
+                                    value={
+                                      entry.stockAfterQuantity === null
+                                        ? '-'
+                                        : `${formatQuantity(entry.stockAfterQuantity)} ${entry.unit}`
+                                    }
+                                    tone={
+                                      entry.stockAfterQuantity === null
+                                        ? 'empty'
+                                        : entry.needsPurchase
+                                          ? 'warning'
+                                          : 'normal'
+                                    }
+                                    helperText={entry.stockAfterQuantity === null ? 'Sem saldo registrado' : undefined}
+                                  />
                                 </View>
                                 <View
                                   style={[

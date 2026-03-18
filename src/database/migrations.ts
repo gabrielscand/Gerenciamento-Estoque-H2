@@ -1,6 +1,6 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 
-const SCHEMA_VERSION = 7;
+const SCHEMA_VERSION = 8;
 
 async function applySchemaV1(db: SQLiteDatabase): Promise<void> {
   await db.execAsync(`
@@ -359,6 +359,69 @@ async function applySchemaV7(db: SQLiteDatabase): Promise<void> {
   `);
 }
 
+async function applySchemaV8(db: SQLiteDatabase): Promise<void> {
+  await db.execAsync(`
+    CREATE TABLE IF NOT EXISTS app_users (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      remote_id TEXT,
+      sync_status TEXT NOT NULL DEFAULT 'pending',
+      username TEXT NOT NULL,
+      username_normalized TEXT NOT NULL,
+      function_name TEXT,
+      password_hash TEXT NOT NULL,
+      password_salt TEXT NOT NULL,
+      is_admin INTEGER NOT NULL DEFAULT 0,
+      can_access_dashboard INTEGER NOT NULL DEFAULT 0,
+      can_access_stock INTEGER NOT NULL DEFAULT 0,
+      can_access_items INTEGER NOT NULL DEFAULT 0,
+      can_access_entry INTEGER NOT NULL DEFAULT 0,
+      can_access_exit INTEGER NOT NULL DEFAULT 0,
+      can_access_history INTEGER NOT NULL DEFAULT 0,
+      is_deleted INTEGER NOT NULL DEFAULT 0,
+      deleted_at TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+  `);
+
+  await db.execAsync(`
+    CREATE TABLE IF NOT EXISTS app_session (
+      id INTEGER PRIMARY KEY CHECK(id = 1),
+      remote_user_id TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+  `);
+
+  await db.execAsync(
+    'CREATE UNIQUE INDEX IF NOT EXISTS idx_app_users_remote_id ON app_users(remote_id);',
+  );
+  await db.execAsync(
+    'CREATE INDEX IF NOT EXISTS idx_app_users_is_deleted ON app_users(is_deleted);',
+  );
+  await db.execAsync(
+    'CREATE UNIQUE INDEX IF NOT EXISTS idx_app_users_username_normalized_active ON app_users(username_normalized) WHERE is_deleted = 0;',
+  );
+  await db.execAsync(
+    'CREATE INDEX IF NOT EXISTS idx_app_session_remote_user_id ON app_session(remote_user_id);',
+  );
+
+  await db.execAsync(`
+    DROP TRIGGER IF EXISTS trg_app_users_updated_at;
+  `);
+  await db.execAsync(`
+    CREATE TRIGGER IF NOT EXISTS trg_app_users_updated_at
+    AFTER UPDATE ON app_users
+    FOR EACH ROW
+    WHEN NEW.updated_at = OLD.updated_at
+    BEGIN
+      UPDATE app_users
+      SET updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+      WHERE id = OLD.id;
+    END;
+  `);
+}
+
 export async function applyMigrations(db: SQLiteDatabase): Promise<void> {
   const row = await db.getFirstAsync<{ user_version: number }>('PRAGMA user_version;');
   const currentVersion = row?.user_version ?? 0;
@@ -394,6 +457,10 @@ export async function applyMigrations(db: SQLiteDatabase): Promise<void> {
 
     if (currentVersion < 7) {
       await applySchemaV7(db);
+    }
+
+    if (currentVersion < 8) {
+      await applySchemaV8(db);
     }
 
     await db.execAsync(`PRAGMA user_version = ${SCHEMA_VERSION};`);

@@ -19,6 +19,7 @@ import {
 } from '../database/items.repository';
 import { syncAppData } from '../database/sync.service';
 import { SyncStatusCard } from '../components/SyncStatusCard';
+import { StockEmphasis } from '../components/StockEmphasis';
 import type { DailyCountUpdateInput, StockMovementItem } from '../types/inventory';
 import {
   formatDateLabel,
@@ -624,6 +625,8 @@ function StockMovementScreen({ mode }: { mode: MovementMode }) {
         renderItem={({ item }) => {
           const parsed = parseDecimalInput(quantities[String(item.id)] ?? '');
           const currentStock = item.currentStockQuantity;
+          const needsPurchaseByCurrentStock =
+            currentStock !== null && currentStock <= item.minQuantity;
           const invalidOverMovement =
             mode === 'exit' && currentStock !== null && parsed !== null && parsed > currentStock;
           const projectedStock =
@@ -669,9 +672,18 @@ function StockMovementScreen({ mode }: { mode: MovementMode }) {
 
               <Text style={styles.itemMeta}>Unidade: {item.unit}</Text>
               <Text style={styles.itemMeta}>Minimo necessario: {formatQuantity(item.minQuantity)}</Text>
-              <Text style={styles.itemMeta}>
-                Saldo atual: {currentStock === null ? '-' : formatQuantity(currentStock)}
-              </Text>
+              <StockEmphasis
+                label="Estoque atual"
+                value={currentStock === null ? '-' : `${formatQuantity(currentStock)} ${item.unit}`}
+                tone={currentStock === null ? 'empty' : needsPurchaseByCurrentStock ? 'warning' : 'normal'}
+                helperText={
+                  currentStock === null
+                    ? 'Sem estoque inicial'
+                    : needsPurchaseByCurrentStock
+                      ? 'No minimo ou abaixo do minimo'
+                      : undefined
+                }
+              />
               <Text style={styles.itemMeta}>
                 Categoria: {item.category ? getCategoryLabel(item.category) : 'Sem categoria'}
               </Text>
