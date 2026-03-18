@@ -1,6 +1,6 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 
-const SCHEMA_VERSION = 8;
+const SCHEMA_VERSION = 9;
 
 async function applySchemaV1(db: SQLiteDatabase): Promise<void> {
   await db.execAsync(`
@@ -422,6 +422,19 @@ async function applySchemaV8(db: SQLiteDatabase): Promise<void> {
   `);
 }
 
+async function applySchemaV9(db: SQLiteDatabase): Promise<void> {
+  await db.execAsync(`
+    ALTER TABLE daily_stock_entries ADD COLUMN created_by_user_remote_id TEXT;
+  `).catch(() => {});
+  await db.execAsync(`
+    ALTER TABLE daily_stock_entries ADD COLUMN created_by_username TEXT;
+  `).catch(() => {});
+
+  await db.execAsync(
+    'CREATE INDEX IF NOT EXISTS idx_daily_stock_entries_created_by_user_remote_id ON daily_stock_entries(created_by_user_remote_id);',
+  );
+}
+
 export async function applyMigrations(db: SQLiteDatabase): Promise<void> {
   const row = await db.getFirstAsync<{ user_version: number }>('PRAGMA user_version;');
   const currentVersion = row?.user_version ?? 0;
@@ -461,6 +474,10 @@ export async function applyMigrations(db: SQLiteDatabase): Promise<void> {
 
     if (currentVersion < 8) {
       await applySchemaV8(db);
+    }
+
+    if (currentVersion < 9) {
+      await applySchemaV9(db);
     }
 
     await db.execAsync(`PRAGMA user_version = ${SCHEMA_VERSION};`);

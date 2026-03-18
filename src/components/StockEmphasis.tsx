@@ -70,11 +70,11 @@ export function StockEmphasis({
 
 const styles = StyleSheet.create({
   container: {
-    borderRadius: 12,
+    borderRadius: 11,
     borderWidth: 1,
-    paddingHorizontal: 11,
-    paddingVertical: 9,
-    gap: 2,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    gap: 1,
   },
   containerNormal: {
     backgroundColor: '#F5F3FF',
@@ -89,10 +89,10 @@ const styles = StyleSheet.create({
     borderColor: '#CBD5E1',
   },
   label: {
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '700',
     textTransform: 'uppercase',
-    letterSpacing: 0.3,
+    letterSpacing: 0.25,
   },
   labelNormal: {
     color: '#6D28D9',
@@ -104,9 +104,9 @@ const styles = StyleSheet.create({
     color: '#475569',
   },
   value: {
-    fontSize: 22,
+    fontSize: 19,
     fontWeight: '800',
-    lineHeight: 26,
+    lineHeight: 22,
   },
   valueNormal: {
     color: '#4C1D95',
@@ -118,7 +118,7 @@ const styles = StyleSheet.create({
     color: '#334155',
   },
   helper: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '600',
   },
   helperNormal: {

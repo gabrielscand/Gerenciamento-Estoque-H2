@@ -11,7 +11,7 @@ Observacoes:
 - O app continua funcionando localmente com SQLite mesmo sem configurar o Supabase.
 - Esta configuracao inicial desabilita RLS para simplificar um prototipo de dono unico. Se voce for publicar o app para terceiros, o proximo passo precisa ser adicionar autenticacao e politicas de acesso.
 - O login desta versao usa autenticacao interna do app (tabela `app_users`), sincronizada com Supabase. Nao usa Supabase Auth nesta etapa.
-- Se voce ja tinha rodado um schema antigo, rode novamente `supabase/schema.sql` para aplicar as colunas novas em `stock_items` (`is_deleted`, `deleted_at`, `category`, `current_stock_quantity`) e em `daily_stock_entries` (`is_deleted`, `deleted_at`, `movement_type`, `stock_after_quantity`).
+- Se voce ja tinha rodado um schema antigo, rode novamente `supabase/schema.sql` para aplicar as colunas novas em `stock_items` (`is_deleted`, `deleted_at`, `category`, `current_stock_quantity`) e em `daily_stock_entries` (`is_deleted`, `deleted_at`, `movement_type`, `stock_after_quantity`, `created_by_user_remote_id`, `created_by_username`).
 - O schema mais recente tambem cria `app_users` para usuarios/funcoes/permissoes por aba. O seed inicial (`admh2`) e criado localmente quando nao existe usuario ativo.
 - O schema mais recente remove a restricao unica de `(item_id, date)` em `daily_stock_entries` para permitir varias movimentacoes no mesmo dia (entrada e saida separadas).
 - Exclusao de item e logica: o registro permanece em `stock_items` com `is_deleted = true` e `deleted_at` preenchido.

@@ -174,6 +174,7 @@ function StockMovementScreen({ mode }: { mode: MovementMode }) {
   const [isCategoryFilterOpen, setIsCategoryFilterOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [quantities, setQuantities] = useState<QuantityFormMap>({});
+  const [focusedInputItemId, setFocusedInputItemId] = useState<number | null>(null);
   const [fieldErrors, setFieldErrors] = useState<QuantityErrorMap>({});
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -708,10 +709,13 @@ function StockMovementScreen({ mode }: { mode: MovementMode }) {
               <TextInput
                 value={quantities[String(item.id)] ?? ''}
                 onChangeText={(value) => setQuantity(item.id, value)}
+                onFocus={() => setFocusedInputItemId(item.id)}
+                onBlur={() => setFocusedInputItemId((current) => (current === item.id ? null : current))}
                 placeholder={mode === 'entry' ? 'Ex.: 50' : 'Ex.: 3'}
                 keyboardType="decimal-pad"
                 style={[
                   styles.input,
+                  focusedInputItemId === item.id ? styles.inputFocused : undefined,
                   fieldErrors[String(item.id)] ? styles.inputError : undefined,
                 ]}
               />
@@ -988,20 +992,26 @@ const styles = StyleSheet.create({
     color: '#5B21B6',
   },
   inputLabel: {
-    marginTop: 6,
-    fontSize: 13,
+    marginTop: 8,
+    fontSize: 14,
     color: '#6D28D9',
-    fontWeight: '700',
+    fontWeight: '800',
   },
   input: {
-    borderWidth: 1,
-    borderColor: '#C4B5FD',
-    backgroundColor: '#FAF5FF',
+    minHeight: 52,
+    borderWidth: 1.5,
+    borderColor: '#A78BFA',
+    backgroundColor: '#F5F3FF',
     borderRadius: 12,
     paddingHorizontal: 12,
-    paddingVertical: 10,
+    paddingVertical: 12,
     color: '#3B0764',
-    fontSize: 15,
+    fontSize: 17,
+    fontWeight: '700',
+  },
+  inputFocused: {
+    borderColor: '#7C3AED',
+    backgroundColor: '#EDE9FE',
   },
   inputError: {
     borderColor: '#EF4444',

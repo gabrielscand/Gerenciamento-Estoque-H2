@@ -83,6 +83,7 @@ type DailyHistoryDetailRow = {
   name: string;
   unit: string;
   quantity: number;
+  createdByUsername: string | null;
   minQuantity: number;
   movementType: 'entry' | 'exit' | 'initial' | 'consumption' | 'legacy_snapshot';
   stockAfterQuantity: number | null;
@@ -104,6 +105,7 @@ type PeriodHistoryDayDetailRow = {
   name: string;
   unit: string;
   quantity: number;
+  createdByUsername: string | null;
   minQuantity: number;
   movementType: string | null;
   stockAfterQuantity: number | null;
@@ -147,12 +149,36 @@ type DailyTimelineRow = {
   stock_after_quantity: number | null;
 };
 
+type SessionAuthorRow = {
+  remote_id: string;
+  username: string;
+};
+
 function normalizeItemName(name: string): string {
   return name.trim().toLocaleLowerCase();
 }
 
 function nowIsoString(): string {
   return new Date().toISOString();
+}
+
+async function getCurrentSessionAuthor(database: Awaited<ReturnType<typeof getDatabase>>): Promise<SessionAuthorRow | null> {
+  const author = await database.getFirstAsync<SessionAuthorRow>(
+    `
+      SELECT app_users.remote_id AS remote_id, app_users.username AS username
+      FROM app_session
+      INNER JOIN app_users ON app_users.remote_id = app_session.remote_user_id
+      WHERE app_session.id = 1
+        AND app_users.is_deleted = 0
+      LIMIT 1;
+    `,
+  );
+
+  if (!author || !author.remote_id || author.username.trim().length === 0) {
+    return null;
+  }
+
+  return author;
 }
 
 function normalizeCategory(category: string | null | undefined): StockItem['category'] {
@@ -725,6 +751,7 @@ async function saveStockMovements(
   }
 
   const database = await getDatabase();
+  const sessionAuthor = await getCurrentSessionAuthor(database);
   const uniqueItemIds = Array.from(new Set(updates.map((update) => update.itemId)));
   const itemIdPlaceholders = uniqueItemIds.map(() => '?').join(', ');
   const itemRows = await database.getAllAsync<StockItemRemoteRow>(
@@ -781,18 +808,22 @@ async function saveStockMovements(
             quantity,
             movement_type,
             stock_after_quantity,
+            created_by_user_remote_id,
+            created_by_username,
             is_deleted,
             deleted_at,
             created_at,
             updated_at
           )
-          VALUES (?, ?, 'pending', ?, ?, ?, NULL, 0, NULL, ?, ?);
+          VALUES (?, ?, 'pending', ?, ?, ?, NULL, ?, ?, 0, NULL, ?, ?);
         `,
         update.itemId,
         entryRemoteId,
         date,
         update.quantity,
         movementType,
+        sessionAuthor?.remote_id ?? null,
+        sessionAuthor?.username ?? null,
         timestamp,
         timestamp,
       );
@@ -1011,6 +1042,7 @@ export async function listDailyHistoryGrouped(): Promise<DailyHistoryGroup[]> {
         stock_items.name AS name,
         stock_items.unit AS unit,
         daily_stock_entries.quantity AS quantity,
+        daily_stock_entries.created_by_username AS createdByUsername,
         daily_stock_entries.movement_type AS movementType,
         daily_stock_entries.stock_after_quantity AS stockAfterQuantity,
         stock_items.min_quantity AS minQuantity,
@@ -1038,6 +1070,7 @@ export async function listDailyHistoryGrouped(): Promise<DailyHistoryGroup[]> {
       name: detail.name,
       unit: detail.unit,
       quantity: detail.quantity,
+      createdByUsername: detail.createdByUsername,
       minQuantity: detail.minQuantity,
       movementType: normalizeMovementType(detail.movementType, 'exit'),
       stockAfterQuantity: detail.stockAfterQuantity,
@@ -1109,6 +1142,7 @@ async function loadPeriodEntries(
         stock_items.name AS name,
         stock_items.unit AS unit,
         daily_stock_entries.quantity AS quantity,
+        daily_stock_entries.created_by_username AS createdByUsername,
         stock_items.min_quantity AS minQuantity,
         daily_stock_entries.movement_type AS movementType,
         daily_stock_entries.stock_after_quantity AS stockAfterQuantity,
@@ -1162,6 +1196,7 @@ async function loadPeriodEntries(
       name: detailRow.name,
       unit: detailRow.unit,
       quantity: detailRow.quantity,
+      createdByUsername: detailRow.createdByUsername,
       minQuantity: detailRow.minQuantity,
       movementType,
       stockAfterQuantity: detailRow.stockAfterQuantity,

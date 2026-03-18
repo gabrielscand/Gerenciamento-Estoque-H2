@@ -44,6 +44,8 @@ create table if not exists public.daily_stock_entries (
     or movement_type in ('entry', 'exit', 'initial', 'consumption', 'legacy_snapshot')
   ),
   stock_after_quantity double precision check (stock_after_quantity is null or stock_after_quantity >= 0),
+  created_by_user_remote_id text,
+  created_by_username text,
   is_deleted boolean not null default false,
   deleted_at timestamptz,
   created_at timestamptz not null default timezone('utc', now()),
@@ -137,6 +139,12 @@ alter table public.daily_stock_entries
 
 alter table public.daily_stock_entries
   add column if not exists stock_after_quantity double precision;
+
+alter table public.daily_stock_entries
+  add column if not exists created_by_user_remote_id text;
+
+alter table public.daily_stock_entries
+  add column if not exists created_by_username text;
 
 do $$
 begin

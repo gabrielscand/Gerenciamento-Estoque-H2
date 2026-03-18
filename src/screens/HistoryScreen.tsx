@@ -650,6 +650,9 @@ export function HistoryScreen({ canManageHistoryActions = false }: HistoryScreen
                           {getMovementTypeLabel(entry.movementType)}: {formatQuantity(entry.quantity)} {entry.unit} | Min{' '}
                           {formatQuantity(entry.minQuantity)}
                         </Text>
+                        <Text style={styles.entryMeta}>
+                          Feito por: {entry.createdByUsername?.trim() ? entry.createdByUsername : 'Nao informado'}
+                        </Text>
                         <StockEmphasis
                           label="Saldo apos"
                           value={
@@ -874,6 +877,9 @@ export function HistoryScreen({ canManageHistoryActions = false }: HistoryScreen
                                     {getDailyMovementFilterLabel(resolveMovementFilter(entry.movementType))}:{' '}
                                     {formatQuantity(entry.quantity)} {entry.unit} | Min{' '}
                                     {formatQuantity(entry.minQuantity)}
+                                  </Text>
+                                  <Text style={styles.entryMeta}>
+                                    Feito por: {entry.createdByUsername?.trim() ? entry.createdByUsername : 'Nao informado'}
                                   </Text>
                                   <StockEmphasis
                                     label="Saldo apos"

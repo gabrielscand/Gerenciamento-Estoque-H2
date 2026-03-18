@@ -109,6 +109,7 @@ export interface DailyHistoryEntry {
   name: string;
   unit: string;
   quantity: number;
+  createdByUsername: string | null;
   minQuantity: number;
   movementType: 'entry' | 'exit' | 'initial' | 'consumption' | 'legacy_snapshot';
   stockAfterQuantity: number | null;
@@ -136,6 +137,7 @@ export interface PeriodHistoryDayEntry {
   name: string;
   unit: string;
   quantity: number;
+  createdByUsername: string | null;
   minQuantity: number;
   movementType: 'entry' | 'exit' | 'initial' | 'consumption' | 'legacy_snapshot';
   stockAfterQuantity: number | null;
