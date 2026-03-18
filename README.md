@@ -155,6 +155,100 @@ npm run android
 npm run ios
 ```
 
+## Como gerar APK para o tablet
+
+Este projeto ja esta preparado para gerar APK Android com EAS Build.
+
+### 1. Fazer login na conta Expo
+
+```bash
+npm install -g eas-cli
+eas login
+```
+
+### 2. Conferir se o `.env` esta preenchido
+
+Antes do build, confirme se o arquivo `.env` tem as credenciais do Supabase:
+
+```env
+EXPO_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
+EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY=your-supabase-publishable-key
+```
+
+### 3. Gerar o APK
+
+```bash
+eas build --platform android --profile preview
+```
+
+Esse comando envia o projeto para a Expo e gera um APK instalavel.
+
+### 4. Instalar no tablet
+
+Quando o build terminar:
+
+1. Abra o link gerado pela Expo.
+2. Baixe o arquivo `.apk` no tablet.
+3. Permita instalar apps desconhecidos, se o Android pedir.
+4. Instale o APK.
+
+## Como atualizar o app no tablet depois de mudar o codigo
+
+Sempre que voce alterar o codigo e quiser ver a nova versao no tablet, faca este fluxo:
+
+### 1. Salvar as mudancas do projeto
+
+Opcionalmente, voce pode fazer commit antes do build:
+
+```bash
+git add .
+git commit -m "sua mensagem"
+git push
+```
+
+### 2. Gerar um novo APK
+
+```bash
+eas build --platform android --profile preview
+```
+
+### 3. Instalar a nova versao por cima da antiga
+
+Depois que a Expo terminar o build:
+
+1. Abra o link do build.
+2. Baixe o novo `.apk`.
+3. Instale no tablet.
+
+Se o nome do pacote continuar o mesmo, o Android atualiza o app por cima da versao anterior.
+
+## Quando precisa gerar um novo APK
+
+No estado atual do projeto, sempre que voce quiser levar uma nova versao para o tablet, o caminho garantido e gerar um novo APK com:
+
+```bash
+eas build --platform android --profile preview
+```
+
+Isso vale para:
+
+- ajustes de layout
+- novas telas
+- mudancas de regras de estoque
+- alteracoes no sync com Supabase
+- mudancas em graficos e dashboard
+
+## Observacao sobre atualizacoes futuras
+
+Existe um fluxo chamado `EAS Update`, que permite publicar algumas alteracoes sem reinstalar APK toda vez. Ele ainda nao esta configurado neste projeto.
+
+Enquanto isso, o fluxo recomendado para voce e:
+
+1. alterar o codigo
+2. rodar `eas build --platform android --profile preview`
+3. baixar o novo APK
+4. instalar no tablet
+
 ## Resumo rapido de onboarding
 
 ```bash
