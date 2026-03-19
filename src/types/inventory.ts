@@ -39,6 +39,7 @@ export interface CreateUserInput {
 export interface UpdateUserInput {
   username: string;
   functionName: string;
+  password?: string;
   isAdmin: boolean;
   permissions: AppUserPermissions;
 }

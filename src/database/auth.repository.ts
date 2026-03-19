@@ -420,6 +420,7 @@ export async function createUser(input: CreateUserInput): Promise<void> {
 export async function updateUser(userId: number, input: UpdateUserInput): Promise<void> {
   const username = input.username.trim();
   const functionName = input.functionName.trim();
+  const newPassword = input.password?.trim() ?? '';
   const normalizedUsername = normalizeUsername(username);
 
   if (normalizedUsername.length === 0) {
@@ -479,86 +480,83 @@ export async function updateUser(userId: number, input: UpdateUserInput): Promis
   }
 
   const timestamp = nowIsoString();
+  let passwordPayload: { hash: string; salt: string } | null = null;
 
-  await db.runAsync(
-    `
-      UPDATE app_users
-      SET
-        username = ?,
-        username_normalized = ?,
-        function_name = ?,
-        is_admin = ?,
-        can_access_dashboard = ?,
-        can_access_stock = ?,
-        can_access_items = ?,
-        can_access_entry = ?,
-        can_access_exit = ?,
-        can_access_history = ?,
-        sync_status = 'pending',
-        updated_at = ?
-      WHERE id = ?
-        AND is_deleted = 0;
-    `,
-    username,
-    normalizedUsername,
-    functionName.length > 0 ? functionName : 'Sem funcao',
-    input.isAdmin ? 1 : 0,
-    input.permissions.dashboard ? 1 : 0,
-    input.permissions.stock ? 1 : 0,
-    input.permissions.items ? 1 : 0,
-    input.permissions.entry ? 1 : 0,
-    input.permissions.exit ? 1 : 0,
-    input.permissions.history ? 1 : 0,
-    timestamp,
-    userId,
-  );
-
-  if (isRemoteSyncConfigured()) {
-    syncAppDataInBackground();
-  }
-}
-
-export async function resetUserPassword(userId: number, newPassword: string): Promise<void> {
-  if (newPassword.length === 0) {
-    throw new Error('Informe uma senha valida.');
+  if (newPassword.length > 0) {
+    passwordPayload = await createPasswordPayload(newPassword);
   }
 
-  const db = await getDatabase();
-  const user = await db.getFirstAsync<{ id: number; remote_id: string }>(
-    `
-      SELECT id, remote_id
-      FROM app_users
-      WHERE id = ?
-        AND is_deleted = 0
-      LIMIT 1;
-    `,
-    userId,
-  );
-
-  if (!user) {
-    throw new Error('Usuario nao encontrado para redefinir senha.');
+  if (passwordPayload) {
+    await db.runAsync(
+      `
+        UPDATE app_users
+        SET
+          username = ?,
+          username_normalized = ?,
+          function_name = ?,
+          password_hash = ?,
+          password_salt = ?,
+          is_admin = ?,
+          can_access_dashboard = ?,
+          can_access_stock = ?,
+          can_access_items = ?,
+          can_access_entry = ?,
+          can_access_exit = ?,
+          can_access_history = ?,
+          sync_status = 'pending',
+          updated_at = ?
+        WHERE id = ?
+          AND is_deleted = 0;
+      `,
+      username,
+      normalizedUsername,
+      functionName.length > 0 ? functionName : 'Sem funcao',
+      passwordPayload.hash,
+      passwordPayload.salt,
+      input.isAdmin ? 1 : 0,
+      input.permissions.dashboard ? 1 : 0,
+      input.permissions.stock ? 1 : 0,
+      input.permissions.items ? 1 : 0,
+      input.permissions.entry ? 1 : 0,
+      input.permissions.exit ? 1 : 0,
+      input.permissions.history ? 1 : 0,
+      timestamp,
+      userId,
+    );
+  } else {
+    await db.runAsync(
+      `
+        UPDATE app_users
+        SET
+          username = ?,
+          username_normalized = ?,
+          function_name = ?,
+          is_admin = ?,
+          can_access_dashboard = ?,
+          can_access_stock = ?,
+          can_access_items = ?,
+          can_access_entry = ?,
+          can_access_exit = ?,
+          can_access_history = ?,
+          sync_status = 'pending',
+          updated_at = ?
+        WHERE id = ?
+          AND is_deleted = 0;
+      `,
+      username,
+      normalizedUsername,
+      functionName.length > 0 ? functionName : 'Sem funcao',
+      input.isAdmin ? 1 : 0,
+      input.permissions.dashboard ? 1 : 0,
+      input.permissions.stock ? 1 : 0,
+      input.permissions.items ? 1 : 0,
+      input.permissions.entry ? 1 : 0,
+      input.permissions.exit ? 1 : 0,
+      input.permissions.history ? 1 : 0,
+      timestamp,
+      userId,
+    );
   }
-
-  const password = await createPasswordPayload(newPassword);
-  const timestamp = nowIsoString();
-
-  await db.runAsync(
-    `
-      UPDATE app_users
-      SET
-        password_hash = ?,
-        password_salt = ?,
-        sync_status = 'pending',
-        updated_at = ?
-      WHERE id = ?;
-    `,
-    password.hash,
-    password.salt,
-    timestamp,
-    userId,
-  );
-
-  await markUserPendingSync(user.remote_id);
 
   if (isRemoteSyncConfigured()) {
     syncAppDataInBackground();

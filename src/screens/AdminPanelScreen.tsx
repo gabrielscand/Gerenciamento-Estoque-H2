@@ -17,7 +17,6 @@ import {
   archiveUser,
   createUser,
   listUsers,
-  resetUserPassword,
   updateUser,
 } from '../database/auth.repository';
 import { SyncStatusCard } from '../components/SyncStatusCard';
@@ -180,7 +179,6 @@ export function AdminPanelScreen({ currentUser, onUsersChanged }: AdminPanelScre
   const [editForm, setEditForm] = useState<UserFormState>(INITIAL_CREATE_FORM);
   const [createErrors, setCreateErrors] = useState<FormErrors>({});
   const [editErrors, setEditErrors] = useState<FormErrors>({});
-  const [newPasswordByUserId, setNewPasswordByUserId] = useState<Record<string, string>>({});
   const [feedbackMessage, setFeedbackMessage] = useState('');
 
   async function loadUsers(syncFirst: boolean = false) {
@@ -294,6 +292,7 @@ export function AdminPanelScreen({ currentUser, onUsersChanged }: AdminPanelScre
       await updateUser(userId, {
         username: editForm.username,
         functionName: editForm.functionName,
+        password: editForm.password,
         isAdmin: editForm.isAdmin,
         permissions: editForm.permissions,
       });
@@ -305,32 +304,6 @@ export function AdminPanelScreen({ currentUser, onUsersChanged }: AdminPanelScre
       setEditErrors((prev) => ({
         ...prev,
         submit: error instanceof Error ? error.message : 'Falha ao atualizar usuario.',
-      }));
-    } finally {
-      setIsSubmitting(false);
-    }
-  }
-
-  async function handleResetPassword(userId: number) {
-    const newPassword = newPasswordByUserId[String(userId)] ?? '';
-
-    if (newPassword.length === 0) {
-      setEditErrors((prev) => ({ ...prev, submit: 'Informe a nova senha para redefinir.' }));
-      return;
-    }
-
-    setIsSubmitting(true);
-    setEditErrors((prev) => ({ ...prev, submit: undefined }));
-
-    try {
-      await resetUserPassword(userId, newPassword);
-      setNewPasswordByUserId((prev) => ({ ...prev, [String(userId)]: '' }));
-      setFeedbackMessage('Senha redefinida com sucesso.');
-      await loadUsers();
-    } catch (error) {
-      setEditErrors((prev) => ({
-        ...prev,
-        submit: error instanceof Error ? error.message : 'Falha ao redefinir senha.',
       }));
     } finally {
       setIsSubmitting(false);
@@ -569,27 +542,16 @@ export function AdminPanelScreen({ currentUser, onUsersChanged }: AdminPanelScre
                   </Pressable>
 
                   <View style={styles.fieldGroup}>
-                    <Text style={styles.label}>Redefinir senha</Text>
+                    <Text style={styles.label}>Nova senha (opcional)</Text>
                     <TextInput
-                      value={newPasswordByUserId[String(item.id)] ?? ''}
-                      onChangeText={(value) =>
-                        setNewPasswordByUserId((prev) => ({ ...prev, [String(item.id)]: value }))
-                      }
+                      value={editForm.password}
+                      onChangeText={(value) => setEditField('password', value)}
                       placeholder="Nova senha"
                       secureTextEntry
                       autoCapitalize="none"
                       autoCorrect={false}
                       style={styles.input}
                     />
-                    <Pressable
-                      style={[styles.secondaryButton, isSubmitting ? styles.submitButtonDisabled : undefined]}
-                      disabled={isSubmitting}
-                      onPress={() => {
-                        void handleResetPassword(item.id);
-                      }}
-                    >
-                      <Text style={styles.secondaryButtonText}>Redefinir senha</Text>
-                    </Pressable>
                   </View>
 
                   {editErrors.submit ? <Text style={styles.errorText}>{editErrors.submit}</Text> : null}
