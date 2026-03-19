@@ -42,6 +42,9 @@
     "owner": "yscand",
     "updates": {
       "url": "https://u.expo.dev/45fdcaea-c320-4f89-ad5f-716f04489ac4"
+    },
+    "runtimeVersion": {
+      "policy": "appVersion"
     }
   }
 }
