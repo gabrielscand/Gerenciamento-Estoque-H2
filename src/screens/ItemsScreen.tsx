@@ -39,6 +39,7 @@ const initialFormState: FormState = {
   category: '',
   minQuantity: '',
 };
+const MAX_AUTOCOMPLETE_SUGGESTIONS = 6;
 
 function parseDecimalInput(value: string): number | null {
   const normalized = value.trim().replace(',', '.');
@@ -106,6 +107,14 @@ function formatQuantity(value: number): string {
     minimumFractionDigits: Number.isInteger(value) ? 0 : 2,
     maximumFractionDigits: 2,
   });
+}
+
+function normalizeSearchValue(value: string): string {
+  return value
+    .trim()
+    .toLocaleLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '');
 }
 
 type CategorySelectProps = {
@@ -235,6 +244,7 @@ async function confirmArchiveItem(): Promise<boolean> {
 
 export function ItemsScreen() {
   const [items, setItems] = useState<StockItemListRow[]>([]);
+  const [searchQuery, setSearchQuery] = useState('');
   const [createForm, setCreateForm] = useState<FormState>(initialFormState);
   const [createErrors, setCreateErrors] = useState<FormErrors>({});
   const [editForm, setEditForm] = useState<FormState>(initialFormState);
@@ -423,10 +433,44 @@ export function ItemsScreen() {
     }
   }
 
+  const normalizedSearchQuery = normalizeSearchValue(searchQuery);
+  const filteredItems =
+    normalizedSearchQuery.length === 0
+      ? items
+      : items.filter((item) =>
+          normalizeSearchValue(item.name).includes(normalizedSearchQuery),
+        );
+  const searchSuggestions = (() => {
+    if (!normalizedSearchQuery) {
+      return [];
+    }
+
+    const startsWithMatches: StockItemListRow[] = [];
+    const containsMatches: StockItemListRow[] = [];
+
+    for (const item of items) {
+      const normalizedName = normalizeSearchValue(item.name);
+
+      if (normalizedName.startsWith(normalizedSearchQuery)) {
+        startsWithMatches.push(item);
+        continue;
+      }
+
+      if (normalizedName.includes(normalizedSearchQuery)) {
+        containsMatches.push(item);
+      }
+    }
+
+    return [...startsWithMatches, ...containsMatches].slice(
+      0,
+      MAX_AUTOCOMPLETE_SUGGESTIONS,
+    );
+  })();
+
   return (
     <View style={styles.container}>
       <FlatList
-        data={items}
+        data={filteredItems}
         keyExtractor={(item) => String(item.id)}
         refreshControl={
           <RefreshControl
@@ -521,14 +565,62 @@ export function ItemsScreen() {
               </Pressable>
             </View>
 
+            <View style={styles.searchCard}>
+              <View style={styles.searchHeader}>
+                <Text style={styles.searchLabel}>Buscar item</Text>
+                {searchQuery.trim().length > 0 ? (
+                  <Pressable
+                    style={styles.clearSearchButton}
+                    onPress={() => {
+                      setSearchQuery('');
+                    }}
+                  >
+                    <Text style={styles.clearSearchButtonText}>Limpar</Text>
+                  </Pressable>
+                ) : null}
+              </View>
+              <TextInput
+                value={searchQuery}
+                onChangeText={setSearchQuery}
+                placeholder="Digite o nome do item"
+                style={styles.searchInput}
+              />
+              {searchSuggestions.length > 0 ? (
+                <View style={styles.searchSuggestionsContainer}>
+                  {searchSuggestions.map((suggestion, index) => (
+                    <Pressable
+                      key={`suggestion-${suggestion.id}`}
+                      style={[
+                        styles.searchSuggestionButton,
+                        index === searchSuggestions.length - 1
+                          ? styles.searchSuggestionButtonLast
+                          : undefined,
+                      ]}
+                      onPress={() => {
+                        setSearchQuery(suggestion.name);
+                      }}
+                    >
+                      <Text style={styles.searchSuggestionText}>
+                        {suggestion.name}
+                      </Text>
+                    </Pressable>
+                  ))}
+                </View>
+              ) : null}
+            </View>
+
             <Text style={styles.listTitle}>Itens cadastrados</Text>
           </View>
         }
         ListEmptyComponent={
           isLoading ? (
             <Text style={styles.emptyText}>Carregando itens...</Text>
-          ) : (
+          ) : items.length === 0 ? (
             <Text style={styles.emptyText}>Nenhum item cadastrado ainda.</Text>
+          ) : (
+            <Text style={styles.emptyText}>
+              Nenhum item encontrado para a busca selecionada.
+            </Text>
           )
         }
         renderItem={({ item }) => {
@@ -826,6 +918,69 @@ const styles = StyleSheet.create({
     color: '#B91C1C',
     fontSize: 12,
     lineHeight: 17,
+  },
+  searchCard: {
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#DDD6FE',
+    borderRadius: 14,
+    padding: 12,
+    gap: 8,
+  },
+  searchHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  searchLabel: {
+    fontSize: 13,
+    color: '#6D28D9',
+    fontWeight: '700',
+  },
+  clearSearchButton: {
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: '#C4B5FD',
+    backgroundColor: '#F5F3FF',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+  },
+  clearSearchButtonText: {
+    color: '#5B21B6',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  searchInput: {
+    borderWidth: 1,
+    borderColor: '#C4B5FD',
+    backgroundColor: '#FAF5FF',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    color: '#3B0764',
+    fontSize: 14,
+  },
+  searchSuggestionsContainer: {
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#DDD6FE',
+    overflow: 'hidden',
+    backgroundColor: '#FFFFFF',
+  },
+  searchSuggestionButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3E8FF',
+  },
+  searchSuggestionButtonLast: {
+    borderBottomWidth: 0,
+  },
+  searchSuggestionText: {
+    color: '#4C1D95',
+    fontSize: 13,
+    fontWeight: '600',
   },
   listTitle: {
     fontSize: 18,

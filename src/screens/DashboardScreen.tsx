@@ -11,7 +11,7 @@ import {
   View,
   useWindowDimensions,
 } from 'react-native';
-import { BarChart, LineChart, PieChart } from 'react-native-chart-kit';
+import { BarChart, LineChart } from 'react-native-chart-kit';
 import { SyncStatusCard } from '../components/SyncStatusCard';
 import { getDashboardAnalytics } from '../database/items.repository';
 import { syncAppData } from '../database/sync.service';
@@ -131,7 +131,7 @@ function abbreviateLabel(name: string): string {
   return `${words[0].slice(0, 4)} ${words[1].slice(0, 4)}`.trim();
 }
 
-type DashboardChartInfoKey = 'abcCurve' | 'topItems' | 'dailyTrend' | 'abcDistribution';
+type DashboardChartInfoKey = 'abcCurve' | 'topEntries' | 'topExits';
 
 const DASHBOARD_CHART_INFO_CONTENT: Record<
   DashboardChartInfoKey,
@@ -142,20 +142,15 @@ const DASHBOARD_CHART_INFO_CONTENT: Record<
     description:
       'Mostra a participacao acumulada dos itens no periodo. Classe A concentra os itens mais relevantes (ate 80%), B ate 95% e C os demais.',
   },
-  topItems: {
-    title: 'Top itens por movimentacao',
+  topEntries: {
+    title: 'Itens mais comprados no mes',
     description:
-      'Ranking dos itens com maior volume de movimentacao no mes selecionado. Quanto maior a barra, maior o giro do item.',
+      'Ranking dos itens com maior entrada no mes selecionado. Quanto maior a barra, maior a quantidade comprada.',
   },
-  dailyTrend: {
-    title: 'Evolucao diaria',
+  topExits: {
+    title: 'Itens que mais sairam no mes',
     description:
-      'Compara as quantidades de Entrada e Saida dia a dia para ajudar a visualizar picos de reposicao e consumo.',
-  },
-  abcDistribution: {
-    title: 'Distribuicao de classes ABC',
-    description:
-      'Resume quantos itens ficaram nas classes A, B e C com base na metrica selecionada para a Curva ABC.',
+      'Ranking dos itens com maior saida no mes selecionado. Quanto maior a barra, maior o consumo no periodo.',
   },
 };
 
@@ -262,17 +257,30 @@ export function DashboardScreen() {
     [dashboardData, selectedMetric],
   );
 
-  const abcClassCounts = useMemo(() => {
-    const counts = { A: 0, B: 0, C: 0 };
-
-    for (const point of abcPoints) {
-      counts[point.abcClass] += 1;
-    }
-
-    return counts;
-  }, [abcPoints]);
-
-  const topMovementItems = useMemo(() => (dashboardData?.items ?? []).slice(0, 6), [dashboardData]);
+  const topEntryItems = useMemo(
+    () =>
+      (dashboardData?.items ?? [])
+        .filter((item) => item.entryQuantity > 0)
+        .sort(
+          (left, right) =>
+            right.entryQuantity - left.entryQuantity ||
+            left.name.localeCompare(right.name, 'pt-BR', { sensitivity: 'base' }),
+        )
+        .slice(0, 6),
+    [dashboardData],
+  );
+  const topExitItems = useMemo(
+    () =>
+      (dashboardData?.items ?? [])
+        .filter((item) => item.exitQuantity > 0)
+        .sort(
+          (left, right) =>
+            right.exitQuantity - left.exitQuantity ||
+            left.name.localeCompare(right.name, 'pt-BR', { sensitivity: 'base' }),
+        )
+        .slice(0, 6),
+    [dashboardData],
+  );
   const hasMovement = (dashboardData?.totals.movementEntries ?? 0) > 0;
 
   const abcCurveLabels = useMemo(() => {
@@ -284,18 +292,6 @@ export function DashboardScreen() {
 
     return abcPoints.map((point, index) => (index % labelStep === 0 ? String(point.rank) : ''));
   }, [abcPoints]);
-
-  const dailyTrendLabels = useMemo(() => {
-    if (!dashboardData) {
-      return [];
-    }
-
-    const labelStep = Math.max(1, Math.ceil(dashboardData.dailySeries.length / 8));
-
-    return dashboardData.dailySeries.map((point, index) =>
-      index % labelStep === 0 ? point.dayLabel : '',
-    );
-  }, [dashboardData]);
 
   const chartConfig = useMemo(
     () => ({
@@ -351,7 +347,7 @@ export function DashboardScreen() {
 
         <View style={styles.heroCard}>
           <Text style={styles.heroTitle}>Dashboard</Text>
-          <Text style={styles.heroSubtitle}>Curva ABC e analises de movimentacao do estoque</Text>
+          <Text style={styles.heroSubtitle}>Curva ABC e ranking mensal de compras e saidas</Text>
           <Text style={styles.heroSummary}>Periodo selecionado: {monthInputValue}</Text>
         </View>
 
@@ -527,16 +523,16 @@ export function DashboardScreen() {
 
             <View style={styles.chartCard}>
               <ChartCardHeader
-                title="Top itens por movimentacao"
-                onPressInfo={() => setActiveChartInfo('topItems')}
+                title="Itens mais comprados no mes"
+                onPressInfo={() => setActiveChartInfo('topEntries')}
               />
-              {topMovementItems.length === 0 ? (
-                <Text style={styles.emptyText}>Sem itens movimentados neste periodo.</Text>
+              {topEntryItems.length === 0 ? (
+                <Text style={styles.emptyText}>Sem compras registradas neste periodo.</Text>
               ) : (
                 <BarChart
                   data={{
-                    labels: topMovementItems.map((item) => abbreviateLabel(item.name)),
-                    datasets: [{ data: topMovementItems.map((item) => item.movementTotal) }],
+                    labels: topEntryItems.map((item) => abbreviateLabel(item.name)),
+                    datasets: [{ data: topEntryItems.map((item) => item.entryQuantity) }],
                   }}
                   width={chartWidth}
                   height={240}
@@ -552,76 +548,25 @@ export function DashboardScreen() {
 
             <View style={styles.chartCard}>
               <ChartCardHeader
-                title="Evolucao diaria (Entrada x Saida)"
-                onPressInfo={() => setActiveChartInfo('dailyTrend')}
+                title="Itens que mais sairam no mes"
+                onPressInfo={() => setActiveChartInfo('topExits')}
               />
-              <LineChart
-                data={{
-                  labels: dailyTrendLabels,
-                  datasets: [
-                    {
-                      data: dashboardData.dailySeries.map((point) => point.entryQuantity),
-                      color: (opacity = 1) => `rgba(22, 163, 74, ${opacity})`,
-                      strokeWidth: 2,
-                    },
-                    {
-                      data: dashboardData.dailySeries.map((point) => point.exitQuantity),
-                      color: (opacity = 1) => `rgba(220, 38, 38, ${opacity})`,
-                      strokeWidth: 2,
-                    },
-                  ],
-                  legend: ['Entrada', 'Saida'],
-                }}
-                width={chartWidth}
-                height={240}
-                chartConfig={chartConfig}
-                fromZero
-                withDots={false}
-                style={styles.chart}
-              />
-            </View>
-
-            <View style={styles.chartCard}>
-              <ChartCardHeader
-                title="Distribuicao de classes ABC"
-                onPressInfo={() => setActiveChartInfo('abcDistribution')}
-              />
-              {abcPoints.length === 0 ? (
-                <Text style={styles.emptyText}>
-                  Sem dados para distribuir classes no filtro atual.
-                </Text>
+              {topExitItems.length === 0 ? (
+                <Text style={styles.emptyText}>Sem saidas registradas neste periodo.</Text>
               ) : (
-                <PieChart
-                  data={[
-                    {
-                      name: `Classe A (${abcClassCounts.A})`,
-                      population: abcClassCounts.A,
-                      color: '#16A34A',
-                      legendFontColor: '#4C1D95',
-                      legendFontSize: 12,
-                    },
-                    {
-                      name: `Classe B (${abcClassCounts.B})`,
-                      population: abcClassCounts.B,
-                      color: '#EAB308',
-                      legendFontColor: '#4C1D95',
-                      legendFontSize: 12,
-                    },
-                    {
-                      name: `Classe C (${abcClassCounts.C})`,
-                      population: abcClassCounts.C,
-                      color: '#DC2626',
-                      legendFontColor: '#4C1D95',
-                      legendFontSize: 12,
-                    },
-                  ]}
+                <BarChart
+                  data={{
+                    labels: topExitItems.map((item) => abbreviateLabel(item.name)),
+                    datasets: [{ data: topExitItems.map((item) => item.exitQuantity) }],
+                  }}
                   width={chartWidth}
-                  height={230}
+                  height={240}
+                  yAxisLabel=""
+                  yAxisSuffix=""
                   chartConfig={chartConfig}
-                  accessor="population"
-                  backgroundColor="transparent"
-                  paddingLeft="12"
-                  absolute
+                  fromZero
+                  showValuesOnTopOfBars
+                  style={styles.chart}
                 />
               )}
             </View>

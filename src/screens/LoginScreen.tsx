@@ -8,6 +8,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { login } from '../database/auth.repository';
 import type { AppUser } from '../types/inventory';
 
@@ -18,6 +19,7 @@ type LoginScreenProps = {
 export function LoginScreen({ onLoginSuccess }: LoginScreenProps) {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [isPasswordVisible, setIsPasswordVisible] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -68,22 +70,36 @@ export function LoginScreen({ onLoginSuccess }: LoginScreenProps) {
 
         <View style={styles.fieldGroup}>
           <Text style={styles.label}>Senha</Text>
-          <TextInput
-            value={password}
-            onChangeText={setPassword}
-            onSubmitEditing={() => {
-              void handleSubmit();
-            }}
-            onKeyPress={(event) => {
-              handlePasswordKeyPress(event.nativeEvent.key);
-            }}
-            secureTextEntry
-            autoCapitalize="none"
-            autoCorrect={false}
-            placeholder="Digite sua senha"
-            returnKeyType="done"
-            style={styles.input}
-          />
+          <View style={styles.passwordInputContainer}>
+            <TextInput
+              value={password}
+              onChangeText={setPassword}
+              onSubmitEditing={() => {
+                void handleSubmit();
+              }}
+              onKeyPress={(event) => {
+                handlePasswordKeyPress(event.nativeEvent.key);
+              }}
+              secureTextEntry={!isPasswordVisible}
+              autoCapitalize="none"
+              autoCorrect={false}
+              placeholder="Digite sua senha"
+              returnKeyType="done"
+              style={[styles.input, styles.passwordInput]}
+            />
+            <Pressable
+              style={styles.passwordToggleButton}
+              onPress={() => setIsPasswordVisible((previous) => !previous)}
+              accessibilityRole="button"
+              accessibilityLabel={isPasswordVisible ? 'Ocultar senha' : 'Mostrar senha'}
+            >
+              <Ionicons
+                name={isPasswordVisible ? 'eye' : 'eye-off'}
+                size={20}
+                color="#6D28D9"
+              />
+            </Pressable>
+          </View>
         </View>
 
         {errorMessage ? <Text style={styles.errorText}>{errorMessage}</Text> : null}
@@ -148,6 +164,22 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 10,
     fontSize: 15,
+  },
+  passwordInputContainer: {
+    position: 'relative',
+    justifyContent: 'center',
+  },
+  passwordInput: {
+    paddingRight: 46,
+  },
+  passwordToggleButton: {
+    position: 'absolute',
+    right: 10,
+    height: 32,
+    width: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   errorText: {
     color: '#B91C1C',
