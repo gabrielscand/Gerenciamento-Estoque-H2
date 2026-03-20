@@ -555,6 +555,36 @@ async function pushPendingItemCategories(db: SQLiteDatabase): Promise<void> {
       continue;
     }
 
+    const localRowWithSameRemoteId = await db.getFirstAsync<{ id: number }>(
+      `
+        SELECT id
+        FROM item_categories
+        WHERE remote_id = ?
+        LIMIT 1;
+      `,
+      existingRemoteId,
+    );
+
+    if (localRowWithSameRemoteId && localRowWithSameRemoteId.id !== row.local_id) {
+      const timestamp = nowIsoString();
+      await db.runAsync(
+        `
+          UPDATE item_categories
+          SET
+            is_deleted = 1,
+            deleted_at = COALESCE(deleted_at, ?),
+            updated_at = ?,
+            sync_status = 'synced'
+          WHERE id = ?;
+        `,
+        timestamp,
+        timestamp,
+        row.local_id,
+      );
+      hasReconciled = true;
+      continue;
+    }
+
     await db.runAsync(
       `
         UPDATE item_categories
@@ -660,6 +690,36 @@ async function pushPendingMeasurementUnits(db: SQLiteDatabase): Promise<void> {
     const existingRemoteId = activeRemoteByNormalized.get(row.name_normalized);
 
     if (!existingRemoteId || existingRemoteId === row.remote_id) {
+      continue;
+    }
+
+    const localRowWithSameRemoteId = await db.getFirstAsync<{ id: number }>(
+      `
+        SELECT id
+        FROM measurement_units
+        WHERE remote_id = ?
+        LIMIT 1;
+      `,
+      existingRemoteId,
+    );
+
+    if (localRowWithSameRemoteId && localRowWithSameRemoteId.id !== row.local_id) {
+      const timestamp = nowIsoString();
+      await db.runAsync(
+        `
+          UPDATE measurement_units
+          SET
+            is_deleted = 1,
+            deleted_at = COALESCE(deleted_at, ?),
+            updated_at = ?,
+            sync_status = 'synced'
+          WHERE id = ?;
+        `,
+        timestamp,
+        timestamp,
+        row.local_id,
+      );
+      hasReconciled = true;
       continue;
     }
 
