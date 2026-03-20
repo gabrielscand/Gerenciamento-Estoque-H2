@@ -1,5 +1,9 @@
 import { getDatabase } from './index';
-import { isRemoteSyncConfigured, syncAppData, syncAppDataInBackground } from './sync.service';
+import {
+  isRemoteSyncConfigured,
+  syncAppData,
+  syncAppDataInBackground,
+} from './sync.service';
 import { normalizeCatalogName } from '../constants/categories';
 import { emitCatalogOptionsChanged, subscribeCatalogOptionsChanged } from './catalog.events';
 import {
@@ -405,6 +409,7 @@ async function updateCatalogOption(
 ): Promise<void> {
   const database = await getDatabase();
   const normalizedName = normalizeCatalogName(rawName);
+  const usageColumn = tableName === 'item_categories' ? 'category' : 'unit';
 
   if (normalizedName.length === 0) {
     throw new Error('Informe um nome valido.');
@@ -449,22 +454,39 @@ async function updateCatalogOption(
   }
 
   const timestamp = nowIsoString();
-  await database.runAsync(
-    `
-      UPDATE ${tableName}
-      SET
-        name = ?,
-        name_normalized = ?,
-        updated_at = ?,
-        sync_status = 'pending'
-      WHERE id = ?
-        AND is_deleted = 0;
-    `,
-    normalizedName,
-    normalizedName,
-    timestamp,
-    optionId,
-  );
+  await database.withTransactionAsync(async () => {
+    await database.runAsync(
+      `
+        UPDATE ${tableName}
+        SET
+          name = ?,
+          name_normalized = ?,
+          updated_at = ?,
+          sync_status = 'pending'
+        WHERE id = ?
+          AND is_deleted = 0;
+      `,
+      normalizedName,
+      normalizedName,
+      timestamp,
+      optionId,
+    );
+
+    await database.runAsync(
+      `
+        UPDATE stock_items
+        SET
+          ${usageColumn} = ?,
+          updated_at = ?,
+          sync_status = 'pending'
+        WHERE is_deleted = 0
+          AND ${usageColumn} = ?;
+      `,
+      normalizedName,
+      timestamp,
+      current.nameNormalized,
+    );
+  });
 
   emitCatalogOptionsChanged();
   syncAppDataInBackground();
@@ -1132,30 +1154,7 @@ export async function archiveStockItem(itemId: number): Promise<void> {
     return;
   }
 
-  const syncOk = await syncAppData();
-
-  if (syncOk) {
-    return;
-  }
-
-  await database.runAsync(
-    `
-      UPDATE stock_items
-      SET
-        is_deleted = ?,
-        deleted_at = ?,
-        sync_status = ?,
-        updated_at = ?
-      WHERE id = ?;
-    `,
-    localItem.is_deleted ?? 0,
-    localItem.deleted_at ?? null,
-    localItem.sync_status ?? 'pending',
-    localItem.updated_at,
-    itemId,
-  );
-
-  throw new Error('Nao foi possivel sincronizar a exclusao do item. Tente novamente.');
+  await syncAppData();
 }
 
 async function saveStockMovements(

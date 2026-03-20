@@ -1,9 +1,10 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useIsFocused } from '@react-navigation/native';
 import {
   ActivityIndicator,
   Alert,
   FlatList,
+  Modal,
   Platform,
   Pressable,
   RefreshControl,
@@ -44,6 +45,7 @@ const initialFormState: FormState = {
   minQuantity: '',
 };
 const MAX_AUTOCOMPLETE_SUGGESTIONS = 6;
+const TOAST_DURATION_MS = 2800;
 
 function parseDecimalInput(value: string): number | null {
   const normalized = value.trim().replace(',', '.');
@@ -223,40 +225,6 @@ async function confirmDuplicateAction(message: string, confirmLabel: string): Pr
   });
 }
 
-async function confirmArchiveItem(): Promise<boolean> {
-  const message =
-    'Deseja arquivar este item? Ele sera removido de Itens, Entrada e Saida, mas continuara no Historico e no banco com is_deleted = 1.';
-
-  if (Platform.OS === 'web') {
-    if (typeof globalThis.confirm === 'function') {
-      return globalThis.confirm(message);
-    }
-
-    return true;
-  }
-
-  return new Promise((resolve) => {
-    let settled = false;
-
-    const finish = (value: boolean) => {
-      if (!settled) {
-        settled = true;
-        resolve(value);
-      }
-    };
-
-    Alert.alert(
-      'Arquivar item',
-      message,
-      [
-        { text: 'Cancelar', style: 'cancel', onPress: () => finish(false) },
-        { text: 'Arquivar', style: 'destructive', onPress: () => finish(true) },
-      ],
-      { cancelable: true, onDismiss: () => finish(false) },
-    );
-  });
-}
-
 export function ItemsScreen() {
   const isFocused = useIsFocused();
   const [items, setItems] = useState<StockItemListRow[]>([]);
@@ -278,6 +246,30 @@ export function ItemsScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [feedbackMessage, setFeedbackMessage] = useState<string>('');
   const [catalogErrorMessage, setCatalogErrorMessage] = useState('');
+  const [toastMessage, setToastMessage] = useState('');
+  const [isToastVisible, setIsToastVisible] = useState(false);
+  const [archiveTarget, setArchiveTarget] = useState<StockItemListRow | null>(null);
+  const toastTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  function clearToastTimer() {
+    if (!toastTimeoutRef.current) {
+      return;
+    }
+
+    clearTimeout(toastTimeoutRef.current);
+    toastTimeoutRef.current = null;
+  }
+
+  function showSuccessToast(message: string) {
+    clearToastTimer();
+    setToastMessage(message);
+    setIsToastVisible(true);
+
+    toastTimeoutRef.current = setTimeout(() => {
+      setIsToastVisible(false);
+      toastTimeoutRef.current = null;
+    }, TOAST_DURATION_MS);
+  }
 
   async function loadCatalogOptions() {
     try {
@@ -332,6 +324,12 @@ export function ItemsScreen() {
 
     void loadCatalogOptions();
   }, [isFocused]);
+
+  useEffect(() => {
+    return () => {
+      clearToastTimer();
+    };
+  }, []);
 
   function setCreateField<K extends keyof FormState>(key: K, value: FormState[K]) {
     setCreateForm((prev) => ({ ...prev, [key]: value }));
@@ -450,7 +448,8 @@ export function ItemsScreen() {
 
       await updateStockItem(itemId, validationResult.parsed);
       cancelEditing();
-      setFeedbackMessage('Item atualizado com sucesso.');
+      setFeedbackMessage('');
+      showSuccessToast('Item atualizado com sucesso.');
       await loadItems();
       await loadCatalogOptions();
     } catch (error) {
@@ -463,10 +462,25 @@ export function ItemsScreen() {
     }
   }
 
-  async function handleArchive(itemId: number) {
-    const confirmed = await confirmArchiveItem();
+  function openArchiveModal(item: StockItemListRow) {
+    if (isDeleting) {
+      return;
+    }
 
-    if (!confirmed) {
+    setArchiveTarget(item);
+    setEditErrors((prev) => ({ ...prev, submit: undefined }));
+  }
+
+  function closeArchiveModal() {
+    if (isDeleting) {
+      return;
+    }
+
+    setArchiveTarget(null);
+  }
+
+  async function handleArchive() {
+    if (!archiveTarget) {
       return;
     }
 
@@ -475,7 +489,8 @@ export function ItemsScreen() {
     setFeedbackMessage('');
 
     try {
-      await archiveStockItem(itemId);
+      await archiveStockItem(archiveTarget.id);
+      setArchiveTarget(null);
       cancelEditing();
       setFeedbackMessage('Item arquivado com sucesso.');
       await loadItems();
@@ -538,6 +553,12 @@ export function ItemsScreen() {
 
   return (
     <View style={styles.container}>
+      {isToastVisible ? (
+        <View style={styles.toastContainer}>
+          <Text style={styles.toastText}>{toastMessage}</Text>
+        </View>
+      ) : null}
+
       <FlatList
         data={filteredItems}
         keyExtractor={(item) => String(item.id)}
@@ -827,7 +848,7 @@ export function ItemsScreen() {
                     <Pressable
                       style={[styles.deleteButton, isDeleting ? styles.submitButtonDisabled : undefined]}
                       onPress={() => {
-                        void handleArchive(item.id);
+                        openArchiveModal(item);
                       }}
                       disabled={isUpdating || isDeleting}
                     >
@@ -862,6 +883,45 @@ export function ItemsScreen() {
         }}
         contentContainerStyle={styles.listContent}
       />
+
+      <Modal
+        animationType="fade"
+        transparent
+        visible={archiveTarget !== null}
+        onRequestClose={closeArchiveModal}
+      >
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>Arquivar item</Text>
+            <Text style={styles.modalDescription}>
+              Deseja arquivar este item? Ele sera removido de Itens, Entrada e Saida, mas continuara no Historico e no banco com is_deleted = 1.
+            </Text>
+            {archiveTarget ? <Text style={styles.modalItemName}>{archiveTarget.name}</Text> : null}
+            <View style={styles.modalActions}>
+              <Pressable
+                style={styles.modalSecondaryButton}
+                onPress={closeArchiveModal}
+                disabled={isDeleting}
+              >
+                <Text style={styles.modalSecondaryButtonText}>Cancelar</Text>
+              </Pressable>
+              <Pressable
+                style={[styles.modalDangerButton, isDeleting ? styles.submitButtonDisabled : undefined]}
+                onPress={() => {
+                  void handleArchive();
+                }}
+                disabled={isDeleting}
+              >
+                {isDeleting ? (
+                  <ActivityIndicator color="#FFFFFF" />
+                ) : (
+                  <Text style={styles.modalDangerButtonText}>Arquivar</Text>
+                )}
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -870,6 +930,25 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#F5F3FF',
+  },
+  toastContainer: {
+    position: 'absolute',
+    top: 12,
+    left: 16,
+    right: 16,
+    zIndex: 10,
+    backgroundColor: '#4C1D95',
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderWidth: 1,
+    borderColor: '#C4B5FD',
+  },
+  toastText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '700',
+    textAlign: 'center',
   },
   listContent: {
     padding: 16,
@@ -1191,5 +1270,68 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 12,
+  },
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(15, 23, 42, 0.35)',
+    paddingHorizontal: 20,
+    justifyContent: 'center',
+  },
+  modalCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#DDD6FE',
+    padding: 16,
+    gap: 12,
+  },
+  modalTitle: {
+    color: '#3B0764',
+    fontSize: 18,
+    fontWeight: '800',
+  },
+  modalDescription: {
+    color: '#5B21B6',
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  modalItemName: {
+    color: '#4C1D95',
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  modalActions: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  modalSecondaryButton: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: '#C4B5FD',
+    borderRadius: 10,
+    minHeight: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#F5F3FF',
+    paddingHorizontal: 12,
+  },
+  modalSecondaryButtonText: {
+    color: '#5B21B6',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  modalDangerButton: {
+    flex: 1,
+    borderRadius: 10,
+    minHeight: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#B91C1C',
+    paddingHorizontal: 12,
+  },
+  modalDangerButtonText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '700',
   },
 });

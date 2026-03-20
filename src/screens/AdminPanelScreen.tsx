@@ -3,6 +3,7 @@ import {
   ActivityIndicator,
   Alert,
   FlatList,
+  Modal,
   Platform,
   Pressable,
   RefreshControl,
@@ -47,6 +48,10 @@ type UserFormState = {
   isAdmin: boolean;
   permissions: AppUserPermissions;
 };
+
+type CatalogArchiveTarget =
+  | { type: 'category'; option: CatalogOption }
+  | { type: 'unit'; option: CatalogOption };
 
 type FormErrors = Partial<Record<'username' | 'functionName' | 'password' | 'permissions' | 'submit', string>>;
 const TAB_PERMISSION_OPTIONS: Array<{ key: AppTabPermissionKey; label: string }> = [
@@ -205,6 +210,7 @@ export function AdminPanelScreen({ currentUser, onUsersChanged }: AdminPanelScre
   const [catalogError, setCatalogError] = useState('');
   const [catalogSuccess, setCatalogSuccess] = useState('');
   const [feedbackMessage, setFeedbackMessage] = useState('');
+  const [catalogArchiveTarget, setCatalogArchiveTarget] = useState<CatalogArchiveTarget | null>(null);
 
   async function loadUsers(syncFirst: boolean = false) {
     setIsLoading(true);
@@ -533,11 +539,10 @@ export function AdminPanelScreen({ currentUser, onUsersChanged }: AdminPanelScre
   }
 
   async function handleArchiveCategory(option: CatalogOption) {
-    const confirmed = await confirmAction(`Deseja excluir a categoria ${option.name}?`);
-    if (!confirmed) {
-      return;
-    }
+    setCatalogArchiveTarget({ type: 'category', option });
+  }
 
+  async function handleConfirmArchiveCategory(option: CatalogOption) {
     setIsCatalogSubmitting(true);
     setCatalogError('');
     setCatalogSuccess('');
@@ -559,11 +564,10 @@ export function AdminPanelScreen({ currentUser, onUsersChanged }: AdminPanelScre
   }
 
   async function handleArchiveUnit(option: CatalogOption) {
-    const confirmed = await confirmAction(`Deseja excluir a unidade ${option.name}?`);
-    if (!confirmed) {
-      return;
-    }
+    setCatalogArchiveTarget({ type: 'unit', option });
+  }
 
+  async function handleConfirmArchiveUnit(option: CatalogOption) {
     setIsCatalogSubmitting(true);
     setCatalogError('');
     setCatalogSuccess('');
@@ -582,6 +586,28 @@ export function AdminPanelScreen({ currentUser, onUsersChanged }: AdminPanelScre
     } finally {
       setIsCatalogSubmitting(false);
     }
+  }
+
+  function closeCatalogArchiveModal() {
+    if (isCatalogSubmitting) {
+      return;
+    }
+
+    setCatalogArchiveTarget(null);
+  }
+
+  async function handleConfirmCatalogArchive() {
+    if (!catalogArchiveTarget) {
+      return;
+    }
+
+    if (catalogArchiveTarget.type === 'category') {
+      await handleConfirmArchiveCategory(catalogArchiveTarget.option);
+    } else {
+      await handleConfirmArchiveUnit(catalogArchiveTarget.option);
+    }
+
+    setCatalogArchiveTarget(null);
   }
 
   const adminCount = useMemo(() => users.filter((user) => user.isAdmin).length, [users]);
@@ -1046,6 +1072,53 @@ export function AdminPanelScreen({ currentUser, onUsersChanged }: AdminPanelScre
         }}
         contentContainerStyle={styles.listContent}
       />
+
+      <Modal
+        animationType="fade"
+        transparent
+        visible={catalogArchiveTarget !== null}
+        onRequestClose={closeCatalogArchiveModal}
+      >
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>
+              {catalogArchiveTarget?.type === 'category'
+                ? 'Excluir categoria'
+                : 'Excluir unidade de medida'}
+            </Text>
+            <Text style={styles.modalDescription}>
+              {catalogArchiveTarget?.type === 'category'
+                ? 'Deseja excluir esta categoria? Ela deixara de aparecer no cadastro de itens.'
+                : 'Deseja excluir esta unidade de medida? Ela deixara de aparecer no cadastro de itens.'}
+            </Text>
+            {catalogArchiveTarget ? (
+              <Text style={styles.modalHighlight}>{catalogArchiveTarget.option.name}</Text>
+            ) : null}
+            <View style={styles.modalActions}>
+              <Pressable
+                style={styles.modalSecondaryButton}
+                onPress={closeCatalogArchiveModal}
+                disabled={isCatalogSubmitting}
+              >
+                <Text style={styles.modalSecondaryButtonText}>Cancelar</Text>
+              </Pressable>
+              <Pressable
+                style={[styles.modalDangerButton, isCatalogSubmitting ? styles.submitButtonDisabled : undefined]}
+                onPress={() => {
+                  void handleConfirmCatalogArchive();
+                }}
+                disabled={isCatalogSubmitting}
+              >
+                {isCatalogSubmitting ? (
+                  <ActivityIndicator color="#FFFFFF" />
+                ) : (
+                  <Text style={styles.modalDangerButtonText}>Excluir</Text>
+                )}
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -1449,5 +1522,68 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 12,
+  },
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(15, 23, 42, 0.35)',
+    paddingHorizontal: 20,
+    justifyContent: 'center',
+  },
+  modalCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#DDD6FE',
+    padding: 16,
+    gap: 12,
+  },
+  modalTitle: {
+    color: '#3B0764',
+    fontSize: 18,
+    fontWeight: '800',
+  },
+  modalDescription: {
+    color: '#5B21B6',
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  modalHighlight: {
+    color: '#4C1D95',
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  modalActions: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  modalSecondaryButton: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: '#C4B5FD',
+    borderRadius: 10,
+    minHeight: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#F5F3FF',
+    paddingHorizontal: 12,
+  },
+  modalSecondaryButtonText: {
+    color: '#5B21B6',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  modalDangerButton: {
+    flex: 1,
+    borderRadius: 10,
+    minHeight: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#B91C1C',
+    paddingHorizontal: 12,
+  },
+  modalDangerButtonText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '700',
   },
 });
