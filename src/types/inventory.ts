@@ -1,5 +1,3 @@
-import type { StockCategory } from '../constants/categories';
-
 export type AppTabPermissionKey =
   | 'dashboard'
   | 'stock'
@@ -49,7 +47,7 @@ export interface StockItem {
   name: string;
   unit: string;
   minQuantity: number;
-  category: StockCategory | null;
+  category: string | null;
   currentStockQuantity: number | null;
   createdAt: string;
   updatedAt: string;
@@ -59,14 +57,14 @@ export interface CreateStockItemInput {
   name: string;
   unit: string;
   minQuantity: number;
-  category: StockCategory;
+  category: string;
 }
 
 export interface UpdateStockItemInput {
   name: string;
   unit: string;
   minQuantity: number;
-  category: StockCategory;
+  category: string;
 }
 
 export interface StockItemListRow {
@@ -74,7 +72,7 @@ export interface StockItemListRow {
   name: string;
   unit: string;
   minQuantity: number;
-  category: StockCategory | null;
+  category: string | null;
   currentStockQuantity: number | null;
 }
 
@@ -83,7 +81,7 @@ export interface DailyInspectionItem {
   name: string;
   unit: string;
   minQuantity: number;
-  category: StockCategory | null;
+  category: string | null;
   currentStockQuantity: number | null;
   currentQuantity: number | null;
 }
@@ -93,7 +91,7 @@ export interface StockMovementItem {
   name: string;
   unit: string;
   minQuantity: number;
-  category: StockCategory | null;
+  category: string | null;
   currentStockQuantity: number | null;
   currentQuantity: number | null;
 }
@@ -176,7 +174,7 @@ export interface DashboardItemAnalyticsRow {
   itemId: number;
   name: string;
   unit: string;
-  category: StockCategory | null;
+  category: string | null;
   entryQuantity: number;
   exitQuantity: number;
   movementTotal: number;
@@ -226,7 +224,7 @@ export interface StockCurrentOverviewRow {
   name: string;
   unit: string;
   minQuantity: number;
-  category: StockCategory | null;
+  category: string | null;
   currentStockQuantity: number | null;
   needsPurchase: boolean;
   missingQuantity: number;

@@ -76,6 +76,8 @@ Se for a primeira vez configurando um banco novo para este projeto:
 4. Configure o `.env`.
 5. Reinicie o Expo, se ele ja estiver aberto.
 
+Se voce ja tinha um banco antigo rodando este projeto, rode novamente o `supabase/schema.sql` para aplicar as tabelas novas de catalogo (`item_categories` e `measurement_units`) e liberar categorias dinamicas.
+
 Se voce ja vai usar o mesmo projeto Supabase que o restante do time, nao precisa rodar o schema novamente. Basta clonar o projeto, instalar as dependencias, configurar o `.env` e iniciar o app.
 
 Observacao:

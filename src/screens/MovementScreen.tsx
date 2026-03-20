@@ -11,7 +11,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import { STOCK_CATEGORIES, getCategoryLabel, type StockCategory } from '../constants/categories';
+import { getCategoryLabel } from '../constants/categories';
 import {
   listStockMovementItems,
   saveStockEntries,
@@ -38,7 +38,7 @@ const FILTER_ALL = '__all__';
 const FILTER_UNCATEGORIZED = '__uncategorized__';
 const MAX_AUTOCOMPLETE_SUGGESTIONS = 6;
 
-type CategoryFilterValue = typeof FILTER_ALL | typeof FILTER_UNCATEGORIZED | StockCategory;
+type CategoryFilterValue = typeof FILTER_ALL | typeof FILTER_UNCATEGORIZED | string;
 
 function parseDecimalInput(value: string): number | null {
   const normalized = value.trim().replace(',', '.');
@@ -77,6 +77,7 @@ function normalizeSearchValue(value: string): string {
 
 type CategoryFilterSelectProps = {
   value: CategoryFilterValue;
+  options: string[];
   onChange: (nextValue: CategoryFilterValue) => void;
   isOpen: boolean;
   onToggle: () => void;
@@ -92,17 +93,18 @@ function getFilterLabel(value: CategoryFilterValue): string {
     return 'Sem categoria';
   }
 
-  return getCategoryLabel(value);
+  return getCategoryLabel(String(value));
 }
 
 function CategoryFilterSelect({
   value,
+  options,
   onChange,
   isOpen,
   onToggle,
   onClose,
 }: CategoryFilterSelectProps) {
-  const options: CategoryFilterValue[] = [FILTER_ALL, ...STOCK_CATEGORIES, FILTER_UNCATEGORIZED];
+  const filterOptions: CategoryFilterValue[] = [FILTER_ALL, ...options, FILTER_UNCATEGORIZED];
 
   return (
     <View style={styles.filterSelectRoot}>
@@ -113,7 +115,7 @@ function CategoryFilterSelect({
 
       {isOpen ? (
         <View style={styles.filterSelectMenu}>
-          {options.map((option) => {
+          {filterOptions.map((option) => {
             const isSelected = value === option;
 
             return (
@@ -271,6 +273,20 @@ function StockMovementScreen({ mode }: { mode: MovementMode }) {
       return item.category === categoryFilter;
     });
   }, [modeVisibleItems, categoryFilter]);
+
+  const availableCategories = useMemo(() => {
+    const uniqueCategories = new Set<string>();
+
+    for (const item of modeVisibleItems) {
+      if (item.category) {
+        uniqueCategories.add(item.category);
+      }
+    }
+
+    return Array.from(uniqueCategories).sort((left, right) =>
+      left.localeCompare(right, 'pt-BR', { sensitivity: 'base' }),
+    );
+  }, [modeVisibleItems]);
 
   const normalizedSearchQuery = useMemo(() => normalizeSearchValue(searchQuery), [searchQuery]);
 
@@ -537,6 +553,7 @@ function StockMovementScreen({ mode }: { mode: MovementMode }) {
               <Text style={styles.filterLabel}>Filtrar por categoria</Text>
               <CategoryFilterSelect
                 value={categoryFilter}
+                options={availableCategories}
                 onChange={(nextValue) => {
                   setCategoryFilter(nextValue);
                   setSubmitError('');

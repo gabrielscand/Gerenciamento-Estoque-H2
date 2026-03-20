@@ -1,5 +1,6 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 import { getDatabase } from './index';
+import { emitCatalogOptionsChanged } from './catalog.events';
 
 type LocalPendingStockItemRow = {
   remote_id: string;
@@ -43,6 +44,28 @@ type LocalPendingAppUserRow = {
   can_access_entry: number;
   can_access_exit: number;
   can_access_history: number;
+  is_deleted: number;
+  deleted_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+type LocalPendingItemCategoryRow = {
+  local_id: number;
+  remote_id: string;
+  name: string;
+  name_normalized: string;
+  is_deleted: number;
+  deleted_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+type LocalPendingMeasurementUnitRow = {
+  local_id: number;
+  remote_id: string;
+  name: string;
+  name_normalized: string;
   is_deleted: number;
   deleted_at: string | null;
   created_at: string;
@@ -97,6 +120,26 @@ type RemoteAppUser = {
   can_access_entry: boolean;
   can_access_exit: boolean;
   can_access_history: boolean;
+  is_deleted: boolean;
+  deleted_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+type RemoteItemCategory = {
+  id: string;
+  name: string;
+  name_normalized: string;
+  is_deleted: boolean;
+  deleted_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+type RemoteMeasurementUnit = {
+  id: string;
+  name: string;
+  name_normalized: string;
   is_deleted: boolean;
   deleted_at: string | null;
   created_at: string;
@@ -271,6 +314,38 @@ async function markAppUsersAsSynced(db: SQLiteDatabase, remoteIds: string[]): Pr
   );
 }
 
+async function markItemCategoriesAsSynced(db: SQLiteDatabase, remoteIds: string[]): Promise<void> {
+  if (remoteIds.length === 0) {
+    return;
+  }
+
+  const clause = buildInClause(remoteIds);
+  await db.runAsync(
+    `
+      UPDATE item_categories
+      SET sync_status = 'synced'
+      WHERE remote_id IN (${clause});
+    `,
+    ...remoteIds,
+  );
+}
+
+async function markMeasurementUnitsAsSynced(db: SQLiteDatabase, remoteIds: string[]): Promise<void> {
+  if (remoteIds.length === 0) {
+    return;
+  }
+
+  const clause = buildInClause(remoteIds);
+  await db.runAsync(
+    `
+      UPDATE measurement_units
+      SET sync_status = 'synced'
+      WHERE remote_id IN (${clause});
+    `,
+    ...remoteIds,
+  );
+}
+
 async function pushPendingStockItems(db: SQLiteDatabase): Promise<void> {
   const rows = await db.getAllAsync<LocalPendingStockItemRow>(
     `
@@ -425,6 +500,222 @@ async function pushPendingAppUsers(db: SQLiteDatabase): Promise<void> {
   );
 
   await markAppUsersAsSynced(
+    db,
+    rows.map((row) => row.remote_id),
+  );
+}
+
+async function pushPendingItemCategories(db: SQLiteDatabase): Promise<void> {
+  let rows = await db.getAllAsync<LocalPendingItemCategoryRow>(
+    `
+      SELECT
+        id AS local_id,
+        remote_id,
+        name,
+        name_normalized,
+        is_deleted,
+        deleted_at,
+        created_at,
+        updated_at
+      FROM item_categories
+      WHERE sync_status <> 'synced'
+        AND remote_id IS NOT NULL
+        AND TRIM(remote_id) <> ''
+      ORDER BY updated_at ASC, id ASC;
+    `,
+  );
+
+  if (rows.length === 0) {
+    return;
+  }
+
+  const remoteRows = await fetchRemote<Array<Pick<RemoteItemCategory, 'id' | 'name_normalized' | 'is_deleted'>>>(
+    '/item_categories?select=id,name_normalized,is_deleted',
+  );
+  const activeRemoteByNormalized = new Map<string, string>();
+
+  for (const remoteRow of remoteRows) {
+    if (remoteRow.is_deleted) {
+      continue;
+    }
+
+    activeRemoteByNormalized.set(remoteRow.name_normalized, remoteRow.id);
+  }
+
+  let hasReconciled = false;
+
+  for (const row of rows) {
+    if (row.is_deleted === 1) {
+      continue;
+    }
+
+    const existingRemoteId = activeRemoteByNormalized.get(row.name_normalized);
+
+    if (!existingRemoteId || existingRemoteId === row.remote_id) {
+      continue;
+    }
+
+    await db.runAsync(
+      `
+        UPDATE item_categories
+        SET
+          remote_id = ?,
+          sync_status = 'synced'
+        WHERE id = ?;
+      `,
+      existingRemoteId,
+      row.local_id,
+    );
+    hasReconciled = true;
+  }
+
+  if (hasReconciled) {
+    rows = await db.getAllAsync<LocalPendingItemCategoryRow>(
+      `
+        SELECT
+          id AS local_id,
+          remote_id,
+          name,
+          name_normalized,
+          is_deleted,
+          deleted_at,
+          created_at,
+          updated_at
+        FROM item_categories
+        WHERE sync_status <> 'synced'
+          AND remote_id IS NOT NULL
+          AND TRIM(remote_id) <> ''
+        ORDER BY updated_at ASC, id ASC;
+      `,
+    );
+  }
+
+  if (rows.length === 0) {
+    return;
+  }
+
+  await upsertRemote(
+    '/item_categories?on_conflict=id',
+    rows.map((row) => ({
+      id: row.remote_id,
+      name: row.name,
+      name_normalized: row.name_normalized,
+      is_deleted: row.is_deleted === 1,
+      deleted_at: row.deleted_at ? normalizeTimestamp(row.deleted_at) : null,
+      created_at: normalizeTimestamp(row.created_at),
+      updated_at: normalizeTimestamp(row.updated_at),
+    })),
+  );
+
+  await markItemCategoriesAsSynced(
+    db,
+    rows.map((row) => row.remote_id),
+  );
+}
+
+async function pushPendingMeasurementUnits(db: SQLiteDatabase): Promise<void> {
+  let rows = await db.getAllAsync<LocalPendingMeasurementUnitRow>(
+    `
+      SELECT
+        id AS local_id,
+        remote_id,
+        name,
+        name_normalized,
+        is_deleted,
+        deleted_at,
+        created_at,
+        updated_at
+      FROM measurement_units
+      WHERE sync_status <> 'synced'
+        AND remote_id IS NOT NULL
+        AND TRIM(remote_id) <> ''
+      ORDER BY updated_at ASC, id ASC;
+    `,
+  );
+
+  if (rows.length === 0) {
+    return;
+  }
+
+  const remoteRows = await fetchRemote<Array<Pick<RemoteMeasurementUnit, 'id' | 'name_normalized' | 'is_deleted'>>>(
+    '/measurement_units?select=id,name_normalized,is_deleted',
+  );
+  const activeRemoteByNormalized = new Map<string, string>();
+
+  for (const remoteRow of remoteRows) {
+    if (remoteRow.is_deleted) {
+      continue;
+    }
+
+    activeRemoteByNormalized.set(remoteRow.name_normalized, remoteRow.id);
+  }
+
+  let hasReconciled = false;
+
+  for (const row of rows) {
+    if (row.is_deleted === 1) {
+      continue;
+    }
+
+    const existingRemoteId = activeRemoteByNormalized.get(row.name_normalized);
+
+    if (!existingRemoteId || existingRemoteId === row.remote_id) {
+      continue;
+    }
+
+    await db.runAsync(
+      `
+        UPDATE measurement_units
+        SET
+          remote_id = ?,
+          sync_status = 'synced'
+        WHERE id = ?;
+      `,
+      existingRemoteId,
+      row.local_id,
+    );
+    hasReconciled = true;
+  }
+
+  if (hasReconciled) {
+    rows = await db.getAllAsync<LocalPendingMeasurementUnitRow>(
+      `
+        SELECT
+          id AS local_id,
+          remote_id,
+          name,
+          name_normalized,
+          is_deleted,
+          deleted_at,
+          created_at,
+          updated_at
+        FROM measurement_units
+        WHERE sync_status <> 'synced'
+          AND remote_id IS NOT NULL
+          AND TRIM(remote_id) <> ''
+        ORDER BY updated_at ASC, id ASC;
+      `,
+    );
+  }
+
+  if (rows.length === 0) {
+    return;
+  }
+
+  await upsertRemote(
+    '/measurement_units?on_conflict=id',
+    rows.map((row) => ({
+      id: row.remote_id,
+      name: row.name,
+      name_normalized: row.name_normalized,
+      is_deleted: row.is_deleted === 1,
+      deleted_at: row.deleted_at ? normalizeTimestamp(row.deleted_at) : null,
+      created_at: normalizeTimestamp(row.created_at),
+      updated_at: normalizeTimestamp(row.updated_at),
+    })),
+  );
+
+  await markMeasurementUnitsAsSynced(
     db,
     rows.map((row) => row.remote_id),
   );
@@ -729,6 +1020,172 @@ async function mergeRemoteAppUsers(db: SQLiteDatabase, remoteUsers: RemoteAppUse
   });
 }
 
+async function mergeRemoteItemCategories(
+  db: SQLiteDatabase,
+  remoteCategories: RemoteItemCategory[],
+): Promise<void> {
+  let hasCatalogChanges = false;
+
+  await db.withTransactionAsync(async () => {
+    for (const remoteCategory of remoteCategories) {
+      const local = await db.getFirstAsync<LocalSyncLookupRow>(
+        `
+          SELECT id, updated_at, sync_status
+          FROM item_categories
+          WHERE remote_id = ?
+          LIMIT 1;
+        `,
+        remoteCategory.id,
+      );
+
+      if (!local) {
+        await db.runAsync(
+          `
+            INSERT INTO item_categories (
+              remote_id,
+              sync_status,
+              name,
+              name_normalized,
+              is_deleted,
+              deleted_at,
+              created_at,
+              updated_at
+            )
+            VALUES (?, 'synced', ?, ?, ?, ?, ?, ?);
+          `,
+          remoteCategory.id,
+          remoteCategory.name,
+          remoteCategory.name_normalized,
+          remoteCategory.is_deleted ? 1 : 0,
+          remoteCategory.deleted_at,
+          remoteCategory.created_at,
+          remoteCategory.updated_at,
+        );
+        hasCatalogChanges = true;
+        continue;
+      }
+
+      const shouldKeepLocal =
+        local.sync_status !== 'synced' &&
+        toTimestamp(local.updated_at) > toTimestamp(remoteCategory.updated_at);
+
+      if (shouldKeepLocal) {
+        continue;
+      }
+
+      await db.runAsync(
+        `
+          UPDATE item_categories
+          SET
+            name = ?,
+            name_normalized = ?,
+            is_deleted = ?,
+            deleted_at = ?,
+            created_at = ?,
+            updated_at = ?,
+            sync_status = 'synced'
+          WHERE id = ?;
+        `,
+        remoteCategory.name,
+        remoteCategory.name_normalized,
+        remoteCategory.is_deleted ? 1 : 0,
+        remoteCategory.deleted_at,
+        remoteCategory.created_at,
+        remoteCategory.updated_at,
+        local.id,
+      );
+      hasCatalogChanges = true;
+    }
+  });
+
+  if (hasCatalogChanges) {
+    emitCatalogOptionsChanged();
+  }
+}
+
+async function mergeRemoteMeasurementUnits(
+  db: SQLiteDatabase,
+  remoteUnits: RemoteMeasurementUnit[],
+): Promise<void> {
+  let hasCatalogChanges = false;
+
+  await db.withTransactionAsync(async () => {
+    for (const remoteUnit of remoteUnits) {
+      const local = await db.getFirstAsync<LocalSyncLookupRow>(
+        `
+          SELECT id, updated_at, sync_status
+          FROM measurement_units
+          WHERE remote_id = ?
+          LIMIT 1;
+        `,
+        remoteUnit.id,
+      );
+
+      if (!local) {
+        await db.runAsync(
+          `
+            INSERT INTO measurement_units (
+              remote_id,
+              sync_status,
+              name,
+              name_normalized,
+              is_deleted,
+              deleted_at,
+              created_at,
+              updated_at
+            )
+            VALUES (?, 'synced', ?, ?, ?, ?, ?, ?);
+          `,
+          remoteUnit.id,
+          remoteUnit.name,
+          remoteUnit.name_normalized,
+          remoteUnit.is_deleted ? 1 : 0,
+          remoteUnit.deleted_at,
+          remoteUnit.created_at,
+          remoteUnit.updated_at,
+        );
+        hasCatalogChanges = true;
+        continue;
+      }
+
+      const shouldKeepLocal =
+        local.sync_status !== 'synced' &&
+        toTimestamp(local.updated_at) > toTimestamp(remoteUnit.updated_at);
+
+      if (shouldKeepLocal) {
+        continue;
+      }
+
+      await db.runAsync(
+        `
+          UPDATE measurement_units
+          SET
+            name = ?,
+            name_normalized = ?,
+            is_deleted = ?,
+            deleted_at = ?,
+            created_at = ?,
+            updated_at = ?,
+            sync_status = 'synced'
+          WHERE id = ?;
+        `,
+        remoteUnit.name,
+        remoteUnit.name_normalized,
+        remoteUnit.is_deleted ? 1 : 0,
+        remoteUnit.deleted_at,
+        remoteUnit.created_at,
+        remoteUnit.updated_at,
+        local.id,
+      );
+      hasCatalogChanges = true;
+    }
+  });
+
+  if (hasCatalogChanges) {
+    emitCatalogOptionsChanged();
+  }
+}
+
 async function performSync(): Promise<boolean> {
   const db = await getDatabase();
   const startedAt = nowIsoString();
@@ -741,6 +1198,8 @@ async function performSync(): Promise<boolean> {
 
   try {
     await pushPendingAppUsers(db);
+    await pushPendingItemCategories(db);
+    await pushPendingMeasurementUnits(db);
     await pushPendingStockItems(db);
     await pushPendingDailyEntries(db);
 
@@ -753,6 +1212,16 @@ async function performSync(): Promise<boolean> {
       '/stock_items?select=id,name,unit,min_quantity,current_stock_quantity,category,is_deleted,deleted_at,created_at,updated_at&order=updated_at.asc',
     );
     await mergeRemoteStockItems(db, remoteItems);
+
+    const remoteCategories = await fetchRemote<RemoteItemCategory[]>(
+      '/item_categories?select=id,name,name_normalized,is_deleted,deleted_at,created_at,updated_at&order=updated_at.asc',
+    );
+    await mergeRemoteItemCategories(db, remoteCategories);
+
+    const remoteUnits = await fetchRemote<RemoteMeasurementUnit[]>(
+      '/measurement_units?select=id,name,name_normalized,is_deleted,deleted_at,created_at,updated_at&order=updated_at.asc',
+    );
+    await mergeRemoteMeasurementUnits(db, remoteUnits);
 
     const remoteEntries = await fetchRemote<RemoteDailyEntry[]>(
       '/daily_stock_entries?select=id,item_id,date,quantity,movement_type,stock_after_quantity,created_by_user_remote_id,created_by_username,is_deleted,deleted_at,created_at,updated_at&order=updated_at.asc',

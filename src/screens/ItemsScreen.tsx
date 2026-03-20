@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useIsFocused } from '@react-navigation/native';
 import {
   ActivityIndicator,
   Alert,
@@ -11,12 +12,15 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import { STOCK_CATEGORIES, getCategoryLabel, type StockCategory } from '../constants/categories';
+import { getCategoryLabel } from '../constants/categories';
 import {
   archiveStockItem,
   createStockItem,
   findItemByNormalizedName,
+  listItemCategories,
+  listMeasurementUnits,
   listStockItems,
+  subscribeToCatalogOptionsChanged,
   updateStockItem,
 } from '../database/items.repository';
 import { syncAppData } from '../database/sync.service';
@@ -26,8 +30,8 @@ import type { CreateStockItemInput, StockItemListRow } from '../types/inventory'
 
 type FormState = {
   name: string;
-  unit: string;
-  category: StockCategory | '';
+  unit: string | '';
+  category: string | '';
   minQuantity: string;
 };
 
@@ -97,7 +101,7 @@ function buildValidationErrors(form: FormState): { errors: FormErrors; parsed?: 
       name,
       unit,
       minQuantity: minQuantity as number,
-      category: category as StockCategory,
+      category: category as string,
     },
   };
 }
@@ -118,26 +122,32 @@ function normalizeSearchValue(value: string): string {
 }
 
 type CategorySelectProps = {
-  value: StockCategory | '';
-  onChange: (nextValue: StockCategory) => void;
+  value: string | '';
+  options: string[];
+  onChange: (nextValue: string) => void;
   isOpen: boolean;
   onToggle: () => void;
   onClose: () => void;
+  formatOptionLabel?: (value: string) => string;
   placeholder: string;
   error?: string;
   disabled?: boolean;
 };
 
-function CategorySelect({
+function CatalogSelect({
   value,
+  options,
   onChange,
   isOpen,
   onToggle,
   onClose,
+  formatOptionLabel,
   placeholder,
   error,
   disabled = false,
 }: CategorySelectProps) {
+  const labelResolver = formatOptionLabel ?? ((option: string) => option);
+
   return (
     <View style={styles.selectRoot}>
       <Pressable
@@ -146,27 +156,32 @@ function CategorySelect({
         disabled={disabled}
       >
         <Text style={value ? styles.selectTriggerText : styles.selectPlaceholderText}>
-          {value ? getCategoryLabel(value) : placeholder}
+          {value ? labelResolver(value) : placeholder}
         </Text>
         <Text style={styles.selectArrow}>{isOpen ? '▴' : '▾'}</Text>
       </Pressable>
 
       {isOpen ? (
         <View style={styles.selectMenu}>
-          {STOCK_CATEGORIES.map((category) => {
-            const isSelected = value === category;
+          {options.length === 0 ? (
+            <View style={styles.selectEmptyState}>
+              <Text style={styles.selectEmptyStateText}>Nenhuma opcao cadastrada.</Text>
+            </View>
+          ) : null}
+          {options.map((option) => {
+            const isSelected = value === option;
 
             return (
               <Pressable
-                key={category}
+                key={option}
                 style={[styles.selectOption, isSelected ? styles.selectOptionActive : undefined]}
                 onPress={() => {
-                  onChange(category);
+                  onChange(option);
                   onClose();
                 }}
               >
                 <Text style={[styles.selectOptionText, isSelected ? styles.selectOptionTextActive : undefined]}>
-                  {getCategoryLabel(category)}
+                  {labelResolver(option)}
                 </Text>
               </Pressable>
             );
@@ -243,20 +258,42 @@ async function confirmArchiveItem(): Promise<boolean> {
 }
 
 export function ItemsScreen() {
+  const isFocused = useIsFocused();
   const [items, setItems] = useState<StockItemListRow[]>([]);
+  const [categoryOptions, setCategoryOptions] = useState<string[]>([]);
+  const [unitOptions, setUnitOptions] = useState<string[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [createForm, setCreateForm] = useState<FormState>(initialFormState);
   const [createErrors, setCreateErrors] = useState<FormErrors>({});
   const [editForm, setEditForm] = useState<FormState>(initialFormState);
   const [editErrors, setEditErrors] = useState<FormErrors>({});
   const [isCreateCategoryOpen, setIsCreateCategoryOpen] = useState(false);
+  const [isCreateUnitOpen, setIsCreateUnitOpen] = useState(false);
   const [isEditCategoryOpen, setIsEditCategoryOpen] = useState(false);
+  const [isEditUnitOpen, setIsEditUnitOpen] = useState(false);
   const [editingItemId, setEditingItemId] = useState<number | null>(null);
   const [isCreating, setIsCreating] = useState(false);
   const [isUpdating, setIsUpdating] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [feedbackMessage, setFeedbackMessage] = useState<string>('');
+  const [catalogErrorMessage, setCatalogErrorMessage] = useState('');
+
+  async function loadCatalogOptions() {
+    try {
+      const [categories, units] = await Promise.all([
+        listItemCategories(),
+        listMeasurementUnits(),
+      ]);
+      setCategoryOptions(categories);
+      setUnitOptions(units);
+      setCatalogErrorMessage('');
+    } catch (error) {
+      setCatalogErrorMessage(
+        error instanceof Error ? error.message : 'Falha ao carregar categorias e unidades.',
+      );
+    }
+  }
 
   async function loadItems(syncFirst: boolean = false) {
     setIsLoading(true);
@@ -280,7 +317,21 @@ export function ItemsScreen() {
 
   useEffect(() => {
     void loadItems();
+    void loadCatalogOptions();
+    const unsubscribe = subscribeToCatalogOptionsChanged(() => {
+      void loadCatalogOptions();
+    });
+
+    return unsubscribe;
   }, []);
+
+  useEffect(() => {
+    if (!isFocused) {
+      return;
+    }
+
+    void loadCatalogOptions();
+  }, [isFocused]);
 
   function setCreateField<K extends keyof FormState>(key: K, value: FormState[K]) {
     setCreateForm((prev) => ({ ...prev, [key]: value }));
@@ -296,6 +347,7 @@ export function ItemsScreen() {
 
   function startEditing(item: StockItemListRow) {
     setIsCreateCategoryOpen(false);
+    setIsCreateUnitOpen(false);
     setEditingItemId(item.id);
     setEditForm({
       name: item.name,
@@ -304,6 +356,7 @@ export function ItemsScreen() {
       minQuantity: String(item.minQuantity),
     });
     setIsEditCategoryOpen(false);
+    setIsEditUnitOpen(false);
     setEditErrors({});
     setCreateErrors((prev) => ({ ...prev, submit: undefined }));
     setFeedbackMessage('');
@@ -313,6 +366,7 @@ export function ItemsScreen() {
     setEditingItemId(null);
     setEditForm(initialFormState);
     setIsEditCategoryOpen(false);
+    setIsEditUnitOpen(false);
     setEditErrors({});
   }
 
@@ -361,6 +415,7 @@ export function ItemsScreen() {
       setCreateErrors({});
       setFeedbackMessage('Item cadastrado com sucesso.');
       await loadItems();
+      await loadCatalogOptions();
     } catch (error) {
       setCreateErrors((prev) => ({
         ...prev,
@@ -397,6 +452,7 @@ export function ItemsScreen() {
       cancelEditing();
       setFeedbackMessage('Item atualizado com sucesso.');
       await loadItems();
+      await loadCatalogOptions();
     } catch (error) {
       setEditErrors((prev) => ({
         ...prev,
@@ -423,6 +479,7 @@ export function ItemsScreen() {
       cancelEditing();
       setFeedbackMessage('Item arquivado com sucesso.');
       await loadItems();
+      await loadCatalogOptions();
     } catch (error) {
       setEditErrors((prev) => ({
         ...prev,
@@ -434,6 +491,18 @@ export function ItemsScreen() {
   }
 
   const normalizedSearchQuery = normalizeSearchValue(searchQuery);
+  const createCategoryOptions = createForm.category && !categoryOptions.includes(createForm.category)
+    ? [createForm.category, ...categoryOptions]
+    : categoryOptions;
+  const createUnitOptions = createForm.unit && !unitOptions.includes(createForm.unit)
+    ? [createForm.unit, ...unitOptions]
+    : unitOptions;
+  const editCategoryOptions = editForm.category && !categoryOptions.includes(editForm.category)
+    ? [editForm.category, ...categoryOptions]
+    : categoryOptions;
+  const editUnitOptions = editForm.unit && !unitOptions.includes(editForm.unit)
+    ? [editForm.unit, ...unitOptions]
+    : unitOptions;
   const filteredItems =
     normalizedSearchQuery.length === 0
       ? items
@@ -508,32 +577,48 @@ export function ItemsScreen() {
 
               <View style={styles.fieldGroup}>
                 <Text style={styles.label}>Unidade de medida</Text>
-                <TextInput
+                <CatalogSelect
                   value={createForm.unit}
-                  onChangeText={(value) => setCreateField('unit', value)}
-                  placeholder="Ex.: kg, un, L"
-                  style={[styles.input, createErrors.unit ? styles.inputError : undefined]}
+                  options={createUnitOptions}
+                  onChange={(value) => setCreateField('unit', value)}
+                  isOpen={isCreateUnitOpen}
+                  onToggle={() => {
+                    setIsCreateUnitOpen((prev) => !prev);
+                    setIsCreateCategoryOpen(false);
+                    setIsEditUnitOpen(false);
+                    setIsEditCategoryOpen(false);
+                  }}
+                  onClose={() => setIsCreateUnitOpen(false)}
+                  placeholder="Selecione a unidade"
+                  error={createErrors.unit}
+                  disabled={isCreating}
                 />
                 {createErrors.unit ? <Text style={styles.errorText}>{createErrors.unit}</Text> : null}
               </View>
 
               <View style={styles.fieldGroup}>
                 <Text style={styles.label}>Categoria</Text>
-                <CategorySelect
+                <CatalogSelect
                   value={createForm.category}
+                  options={createCategoryOptions}
                   onChange={(value) => setCreateField('category', value)}
                   isOpen={isCreateCategoryOpen}
                   onToggle={() => {
                     setIsCreateCategoryOpen((prev) => !prev);
+                    setIsCreateUnitOpen(false);
                     setIsEditCategoryOpen(false);
+                    setIsEditUnitOpen(false);
                   }}
                   onClose={() => setIsCreateCategoryOpen(false)}
+                  formatOptionLabel={getCategoryLabel}
                   placeholder="Selecione uma categoria"
                   error={createErrors.category}
                   disabled={isCreating}
                 />
                 {createErrors.category ? <Text style={styles.errorText}>{createErrors.category}</Text> : null}
               </View>
+
+              {catalogErrorMessage ? <Text style={styles.errorText}>{catalogErrorMessage}</Text> : null}
 
               <View style={styles.fieldGroup}>
                 <Text style={styles.label}>Quantidade minima</Text>
@@ -680,26 +765,40 @@ export function ItemsScreen() {
 
                   <View style={styles.fieldGroup}>
                     <Text style={styles.label}>Unidade de medida</Text>
-                    <TextInput
+                    <CatalogSelect
                       value={editForm.unit}
-                      onChangeText={(value) => setEditField('unit', value)}
-                      placeholder="Ex.: kg, un, L"
-                      style={[styles.input, editErrors.unit ? styles.inputError : undefined]}
+                      options={editUnitOptions}
+                      onChange={(value) => setEditField('unit', value)}
+                      isOpen={isEditUnitOpen}
+                      onToggle={() => {
+                        setIsEditUnitOpen((prev) => !prev);
+                        setIsEditCategoryOpen(false);
+                        setIsCreateUnitOpen(false);
+                        setIsCreateCategoryOpen(false);
+                      }}
+                      onClose={() => setIsEditUnitOpen(false)}
+                      placeholder="Selecione a unidade"
+                      error={editErrors.unit}
+                      disabled={isUpdating || isDeleting}
                     />
                     {editErrors.unit ? <Text style={styles.errorText}>{editErrors.unit}</Text> : null}
                   </View>
 
                   <View style={styles.fieldGroup}>
                     <Text style={styles.label}>Categoria</Text>
-                    <CategorySelect
+                    <CatalogSelect
                       value={editForm.category}
+                      options={editCategoryOptions}
                       onChange={(value) => setEditField('category', value)}
                       isOpen={isEditCategoryOpen}
                       onToggle={() => {
                         setIsEditCategoryOpen((prev) => !prev);
+                        setIsEditUnitOpen(false);
                         setIsCreateCategoryOpen(false);
+                        setIsCreateUnitOpen(false);
                       }}
                       onClose={() => setIsEditCategoryOpen(false)}
+                      formatOptionLabel={getCategoryLabel}
                       placeholder="Selecione uma categoria"
                       error={editErrors.category}
                       disabled={isUpdating || isDeleting}
@@ -866,6 +965,17 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     backgroundColor: '#FFFFFF',
     overflow: 'hidden',
+  },
+  selectEmptyState: {
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3E8FF',
+    backgroundColor: '#FAF5FF',
+  },
+  selectEmptyStateText: {
+    color: '#7C3AED',
+    fontSize: 13,
   },
   selectOption: {
     paddingHorizontal: 12,

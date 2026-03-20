@@ -1,6 +1,7 @@
 import { getDatabase } from './index';
 import { isRemoteSyncConfigured, syncAppData, syncAppDataInBackground } from './sync.service';
-import { isStockCategory } from '../constants/categories';
+import { normalizeCatalogName } from '../constants/categories';
+import { emitCatalogOptionsChanged, subscribeCatalogOptionsChanged } from './catalog.events';
 import {
   formatDateLabel,
   getMonthDateRange,
@@ -141,6 +142,29 @@ type StockItemRemoteRow = {
   current_stock_quantity: number | null;
 };
 
+type CatalogOptionListRow = {
+  id: number;
+  name: string;
+  nameNormalized: string;
+};
+
+type CatalogExistingRow = {
+  id: number;
+};
+
+type CatalogCurrentRow = {
+  id: number;
+  nameNormalized: string;
+};
+
+type CatalogBackfillValueRow = {
+  value: string;
+};
+
+type CatalogUsageCountRow = {
+  total: number;
+};
+
 type DailyTimelineRow = {
   id: number;
   date: string;
@@ -186,12 +210,101 @@ function normalizeCategory(category: string | null | undefined): StockItem['cate
     return null;
   }
 
-  const normalized = category.trim().toLowerCase();
-  return isStockCategory(normalized) ? normalized : null;
+  const normalized = normalizeCatalogName(category);
+  return normalized.length === 0 ? null : normalized;
 }
 
 function createRemoteItemId(): string {
   return `item-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+function createCatalogRemoteId(prefix: 'cat' | 'unit'): string {
+  return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+async function backfillCatalogFromStockItems(
+  database: Awaited<ReturnType<typeof getDatabase>>,
+  tableName: 'item_categories' | 'measurement_units',
+  sourceColumn: 'category' | 'unit',
+): Promise<boolean> {
+  const rows = await database.getAllAsync<CatalogBackfillValueRow>(
+    `
+      SELECT DISTINCT ${sourceColumn} AS value
+      FROM stock_items
+      WHERE is_deleted = 0
+        AND ${sourceColumn} IS NOT NULL
+        AND TRIM(${sourceColumn}) <> '';
+    `,
+  );
+
+  if (rows.length === 0) {
+    return false;
+  }
+
+  const timestamp = nowIsoString();
+  let hasInserted = false;
+
+  for (const row of rows) {
+    const normalizedName = normalizeCatalogName(row.value);
+
+    if (normalizedName.length === 0) {
+      continue;
+    }
+
+    const result = await database.runAsync(
+      `
+        INSERT OR IGNORE INTO ${tableName} (
+          remote_id,
+          sync_status,
+          name,
+          name_normalized,
+          created_at,
+          updated_at
+        )
+        VALUES (?, 'pending', ?, ?, ?, ?);
+      `,
+      createCatalogRemoteId(tableName === 'item_categories' ? 'cat' : 'unit'),
+      normalizedName,
+      normalizedName,
+      timestamp,
+      timestamp,
+    );
+
+    if ((result.changes ?? 0) > 0) {
+      hasInserted = true;
+    }
+  }
+
+  return hasInserted;
+}
+
+let activeCatalogBackfill: Promise<void> | null = null;
+
+async function ensureCatalogBackfillFromStockItems(
+  database: Awaited<ReturnType<typeof getDatabase>>,
+): Promise<void> {
+  if (!activeCatalogBackfill) {
+    activeCatalogBackfill = (async () => {
+      const hasCategoryInsertions = await backfillCatalogFromStockItems(
+        database,
+        'item_categories',
+        'category',
+      );
+      const hasUnitInsertions = await backfillCatalogFromStockItems(
+        database,
+        'measurement_units',
+        'unit',
+      );
+
+      if (hasCategoryInsertions || hasUnitInsertions) {
+        syncAppDataInBackground();
+      }
+    })().finally(() => {
+      activeCatalogBackfill = null;
+    });
+  }
+
+  await activeCatalogBackfill;
 }
 
 function createMovementRemoteId(itemRemoteId: string, date: string, movementType: 'entry' | 'exit'): string {
@@ -230,6 +343,296 @@ function isExitLikeMovementType(movementType: DailyHistoryEntry['movementType'])
 
 function roundQuantity(value: number): number {
   return Math.round(value * 1000) / 1000;
+}
+
+async function createCatalogOption(
+  tableName: 'item_categories' | 'measurement_units',
+  rawName: string,
+  duplicateError: string,
+): Promise<void> {
+  const database = await getDatabase();
+  const normalizedName = normalizeCatalogName(rawName);
+
+  if (normalizedName.length === 0) {
+    throw new Error('Informe um nome valido.');
+  }
+
+  const existing = await database.getFirstAsync<CatalogExistingRow>(
+    `
+      SELECT id
+      FROM ${tableName}
+      WHERE name_normalized = ?
+        AND is_deleted = 0
+      LIMIT 1;
+    `,
+    normalizedName,
+  );
+
+  if (existing) {
+    throw new Error(duplicateError);
+  }
+
+  const timestamp = nowIsoString();
+  await database.runAsync(
+    `
+      INSERT INTO ${tableName} (
+        remote_id,
+        sync_status,
+        name,
+        name_normalized,
+        created_at,
+        updated_at
+      )
+      VALUES (?, 'pending', ?, ?, ?, ?);
+    `,
+    createCatalogRemoteId(tableName === 'item_categories' ? 'cat' : 'unit'),
+    normalizedName,
+    normalizedName,
+    timestamp,
+    timestamp,
+  );
+
+  emitCatalogOptionsChanged();
+  syncAppDataInBackground();
+}
+
+async function updateCatalogOption(
+  tableName: 'item_categories' | 'measurement_units',
+  optionId: number,
+  rawName: string,
+  duplicateError: string,
+  notFoundError: string,
+): Promise<void> {
+  const database = await getDatabase();
+  const normalizedName = normalizeCatalogName(rawName);
+
+  if (normalizedName.length === 0) {
+    throw new Error('Informe um nome valido.');
+  }
+
+  const current = await database.getFirstAsync<CatalogCurrentRow>(
+    `
+      SELECT
+        id,
+        name_normalized AS nameNormalized
+      FROM ${tableName}
+      WHERE id = ?
+        AND is_deleted = 0
+      LIMIT 1;
+    `,
+    optionId,
+  );
+
+  if (!current) {
+    throw new Error(notFoundError);
+  }
+
+  const existing = await database.getFirstAsync<CatalogExistingRow>(
+    `
+      SELECT id
+      FROM ${tableName}
+      WHERE name_normalized = ?
+        AND is_deleted = 0
+        AND id <> ?
+      LIMIT 1;
+    `,
+    normalizedName,
+    optionId,
+  );
+
+  if (existing) {
+    throw new Error(duplicateError);
+  }
+
+  if (current.nameNormalized === normalizedName) {
+    return;
+  }
+
+  const timestamp = nowIsoString();
+  await database.runAsync(
+    `
+      UPDATE ${tableName}
+      SET
+        name = ?,
+        name_normalized = ?,
+        updated_at = ?,
+        sync_status = 'pending'
+      WHERE id = ?
+        AND is_deleted = 0;
+    `,
+    normalizedName,
+    normalizedName,
+    timestamp,
+    optionId,
+  );
+
+  emitCatalogOptionsChanged();
+  syncAppDataInBackground();
+}
+
+async function archiveCatalogOption(
+  tableName: 'item_categories' | 'measurement_units',
+  optionId: number,
+  usageColumn: 'category' | 'unit',
+  inUseError: string,
+  notFoundError: string,
+): Promise<void> {
+  const database = await getDatabase();
+
+  const current = await database.getFirstAsync<CatalogCurrentRow>(
+    `
+      SELECT
+        id,
+        name_normalized AS nameNormalized
+      FROM ${tableName}
+      WHERE id = ?
+        AND is_deleted = 0
+      LIMIT 1;
+    `,
+    optionId,
+  );
+
+  if (!current) {
+    throw new Error(notFoundError);
+  }
+
+  const usage = await database.getFirstAsync<CatalogUsageCountRow>(
+    `
+      SELECT COUNT(1) AS total
+      FROM stock_items
+      WHERE is_deleted = 0
+        AND ${usageColumn} = ?;
+    `,
+    current.nameNormalized,
+  );
+
+  if ((usage?.total ?? 0) > 0) {
+    throw new Error(inUseError);
+  }
+
+  const timestamp = nowIsoString();
+  const result = await database.runAsync(
+    `
+      UPDATE ${tableName}
+      SET
+        is_deleted = 1,
+        deleted_at = ?,
+        updated_at = ?,
+        sync_status = 'pending'
+      WHERE id = ?
+        AND is_deleted = 0;
+    `,
+    timestamp,
+    timestamp,
+    optionId,
+  );
+
+  if ((result.changes ?? 0) === 0) {
+    throw new Error(notFoundError);
+  }
+
+  emitCatalogOptionsChanged();
+  syncAppDataInBackground();
+}
+
+export type CatalogOption = {
+  id: number;
+  name: string;
+  nameNormalized: string;
+};
+
+export function subscribeToCatalogOptionsChanged(listener: () => void): () => void {
+  return subscribeCatalogOptionsChanged(listener);
+}
+
+async function listCatalogOptions(
+  tableName: 'item_categories' | 'measurement_units',
+): Promise<CatalogOption[]> {
+  const database = await getDatabase();
+  await ensureCatalogBackfillFromStockItems(database);
+  const rows = await database.getAllAsync<CatalogOptionListRow>(
+    `
+      SELECT
+        id,
+        name,
+        name_normalized AS nameNormalized
+      FROM ${tableName}
+      WHERE is_deleted = 0
+      ORDER BY name COLLATE NOCASE ASC;
+    `,
+  );
+
+  return rows.map((row) => ({
+    id: row.id,
+    name: normalizeCatalogName(row.name),
+    nameNormalized: normalizeCatalogName(row.nameNormalized),
+  }));
+}
+
+export async function listItemCategories(): Promise<string[]> {
+  const rows = await listCatalogOptions('item_categories');
+  return rows.map((row) => row.name).filter((row) => row.length > 0);
+}
+
+export async function listMeasurementUnits(): Promise<string[]> {
+  const rows = await listCatalogOptions('measurement_units');
+  return rows.map((row) => row.name).filter((row) => row.length > 0);
+}
+
+export async function listItemCategoryOptions(): Promise<CatalogOption[]> {
+  return listCatalogOptions('item_categories');
+}
+
+export async function listMeasurementUnitOptions(): Promise<CatalogOption[]> {
+  return listCatalogOptions('measurement_units');
+}
+
+export async function createItemCategory(name: string): Promise<void> {
+  await createCatalogOption('item_categories', name, 'Categoria ja existe.');
+}
+
+export async function createMeasurementUnit(name: string): Promise<void> {
+  await createCatalogOption('measurement_units', name, 'Unidade de medida ja existe.');
+}
+
+export async function updateItemCategory(optionId: number, name: string): Promise<void> {
+  await updateCatalogOption(
+    'item_categories',
+    optionId,
+    name,
+    'Categoria ja existe.',
+    'Categoria nao encontrada.',
+  );
+}
+
+export async function updateMeasurementUnit(optionId: number, name: string): Promise<void> {
+  await updateCatalogOption(
+    'measurement_units',
+    optionId,
+    name,
+    'Unidade de medida ja existe.',
+    'Unidade de medida nao encontrada.',
+  );
+}
+
+export async function archiveItemCategory(optionId: number): Promise<void> {
+  await archiveCatalogOption(
+    'item_categories',
+    optionId,
+    'category',
+    'Nao e possivel excluir: existem itens ativos usando essa categoria.',
+    'Categoria nao encontrada.',
+  );
+}
+
+export async function archiveMeasurementUnit(optionId: number): Promise<void> {
+  await archiveCatalogOption(
+    'measurement_units',
+    optionId,
+    'unit',
+    'Nao e possivel excluir: existem itens ativos usando essa unidade.',
+    'Unidade de medida nao encontrada.',
+  );
 }
 
 function toSafeNumber(value: number | null | undefined): number {
@@ -605,9 +1008,18 @@ export async function findItemByNormalizedName(
 export async function createStockItem(input: CreateStockItemInput): Promise<void> {
   const database = await getDatabase();
   const name = input.name.trim();
-  const unit = input.unit.trim();
+  const unit = normalizeCatalogName(input.unit);
+  const category = normalizeCatalogName(input.category);
   const timestamp = nowIsoString();
   const remoteId = createRemoteItemId();
+
+  if (unit.length === 0) {
+    throw new Error('Informe a unidade de medida.');
+  }
+
+  if (category.length === 0) {
+    throw new Error('Selecione uma categoria.');
+  }
 
   await database.runAsync(
     `
@@ -627,7 +1039,7 @@ export async function createStockItem(input: CreateStockItemInput): Promise<void
     name,
     unit,
     input.minQuantity,
-    input.category,
+    category,
     timestamp,
     timestamp,
   );
@@ -638,8 +1050,17 @@ export async function createStockItem(input: CreateStockItemInput): Promise<void
 export async function updateStockItem(itemId: number, input: UpdateStockItemInput): Promise<void> {
   const database = await getDatabase();
   const name = input.name.trim();
-  const unit = input.unit.trim();
+  const unit = normalizeCatalogName(input.unit);
+  const category = normalizeCatalogName(input.category);
   const timestamp = nowIsoString();
+
+  if (unit.length === 0) {
+    throw new Error('Informe a unidade de medida.');
+  }
+
+  if (category.length === 0) {
+    throw new Error('Selecione uma categoria.');
+  }
 
   const result = await database.runAsync(
     `
@@ -657,7 +1078,7 @@ export async function updateStockItem(itemId: number, input: UpdateStockItemInpu
     name,
     unit,
     input.minQuantity,
-    input.category,
+    category,
     timestamp,
     itemId,
   );

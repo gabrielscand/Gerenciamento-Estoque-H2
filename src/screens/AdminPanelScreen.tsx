@@ -6,6 +6,7 @@ import {
   Platform,
   Pressable,
   RefreshControl,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -19,6 +20,18 @@ import {
   listUsers,
   updateUser,
 } from '../database/auth.repository';
+import {
+  archiveItemCategory,
+  archiveMeasurementUnit,
+  createItemCategory,
+  createMeasurementUnit,
+  listItemCategoryOptions,
+  listMeasurementUnitOptions,
+  subscribeToCatalogOptionsChanged,
+  updateItemCategory,
+  updateMeasurementUnit,
+} from '../database/items.repository';
+import type { CatalogOption } from '../database/items.repository';
 import { SyncStatusCard } from '../components/SyncStatusCard';
 import { syncAppData } from '../database/sync.service';
 
@@ -36,7 +49,6 @@ type UserFormState = {
 };
 
 type FormErrors = Partial<Record<'username' | 'functionName' | 'password' | 'permissions' | 'submit', string>>;
-
 const TAB_PERMISSION_OPTIONS: Array<{ key: AppTabPermissionKey; label: string }> = [
   { key: 'dashboard', label: 'Dashboard' },
   { key: 'stock', label: 'Estoque' },
@@ -172,13 +184,26 @@ function PermissionSelector({ value, onToggle }: PermissionSelectorProps) {
 
 export function AdminPanelScreen({ currentUser, onUsersChanged }: AdminPanelScreenProps) {
   const [users, setUsers] = useState<AppUser[]>([]);
+  const [categories, setCategories] = useState<CatalogOption[]>([]);
+  const [units, setUnits] = useState<CatalogOption[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isCatalogSubmitting, setIsCatalogSubmitting] = useState(false);
+  const [editingCategoryId, setEditingCategoryId] = useState<number | null>(null);
+  const [editingCategoryName, setEditingCategoryName] = useState('');
+  const [editingUnitId, setEditingUnitId] = useState<number | null>(null);
+  const [editingUnitName, setEditingUnitName] = useState('');
+  const [isCategoriesEditorOpen, setIsCategoriesEditorOpen] = useState(false);
+  const [isUnitsEditorOpen, setIsUnitsEditorOpen] = useState(false);
   const [editingUserId, setEditingUserId] = useState<number | null>(null);
   const [createForm, setCreateForm] = useState<UserFormState>(INITIAL_CREATE_FORM);
   const [editForm, setEditForm] = useState<UserFormState>(INITIAL_CREATE_FORM);
+  const [newCategory, setNewCategory] = useState('');
+  const [newUnit, setNewUnit] = useState('');
   const [createErrors, setCreateErrors] = useState<FormErrors>({});
   const [editErrors, setEditErrors] = useState<FormErrors>({});
+  const [catalogError, setCatalogError] = useState('');
+  const [catalogSuccess, setCatalogSuccess] = useState('');
   const [feedbackMessage, setFeedbackMessage] = useState('');
 
   async function loadUsers(syncFirst: boolean = false) {
@@ -201,8 +226,36 @@ export function AdminPanelScreen({ currentUser, onUsersChanged }: AdminPanelScre
     }
   }
 
+  async function loadCatalog(syncFirst: boolean = false) {
+    try {
+      if (syncFirst) {
+        await syncAppData();
+      }
+
+      const [nextCategories, nextUnits] = await Promise.all([
+        listItemCategoryOptions(),
+        listMeasurementUnitOptions(),
+      ]);
+
+      setCategories(nextCategories);
+      setUnits(nextUnits);
+      setCatalogError('');
+    } catch (error) {
+      setCatalogError(
+        error instanceof Error ? error.message : 'Falha ao carregar categorias e unidades.',
+      );
+    }
+  }
+
   useEffect(() => {
     void loadUsers(true);
+    void loadCatalog(true);
+
+    const unsubscribe = subscribeToCatalogOptionsChanged(() => {
+      void loadCatalog();
+    });
+
+    return unsubscribe;
   }, []);
 
   function setCreateField<K extends keyof UserFormState>(key: K, value: UserFormState[K]) {
@@ -337,6 +390,200 @@ export function AdminPanelScreen({ currentUser, onUsersChanged }: AdminPanelScre
     }
   }
 
+  async function handleCreateCategory() {
+    if (newCategory.trim().length === 0) {
+      setCatalogError('Informe o nome da categoria.');
+      return;
+    }
+
+    setIsCatalogSubmitting(true);
+    setCatalogError('');
+    setCatalogSuccess('');
+
+    try {
+      await createItemCategory(newCategory);
+      setNewCategory('');
+      setCatalogSuccess('Categoria criada com sucesso.');
+      await loadCatalog();
+    } catch (error) {
+      setCatalogError(
+        error instanceof Error ? error.message : 'Falha ao criar categoria.',
+      );
+    } finally {
+      setIsCatalogSubmitting(false);
+    }
+  }
+
+  async function handleCreateUnit() {
+    if (newUnit.trim().length === 0) {
+      setCatalogError('Informe a unidade de medida.');
+      return;
+    }
+
+    setIsCatalogSubmitting(true);
+    setCatalogError('');
+    setCatalogSuccess('');
+
+    try {
+      await createMeasurementUnit(newUnit);
+      setNewUnit('');
+      setCatalogSuccess('Unidade criada com sucesso.');
+      await loadCatalog();
+    } catch (error) {
+      setCatalogError(
+        error instanceof Error ? error.message : 'Falha ao criar unidade.',
+      );
+    } finally {
+      setIsCatalogSubmitting(false);
+    }
+  }
+
+  function startEditingCategory(option: CatalogOption) {
+    setEditingCategoryId(option.id);
+    setEditingCategoryName(option.name);
+    setCatalogError('');
+    setCatalogSuccess('');
+  }
+
+  function cancelEditingCategory() {
+    setEditingCategoryId(null);
+    setEditingCategoryName('');
+  }
+
+  function startEditingUnit(option: CatalogOption) {
+    setEditingUnitId(option.id);
+    setEditingUnitName(option.name);
+    setCatalogError('');
+    setCatalogSuccess('');
+  }
+
+  function cancelEditingUnit() {
+    setEditingUnitId(null);
+    setEditingUnitName('');
+  }
+
+  function toggleCategoriesEditor() {
+    setIsCategoriesEditorOpen((prev) => {
+      const next = !prev;
+      if (!next) {
+        cancelEditingCategory();
+      }
+
+      return next;
+    });
+  }
+
+  function toggleUnitsEditor() {
+    setIsUnitsEditorOpen((prev) => {
+      const next = !prev;
+      if (!next) {
+        cancelEditingUnit();
+      }
+
+      return next;
+    });
+  }
+
+  async function handleUpdateCategory(optionId: number) {
+    if (editingCategoryName.trim().length === 0) {
+      setCatalogError('Informe o nome da categoria.');
+      return;
+    }
+
+    setIsCatalogSubmitting(true);
+    setCatalogError('');
+    setCatalogSuccess('');
+
+    try {
+      await updateItemCategory(optionId, editingCategoryName);
+      cancelEditingCategory();
+      setCatalogSuccess('Categoria atualizada com sucesso.');
+      await loadCatalog();
+    } catch (error) {
+      setCatalogError(
+        error instanceof Error ? error.message : 'Falha ao atualizar categoria.',
+      );
+    } finally {
+      setIsCatalogSubmitting(false);
+    }
+  }
+
+  async function handleUpdateUnit(optionId: number) {
+    if (editingUnitName.trim().length === 0) {
+      setCatalogError('Informe a unidade de medida.');
+      return;
+    }
+
+    setIsCatalogSubmitting(true);
+    setCatalogError('');
+    setCatalogSuccess('');
+
+    try {
+      await updateMeasurementUnit(optionId, editingUnitName);
+      cancelEditingUnit();
+      setCatalogSuccess('Unidade atualizada com sucesso.');
+      await loadCatalog();
+    } catch (error) {
+      setCatalogError(
+        error instanceof Error ? error.message : 'Falha ao atualizar unidade.',
+      );
+    } finally {
+      setIsCatalogSubmitting(false);
+    }
+  }
+
+  async function handleArchiveCategory(option: CatalogOption) {
+    const confirmed = await confirmAction(`Deseja excluir a categoria ${option.name}?`);
+    if (!confirmed) {
+      return;
+    }
+
+    setIsCatalogSubmitting(true);
+    setCatalogError('');
+    setCatalogSuccess('');
+
+    try {
+      await archiveItemCategory(option.id);
+      if (editingCategoryId === option.id) {
+        cancelEditingCategory();
+      }
+      setCatalogSuccess('Categoria excluida com sucesso.');
+      await loadCatalog();
+    } catch (error) {
+      setCatalogError(
+        error instanceof Error ? error.message : 'Falha ao excluir categoria.',
+      );
+    } finally {
+      setIsCatalogSubmitting(false);
+    }
+  }
+
+  async function handleArchiveUnit(option: CatalogOption) {
+    const confirmed = await confirmAction(`Deseja excluir a unidade ${option.name}?`);
+    if (!confirmed) {
+      return;
+    }
+
+    setIsCatalogSubmitting(true);
+    setCatalogError('');
+    setCatalogSuccess('');
+
+    try {
+      await archiveMeasurementUnit(option.id);
+      if (editingUnitId === option.id) {
+        cancelEditingUnit();
+      }
+      setCatalogSuccess('Unidade excluida com sucesso.');
+      await loadCatalog();
+    } catch (error) {
+      setCatalogError(
+        error instanceof Error ? error.message : 'Falha ao excluir unidade.',
+      );
+    } finally {
+      setIsCatalogSubmitting(false);
+    }
+  }
+
   const adminCount = useMemo(() => users.filter((user) => user.isAdmin).length, [users]);
 
   return (
@@ -349,6 +596,7 @@ export function AdminPanelScreen({ currentUser, onUsersChanged }: AdminPanelScre
             refreshing={isLoading}
             onRefresh={() => {
               void loadUsers(true);
+              void loadCatalog(true);
             }}
           />
         }
@@ -446,6 +694,214 @@ export function AdminPanelScreen({ currentUser, onUsersChanged }: AdminPanelScre
                   <Text style={styles.submitButtonText}>Criar usuario</Text>
                 )}
               </Pressable>
+            </View>
+
+            <View style={styles.formCard}>
+              <Text style={styles.formTitle}>Catalogo de itens</Text>
+              <Text style={styles.catalogHint}>
+                Crie novas categorias e unidades para aparecerem imediatamente na aba Itens.
+              </Text>
+
+              <View style={styles.fieldGroup}>
+                <Text style={styles.label}>Nova categoria</Text>
+                <TextInput
+                  value={newCategory}
+                  onChangeText={setNewCategory}
+                  placeholder="Ex.: padaria"
+                  style={styles.input}
+                />
+                <Pressable
+                  style={[styles.secondaryButton, isCatalogSubmitting ? styles.submitButtonDisabled : undefined]}
+                  disabled={isCatalogSubmitting}
+                  onPress={() => {
+                    void handleCreateCategory();
+                  }}
+                >
+                  {isCatalogSubmitting ? (
+                    <ActivityIndicator color="#5B21B6" />
+                  ) : (
+                    <Text style={styles.secondaryButtonText}>Criar categoria</Text>
+                  )}
+                </Pressable>
+              </View>
+
+              <View style={styles.fieldGroup}>
+                <Text style={styles.label}>Nova unidade de medida</Text>
+                <TextInput
+                  value={newUnit}
+                  onChangeText={setNewUnit}
+                  placeholder="Ex.: caixa"
+                  style={styles.input}
+                />
+                <Pressable
+                  style={[styles.secondaryButton, isCatalogSubmitting ? styles.submitButtonDisabled : undefined]}
+                  disabled={isCatalogSubmitting}
+                  onPress={() => {
+                    void handleCreateUnit();
+                  }}
+                >
+                  {isCatalogSubmitting ? (
+                    <ActivityIndicator color="#5B21B6" />
+                  ) : (
+                    <Text style={styles.secondaryButtonText}>Criar unidade</Text>
+                  )}
+                </Pressable>
+              </View>
+
+              {catalogError ? <Text style={styles.errorText}>{catalogError}</Text> : null}
+              {catalogSuccess ? <Text style={styles.successText}>{catalogSuccess}</Text> : null}
+
+              <View style={styles.catalogListSection}>
+                <Pressable style={styles.catalogEditorToggle} onPress={toggleCategoriesEditor}>
+                  <Text style={styles.catalogEditorToggleText}>
+                    Editar Categorias ({categories.length})
+                  </Text>
+                  <Text style={styles.catalogEditorToggleArrow}>
+                    {isCategoriesEditorOpen ? '▴' : '▾'}
+                  </Text>
+                </Pressable>
+
+                {isCategoriesEditorOpen ? (
+                  categories.length === 0 ? (
+                    <Text style={styles.catalogValuesText}>Nenhuma categoria cadastrada.</Text>
+                  ) : (
+                    <ScrollView
+                      style={styles.catalogEditorList}
+                      contentContainerStyle={styles.catalogEditorListContent}
+                      nestedScrollEnabled
+                    >
+                      {categories.map((option) =>
+                        editingCategoryId === option.id ? (
+                          <View key={`category-edit-${option.id}`} style={styles.catalogOptionEditCard}>
+                            <TextInput
+                              value={editingCategoryName}
+                              onChangeText={setEditingCategoryName}
+                              style={styles.catalogCompactInput}
+                              placeholder="Nome da categoria"
+                            />
+                            <View style={styles.catalogOptionActions}>
+                              <Pressable
+                                style={[styles.catalogActionButton, isCatalogSubmitting ? styles.submitButtonDisabled : undefined]}
+                                disabled={isCatalogSubmitting}
+                                onPress={() => {
+                                  void handleUpdateCategory(option.id);
+                                }}
+                              >
+                                <Text style={styles.catalogActionButtonText}>Salvar</Text>
+                              </Pressable>
+                              <Pressable
+                                style={styles.catalogCancelButton}
+                                disabled={isCatalogSubmitting}
+                                onPress={cancelEditingCategory}
+                              >
+                                <Text style={styles.catalogCancelButtonText}>Cancelar</Text>
+                              </Pressable>
+                            </View>
+                          </View>
+                        ) : (
+                          <View key={`category-${option.id}`} style={styles.catalogOptionRow}>
+                            <Text style={styles.catalogOptionName}>{option.name}</Text>
+                            <View style={styles.catalogOptionActions}>
+                              <Pressable
+                                style={styles.catalogActionButton}
+                                disabled={isCatalogSubmitting}
+                                onPress={() => startEditingCategory(option)}
+                              >
+                                <Text style={styles.catalogActionButtonText}>Editar</Text>
+                              </Pressable>
+                              <Pressable
+                                style={[styles.catalogActionButton, styles.catalogDeleteButton]}
+                                disabled={isCatalogSubmitting}
+                                onPress={() => {
+                                  void handleArchiveCategory(option);
+                                }}
+                              >
+                                <Text style={styles.catalogDeleteButtonText}>Excluir</Text>
+                              </Pressable>
+                            </View>
+                          </View>
+                        ),
+                      )}
+                    </ScrollView>
+                  )
+                ) : null}
+              </View>
+
+              <View style={styles.catalogListSection}>
+                <Pressable style={styles.catalogEditorToggle} onPress={toggleUnitsEditor}>
+                  <Text style={styles.catalogEditorToggleText}>
+                    Editar Unidades de Medidas ({units.length})
+                  </Text>
+                  <Text style={styles.catalogEditorToggleArrow}>
+                    {isUnitsEditorOpen ? '▴' : '▾'}
+                  </Text>
+                </Pressable>
+
+                {isUnitsEditorOpen ? (
+                  units.length === 0 ? (
+                    <Text style={styles.catalogValuesText}>Nenhuma unidade cadastrada.</Text>
+                  ) : (
+                    <ScrollView
+                      style={styles.catalogEditorList}
+                      contentContainerStyle={styles.catalogEditorListContent}
+                      nestedScrollEnabled
+                    >
+                      {units.map((option) =>
+                        editingUnitId === option.id ? (
+                          <View key={`unit-edit-${option.id}`} style={styles.catalogOptionEditCard}>
+                            <TextInput
+                              value={editingUnitName}
+                              onChangeText={setEditingUnitName}
+                              style={styles.catalogCompactInput}
+                              placeholder="Nome da unidade"
+                            />
+                            <View style={styles.catalogOptionActions}>
+                              <Pressable
+                                style={[styles.catalogActionButton, isCatalogSubmitting ? styles.submitButtonDisabled : undefined]}
+                                disabled={isCatalogSubmitting}
+                                onPress={() => {
+                                  void handleUpdateUnit(option.id);
+                                }}
+                              >
+                                <Text style={styles.catalogActionButtonText}>Salvar</Text>
+                              </Pressable>
+                              <Pressable
+                                style={styles.catalogCancelButton}
+                                disabled={isCatalogSubmitting}
+                                onPress={cancelEditingUnit}
+                              >
+                                <Text style={styles.catalogCancelButtonText}>Cancelar</Text>
+                              </Pressable>
+                            </View>
+                          </View>
+                        ) : (
+                          <View key={`unit-${option.id}`} style={styles.catalogOptionRow}>
+                            <Text style={styles.catalogOptionName}>{option.name}</Text>
+                            <View style={styles.catalogOptionActions}>
+                              <Pressable
+                                style={styles.catalogActionButton}
+                                disabled={isCatalogSubmitting}
+                                onPress={() => startEditingUnit(option)}
+                              >
+                                <Text style={styles.catalogActionButtonText}>Editar</Text>
+                              </Pressable>
+                              <Pressable
+                                style={[styles.catalogActionButton, styles.catalogDeleteButton]}
+                                disabled={isCatalogSubmitting}
+                                onPress={() => {
+                                  void handleArchiveUnit(option);
+                                }}
+                              >
+                                <Text style={styles.catalogDeleteButtonText}>Excluir</Text>
+                              </Pressable>
+                            </View>
+                          </View>
+                        ),
+                      )}
+                    </ScrollView>
+                  )
+                ) : null}
+              </View>
             </View>
 
             <Text style={styles.listTitle}>Usuarios cadastrados</Text>
@@ -642,6 +1098,11 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#4C1D95',
   },
+  catalogHint: {
+    color: '#6D28D9',
+    fontSize: 13,
+    lineHeight: 18,
+  },
   fieldGroup: {
     gap: 6,
   },
@@ -750,6 +1211,123 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     fontSize: 13,
     fontWeight: '600',
+  },
+  catalogListSection: {
+    gap: 6,
+  },
+  catalogValuesText: {
+    color: '#5B21B6',
+    fontSize: 12,
+    lineHeight: 16,
+    paddingHorizontal: 2,
+  },
+  catalogEditorToggle: {
+    borderWidth: 1,
+    borderColor: '#C4B5FD',
+    borderRadius: 10,
+    backgroundColor: '#F5F3FF',
+    minHeight: 38,
+    paddingHorizontal: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  catalogEditorToggleText: {
+    flex: 1,
+    color: '#5B21B6',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  catalogEditorToggleArrow: {
+    color: '#6D28D9',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  catalogEditorList: {
+    maxHeight: 200,
+  },
+  catalogEditorListContent: {
+    gap: 6,
+  },
+  catalogOptionRow: {
+    borderWidth: 1,
+    borderColor: '#DDD6FE',
+    borderRadius: 10,
+    backgroundColor: '#FAF5FF',
+    paddingHorizontal: 8,
+    paddingVertical: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 6,
+  },
+  catalogOptionEditCard: {
+    borderWidth: 1,
+    borderColor: '#DDD6FE',
+    borderRadius: 10,
+    backgroundColor: '#FFFFFF',
+    padding: 8,
+    gap: 6,
+  },
+  catalogCompactInput: {
+    borderWidth: 1,
+    borderColor: '#C4B5FD',
+    backgroundColor: '#FAF5FF',
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    color: '#3B0764',
+    fontSize: 13,
+  },
+  catalogOptionName: {
+    flex: 1,
+    color: '#3B0764',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  catalogOptionActions: {
+    flexDirection: 'row',
+    gap: 6,
+  },
+  catalogActionButton: {
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#C4B5FD',
+    backgroundColor: '#EDE9FE',
+    minHeight: 30,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 10,
+  },
+  catalogActionButtonText: {
+    color: '#5B21B6',
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  catalogDeleteButton: {
+    borderColor: '#FCA5A5',
+    backgroundColor: '#FEE2E2',
+  },
+  catalogDeleteButtonText: {
+    color: '#B91C1C',
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  catalogCancelButton: {
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#C4B5FD',
+    backgroundColor: '#F5F3FF',
+    minHeight: 30,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 10,
+  },
+  catalogCancelButtonText: {
+    color: '#5B21B6',
+    fontSize: 11,
+    fontWeight: '700',
   },
   errorText: {
     color: '#B91C1C',

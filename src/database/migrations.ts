@@ -1,6 +1,7 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
+import { DEFAULT_MEASUREMENT_UNITS, DEFAULT_STOCK_CATEGORIES, normalizeCatalogName } from '../constants/categories';
 
-const SCHEMA_VERSION = 9;
+const SCHEMA_VERSION = 10;
 
 async function applySchemaV1(db: SQLiteDatabase): Promise<void> {
   await db.execAsync(`
@@ -435,6 +436,170 @@ async function applySchemaV9(db: SQLiteDatabase): Promise<void> {
   );
 }
 
+function createCatalogRemoteId(prefix: 'cat' | 'unit'): string {
+  return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+async function applySchemaV10(db: SQLiteDatabase): Promise<void> {
+  await db.execAsync(`
+    CREATE TABLE IF NOT EXISTS item_categories (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      remote_id TEXT,
+      sync_status TEXT NOT NULL DEFAULT 'pending',
+      name TEXT NOT NULL CHECK(length(trim(name)) > 0),
+      name_normalized TEXT NOT NULL CHECK(length(trim(name_normalized)) > 0),
+      is_deleted INTEGER NOT NULL DEFAULT 0,
+      deleted_at TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+  `);
+
+  await db.execAsync(`
+    CREATE TABLE IF NOT EXISTS measurement_units (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      remote_id TEXT,
+      sync_status TEXT NOT NULL DEFAULT 'pending',
+      name TEXT NOT NULL CHECK(length(trim(name)) > 0),
+      name_normalized TEXT NOT NULL CHECK(length(trim(name_normalized)) > 0),
+      is_deleted INTEGER NOT NULL DEFAULT 0,
+      deleted_at TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+  `);
+
+  await db.execAsync(
+    'CREATE UNIQUE INDEX IF NOT EXISTS idx_item_categories_remote_id ON item_categories(remote_id);',
+  );
+  await db.execAsync(
+    'CREATE UNIQUE INDEX IF NOT EXISTS idx_measurement_units_remote_id ON measurement_units(remote_id);',
+  );
+  await db.execAsync(
+    'CREATE UNIQUE INDEX IF NOT EXISTS idx_item_categories_name_normalized_active ON item_categories(name_normalized) WHERE is_deleted = 0;',
+  );
+  await db.execAsync(
+    'CREATE UNIQUE INDEX IF NOT EXISTS idx_measurement_units_name_normalized_active ON measurement_units(name_normalized) WHERE is_deleted = 0;',
+  );
+  await db.execAsync(
+    'CREATE INDEX IF NOT EXISTS idx_item_categories_is_deleted ON item_categories(is_deleted);',
+  );
+  await db.execAsync(
+    'CREATE INDEX IF NOT EXISTS idx_measurement_units_is_deleted ON measurement_units(is_deleted);',
+  );
+
+  await db.execAsync(`
+    DROP TRIGGER IF EXISTS trg_item_categories_updated_at;
+  `);
+  await db.execAsync(`
+    CREATE TRIGGER IF NOT EXISTS trg_item_categories_updated_at
+    AFTER UPDATE ON item_categories
+    FOR EACH ROW
+    WHEN NEW.updated_at = OLD.updated_at
+    BEGIN
+      UPDATE item_categories
+      SET updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+      WHERE id = OLD.id;
+    END;
+  `);
+
+  await db.execAsync(`
+    DROP TRIGGER IF EXISTS trg_measurement_units_updated_at;
+  `);
+  await db.execAsync(`
+    CREATE TRIGGER IF NOT EXISTS trg_measurement_units_updated_at
+    AFTER UPDATE ON measurement_units
+    FOR EACH ROW
+    WHEN NEW.updated_at = OLD.updated_at
+    BEGIN
+      UPDATE measurement_units
+      SET updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+      WHERE id = OLD.id;
+    END;
+  `);
+
+  const timestamp = new Date().toISOString();
+  const existingCategories = await db.getAllAsync<{ category: string | null }>(
+    `
+      SELECT DISTINCT category
+      FROM stock_items
+      WHERE category IS NOT NULL
+        AND TRIM(category) <> '';
+    `,
+  );
+  const existingUnits = await db.getAllAsync<{ unit: string }>(
+    `
+      SELECT DISTINCT unit
+      FROM stock_items
+      WHERE TRIM(unit) <> '';
+    `,
+  );
+
+  const categoriesToSeed = new Set<string>(DEFAULT_STOCK_CATEGORIES);
+  for (const row of existingCategories) {
+    if (!row.category) {
+      continue;
+    }
+
+    const normalized = normalizeCatalogName(row.category);
+    if (normalized.length > 0) {
+      categoriesToSeed.add(normalized);
+    }
+  }
+
+  const unitsToSeed = new Set<string>(DEFAULT_MEASUREMENT_UNITS);
+  for (const row of existingUnits) {
+    const normalized = normalizeCatalogName(row.unit);
+    if (normalized.length > 0) {
+      unitsToSeed.add(normalized);
+    }
+  }
+
+  for (const name of categoriesToSeed) {
+    const normalized = normalizeCatalogName(name);
+    await db.runAsync(
+      `
+        INSERT OR IGNORE INTO item_categories (
+          remote_id,
+          sync_status,
+          name,
+          name_normalized,
+          created_at,
+          updated_at
+        )
+        VALUES (?, 'pending', ?, ?, ?, ?);
+      `,
+      createCatalogRemoteId('cat'),
+      normalized,
+      normalized,
+      timestamp,
+      timestamp,
+    );
+  }
+
+  for (const name of unitsToSeed) {
+    const normalized = normalizeCatalogName(name);
+    await db.runAsync(
+      `
+        INSERT OR IGNORE INTO measurement_units (
+          remote_id,
+          sync_status,
+          name,
+          name_normalized,
+          created_at,
+          updated_at
+        )
+        VALUES (?, 'pending', ?, ?, ?, ?);
+      `,
+      createCatalogRemoteId('unit'),
+      normalized,
+      normalized,
+      timestamp,
+      timestamp,
+    );
+  }
+}
+
 export async function applyMigrations(db: SQLiteDatabase): Promise<void> {
   const row = await db.getFirstAsync<{ user_version: number }>('PRAGMA user_version;');
   const currentVersion = row?.user_version ?? 0;
@@ -478,6 +643,10 @@ export async function applyMigrations(db: SQLiteDatabase): Promise<void> {
 
     if (currentVersion < 9) {
       await applySchemaV9(db);
+    }
+
+    if (currentVersion < 10) {
+      await applySchemaV10(db);
     }
 
     await db.execAsync(`PRAGMA user_version = ${SCHEMA_VERSION};`);

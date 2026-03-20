@@ -4,10 +4,27 @@ create table if not exists public.stock_items (
   unit text not null check (char_length(trim(unit)) > 0),
   min_quantity double precision not null check (min_quantity >= 0),
   current_stock_quantity double precision check (current_stock_quantity is null or current_stock_quantity >= 0),
-  category text check (
-    category is null
-    or category in ('mercearia', 'bebidas', 'bomboniere', 'material limpeza', 'material descartavel')
-  ),
+  category text,
+  is_deleted boolean not null default false,
+  deleted_at timestamptz,
+  created_at timestamptz not null default timezone('utc', now()),
+  updated_at timestamptz not null default timezone('utc', now())
+);
+
+create table if not exists public.item_categories (
+  id text primary key,
+  name text not null check (char_length(trim(name)) > 0),
+  name_normalized text not null check (char_length(trim(name_normalized)) > 0),
+  is_deleted boolean not null default false,
+  deleted_at timestamptz,
+  created_at timestamptz not null default timezone('utc', now()),
+  updated_at timestamptz not null default timezone('utc', now())
+);
+
+create table if not exists public.measurement_units (
+  id text primary key,
+  name text not null check (char_length(trim(name)) > 0),
+  name_normalized text not null check (char_length(trim(name_normalized)) > 0),
   is_deleted boolean not null default false,
   deleted_at timestamptz,
   created_at timestamptz not null default timezone('utc', now()),
@@ -70,6 +87,20 @@ create index if not exists idx_stock_items_is_deleted
 create index if not exists idx_stock_items_category
   on public.stock_items (category);
 
+create index if not exists idx_item_categories_is_deleted
+  on public.item_categories (is_deleted);
+
+create index if not exists idx_measurement_units_is_deleted
+  on public.measurement_units (is_deleted);
+
+create unique index if not exists idx_item_categories_name_normalized_active
+  on public.item_categories (name_normalized)
+  where is_deleted = false;
+
+create unique index if not exists idx_measurement_units_name_normalized_active
+  on public.measurement_units (name_normalized)
+  where is_deleted = false;
+
 create index if not exists idx_app_users_is_deleted
   on public.app_users (is_deleted);
 
@@ -88,6 +119,24 @@ alter table public.stock_items
 
 alter table public.stock_items
   add column if not exists current_stock_quantity double precision;
+
+alter table public.item_categories
+  add column if not exists name_normalized text;
+
+alter table public.item_categories
+  add column if not exists is_deleted boolean not null default false;
+
+alter table public.item_categories
+  add column if not exists deleted_at timestamptz;
+
+alter table public.measurement_units
+  add column if not exists name_normalized text;
+
+alter table public.measurement_units
+  add column if not exists is_deleted boolean not null default false;
+
+alter table public.measurement_units
+  add column if not exists deleted_at timestamptz;
 
 alter table public.app_users
   add column if not exists username_normalized text;
@@ -160,6 +209,20 @@ begin
 end
 $$;
 
+do $$
+begin
+  if exists (
+    select 1
+    from pg_constraint
+    where conname = 'stock_items_category_check'
+      and conrelid = 'public.stock_items'::regclass
+  ) then
+    alter table public.stock_items
+      drop constraint stock_items_category_check;
+  end if;
+end
+$$;
+
 alter table public.daily_stock_entries
   drop constraint if exists daily_stock_entries_movement_type_check;
 
@@ -213,6 +276,80 @@ before update on public.daily_stock_entries
 for each row
 execute function public.set_updated_at();
 
+drop trigger if exists trg_item_categories_updated_at on public.item_categories;
+create trigger trg_item_categories_updated_at
+before update on public.item_categories
+for each row
+execute function public.set_updated_at();
+
+drop trigger if exists trg_measurement_units_updated_at on public.measurement_units;
+create trigger trg_measurement_units_updated_at
+before update on public.measurement_units
+for each row
+execute function public.set_updated_at();
+
+insert into public.item_categories (id, name, name_normalized, is_deleted)
+values
+  ('seed-cat-mercearia', 'mercearia', 'mercearia', false),
+  ('seed-cat-bebidas', 'bebidas', 'bebidas', false),
+  ('seed-cat-bomboniere', 'bomboniere', 'bomboniere', false),
+  ('seed-cat-material-limpeza', 'material limpeza', 'material limpeza', false),
+  ('seed-cat-material-descartavel', 'material descartavel', 'material descartavel', false)
+on conflict (id) do nothing;
+
+insert into public.measurement_units (id, name, name_normalized, is_deleted)
+values
+  ('seed-unit-un', 'un', 'un', false),
+  ('seed-unit-kg', 'kg', 'kg', false),
+  ('seed-unit-caixa', 'caixa', 'caixa', false),
+  ('seed-unit-pacote', 'pacote', 'pacote', false),
+  ('seed-unit-gf', 'gf', 'gf', false),
+  ('seed-unit-duzia', 'duzia', 'duzia', false),
+  ('seed-unit-mz', 'mz', 'mz', false)
+on conflict (id) do nothing;
+
+insert into public.item_categories (id, name, name_normalized, is_deleted)
+select
+  'backfill-cat-' || md5(lower(trim(source.category))) as id,
+  lower(trim(source.category)) as name,
+  lower(trim(source.category)) as name_normalized,
+  false
+from (
+  select distinct category
+  from public.stock_items
+  where category is not null
+    and char_length(trim(category)) > 0
+) as source
+where not exists (
+  select 1
+  from public.item_categories ic
+  where ic.is_deleted = false
+    and ic.name_normalized = lower(trim(source.category))
+)
+on conflict (id) do nothing;
+
+insert into public.measurement_units (id, name, name_normalized, is_deleted)
+select
+  'backfill-unit-' || md5(lower(trim(source.unit))) as id,
+  lower(trim(source.unit)) as name,
+  lower(trim(source.unit)) as name_normalized,
+  false
+from (
+  select distinct unit
+  from public.stock_items
+  where unit is not null
+    and char_length(trim(unit)) > 0
+) as source
+where not exists (
+  select 1
+  from public.measurement_units mu
+  where mu.is_deleted = false
+    and mu.name_normalized = lower(trim(source.unit))
+)
+on conflict (id) do nothing;
+
 alter table public.stock_items disable row level security;
 alter table public.app_users disable row level security;
 alter table public.daily_stock_entries disable row level security;
+alter table public.item_categories disable row level security;
+alter table public.measurement_units disable row level security;

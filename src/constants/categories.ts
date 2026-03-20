@@ -1,4 +1,4 @@
-export const STOCK_CATEGORIES = [
+export const DEFAULT_STOCK_CATEGORIES = [
   'mercearia',
   'bebidas',
   'bomboniere',
@@ -6,20 +6,28 @@ export const STOCK_CATEGORIES = [
   'material descartavel',
 ] as const;
 
-export type StockCategory = (typeof STOCK_CATEGORIES)[number];
+export const DEFAULT_MEASUREMENT_UNITS = [
+  'un',
+  'kg',
+  'caixa',
+  'pacote',
+  'gf',
+  'duzia',
+  'mz',
+] as const;
 
-const CATEGORY_LABELS: Record<StockCategory, string> = {
-  mercearia: 'Mercearia',
-  bebidas: 'Bebidas',
-  bomboniere: 'Bomboniere',
-  'material limpeza': 'Material limpeza',
-  'material descartavel': 'Material descartavel',
-};
-
-export function getCategoryLabel(category: StockCategory): string {
-  return CATEGORY_LABELS[category];
+export function normalizeCatalogName(value: string): string {
+  return value
+    .trim()
+    .toLocaleLowerCase()
+    .replace(/\s+/g, ' ');
 }
 
-export function isStockCategory(value: string): value is StockCategory {
-  return (STOCK_CATEGORIES as readonly string[]).includes(value);
+export function getCategoryLabel(category: string): string {
+  return category
+    .trim()
+    .split(/\s+/)
+    .filter((part) => part.length > 0)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ');
 }
