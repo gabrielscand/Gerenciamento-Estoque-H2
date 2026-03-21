@@ -6,6 +6,7 @@ import { listStockCurrentOverview } from '../database/items.repository';
 import { syncAppData } from '../database/sync.service';
 import { SyncStatusCard } from '../components/SyncStatusCard';
 import { StockEmphasis } from '../components/StockEmphasis';
+import { useTopPopup } from '../components/TopPopupProvider';
 import type { StockCurrentOverviewRow } from '../types/inventory';
 
 function formatQuantity(value: number): string {
@@ -18,12 +19,11 @@ function formatQuantity(value: number): string {
 export function StockScreen() {
   const [items, setItems] = useState<StockCurrentOverviewRow[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [errorMessage, setErrorMessage] = useState('');
   const isFocused = useIsFocused();
+  const { showTopPopup } = useTopPopup();
 
   async function loadStock(syncFirst: boolean = false) {
     setIsLoading(true);
-    setErrorMessage('');
 
     try {
       if (syncFirst) {
@@ -33,7 +33,10 @@ export function StockScreen() {
       const data = await listStockCurrentOverview();
       setItems(data);
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : 'Falha ao carregar estoque atual.');
+      showTopPopup({
+        type: 'error',
+        message: error instanceof Error ? error.message : 'Falha ao carregar estoque atual.',
+      });
     } finally {
       setIsLoading(false);
     }
@@ -99,8 +102,6 @@ export function StockScreen() {
                 {summary.needPurchaseItems} | Faltante total: {formatQuantity(summary.totalMissingQuantity)}
               </Text>
             </View>
-
-            {errorMessage ? <Text style={styles.errorText}>{errorMessage}</Text> : null}
           </View>
         }
         ListEmptyComponent={

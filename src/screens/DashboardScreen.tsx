@@ -13,6 +13,7 @@ import {
 } from 'react-native';
 import { BarChart, LineChart } from 'react-native-chart-kit';
 import { SyncStatusCard } from '../components/SyncStatusCard';
+import { useTopPopup } from '../components/TopPopupProvider';
 import { getDashboardAnalytics } from '../database/items.repository';
 import { syncAppData } from '../database/sync.service';
 import type {
@@ -188,6 +189,7 @@ export function DashboardScreen() {
   const isFocused = useIsFocused();
   const { width } = useWindowDimensions();
   const chartWidth = Math.max(280, width - 56);
+  const { showTopPopup } = useTopPopup();
 
   async function loadDashboard(month: string, syncFirst: boolean = false) {
     setIsLoading(true);
@@ -219,6 +221,18 @@ export function DashboardScreen() {
   useEffect(() => {
     setMonthInputValue(formatMonthLabel(selectedMonth));
   }, [selectedMonth]);
+
+  useEffect(() => {
+    if (!errorMessage) {
+      return;
+    }
+
+    showTopPopup({
+      type: 'error',
+      message: errorMessage,
+      durationMs: 4200,
+    });
+  }, [errorMessage, showTopPopup]);
 
   function handleMonthInputChange(nextValue: string) {
     setMonthInputValue(nextValue);
@@ -419,8 +433,6 @@ export function DashboardScreen() {
             </Pressable>
           </View>
         </View>
-
-        {errorMessage ? <Text style={styles.errorText}>{errorMessage}</Text> : null}
 
         {isLoading ? <Text style={styles.emptyText}>Carregando dashboard...</Text> : null}
 

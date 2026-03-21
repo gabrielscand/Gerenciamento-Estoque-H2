@@ -10,6 +10,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { login } from '../database/auth.repository';
+import { useTopPopup } from '../components/TopPopupProvider';
 import type { AppUser } from '../types/inventory';
 
 type LoginScreenProps = {
@@ -20,15 +21,14 @@ export function LoginScreen({ onLoginSuccess }: LoginScreenProps) {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [isPasswordVisible, setIsPasswordVisible] = useState(false);
-  const [errorMessage, setErrorMessage] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const { showTopPopup } = useTopPopup();
 
   async function handleSubmit() {
     if (isSubmitting) {
       return;
     }
 
-    setErrorMessage('');
     setIsSubmitting(true);
 
     try {
@@ -36,7 +36,10 @@ export function LoginScreen({ onLoginSuccess }: LoginScreenProps) {
       setPassword('');
       onLoginSuccess(user);
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : 'Falha ao entrar.');
+      showTopPopup({
+        type: 'error',
+        message: error instanceof Error ? error.message : 'Falha ao entrar.',
+      });
     } finally {
       setIsSubmitting(false);
     }
@@ -101,8 +104,6 @@ export function LoginScreen({ onLoginSuccess }: LoginScreenProps) {
             </Pressable>
           </View>
         </View>
-
-        {errorMessage ? <Text style={styles.errorText}>{errorMessage}</Text> : null}
 
         <Pressable
           style={[styles.submitButton, isSubmitting ? styles.submitButtonDisabled : undefined]}

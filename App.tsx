@@ -10,6 +10,7 @@ import {
 import { refreshSyncStateFromDatabase, syncAppData } from './src/database/sync.service';
 import { Tabs } from './src/navigation/Tabs';
 import { LoginScreen } from './src/screens/LoginScreen';
+import { TopPopupProvider } from './src/components/TopPopupProvider';
 import type { AppUser } from './src/types/inventory';
 
 type InitStatus = 'loading' | 'ready' | 'error';
@@ -81,21 +82,25 @@ export default function App() {
 
   if (initStatus === 'loading') {
     return (
-      <View style={styles.centeredContainer}>
-        <StatusBar style="dark" />
-        <ActivityIndicator size="large" />
-        <Text style={styles.infoText}>Inicializando banco local...</Text>
-      </View>
+      <TopPopupProvider>
+        <View style={styles.centeredContainer}>
+          <StatusBar style="dark" />
+          <ActivityIndicator size="large" />
+          <Text style={styles.infoText}>Inicializando banco local...</Text>
+        </View>
+      </TopPopupProvider>
     );
   }
 
   if (initStatus === 'error') {
     return (
-      <View style={styles.centeredContainer}>
-        <StatusBar style="dark" />
-        <Text style={styles.errorTitle}>Falha ao iniciar o aplicativo</Text>
-        <Text style={styles.errorMessage}>{errorMessage}</Text>
-      </View>
+      <TopPopupProvider>
+        <View style={styles.centeredContainer}>
+          <StatusBar style="dark" />
+          <Text style={styles.errorTitle}>Falha ao iniciar o aplicativo</Text>
+          <Text style={styles.errorMessage}>{errorMessage}</Text>
+        </View>
+      </TopPopupProvider>
     );
   }
 
@@ -111,26 +116,26 @@ export default function App() {
 
   if (!sessionUser) {
     return (
-      <>
+      <TopPopupProvider>
         <StatusBar style="dark" />
         <LoginScreen
           onLoginSuccess={(user) => {
             setSessionUser(user);
           }}
         />
-      </>
+      </TopPopupProvider>
     );
   }
 
   return (
-    <>
+    <TopPopupProvider>
       <StatusBar style="dark" />
       <Tabs
         currentUser={sessionUser}
         onLogout={handleLogout}
         onUsersChanged={refreshSessionUser}
       />
-    </>
+    </TopPopupProvider>
   );
 }
 

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useIsFocused } from '@react-navigation/native';
 import {
   ActivityIndicator,
   Alert,
@@ -20,6 +21,7 @@ import {
 import { syncAppData } from '../database/sync.service';
 import { SyncStatusCard } from '../components/SyncStatusCard';
 import { StockEmphasis } from '../components/StockEmphasis';
+import { useTopPopup } from '../components/TopPopupProvider';
 import type { DailyCountUpdateInput, StockMovementItem } from '../types/inventory';
 import {
   formatDateLabel,
@@ -33,7 +35,6 @@ type MovementMode = 'entry' | 'exit';
 type QuantityFormMap = Record<string, string>;
 type QuantityErrorMap = Record<string, string>;
 
-const TOAST_DURATION_MS = 2800;
 const FILTER_ALL = '__all__';
 const FILTER_UNCATEGORIZED = '__uncategorized__';
 const MAX_AUTOCOMPLETE_SUGGESTIONS = 6;
@@ -169,6 +170,7 @@ export function ExitScreen() {
 }
 
 function StockMovementScreen({ mode }: { mode: MovementMode }) {
+  const isFocused = useIsFocused();
   const [selectedDate, setSelectedDate] = useState(getTodayLocalDateString());
   const [selectedDateError, setSelectedDateError] = useState('');
   const [items, setItems] = useState<StockMovementItem[]>([]);
@@ -180,35 +182,12 @@ function StockMovementScreen({ mode }: { mode: MovementMode }) {
   const [fieldErrors, setFieldErrors] = useState<QuantityErrorMap>({});
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
-  const [submitError, setSubmitError] = useState('');
-  const [toastMessage, setToastMessage] = useState('');
-  const [isToastVisible, setIsToastVisible] = useState(false);
-  const toastTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const skipNextDateModeLoadRef = useRef(false);
   const heroText = getHeroText(mode);
-
-  function clearToastTimer() {
-    if (!toastTimeoutRef.current) {
-      return;
-    }
-
-    clearTimeout(toastTimeoutRef.current);
-    toastTimeoutRef.current = null;
-  }
-
-  function showSuccessToast(message: string) {
-    clearToastTimer();
-    setToastMessage(message);
-    setIsToastVisible(true);
-
-    toastTimeoutRef.current = setTimeout(() => {
-      setIsToastVisible(false);
-      toastTimeoutRef.current = null;
-    }, TOAST_DURATION_MS);
-  }
+  const { showTopPopup } = useTopPopup();
 
   async function loadMovementItems(date: string, syncFirst: boolean = false) {
     setIsLoading(true);
-    setSubmitError('');
 
     if (!isValidDateString(date)) {
       setItems([]);
@@ -236,21 +215,37 @@ function StockMovementScreen({ mode }: { mode: MovementMode }) {
       setQuantities(nextQuantities);
       setFieldErrors({});
     } catch (error) {
-      setSubmitError(error instanceof Error ? error.message : 'Falha ao carregar movimentacoes.');
+      showTopPopup({
+        type: 'error',
+        message: error instanceof Error ? error.message : 'Falha ao carregar movimentacoes.',
+        durationMs: 4200,
+      });
     } finally {
       setIsLoading(false);
     }
   }
 
   useEffect(() => {
+    if (!isFocused) {
+      return;
+    }
+
+    skipNextDateModeLoadRef.current = true;
     void loadMovementItems(selectedDate);
-  }, [selectedDate, mode]);
+  }, [isFocused]);
 
   useEffect(() => {
-    return () => {
-      clearToastTimer();
-    };
-  }, []);
+    if (!isFocused) {
+      return;
+    }
+
+    if (skipNextDateModeLoadRef.current) {
+      skipNextDateModeLoadRef.current = false;
+      return;
+    }
+
+    void loadMovementItems(selectedDate);
+  }, [selectedDate, mode, isFocused]);
 
   const modeVisibleItems = useMemo(() => {
     if (mode === 'entry') {
@@ -287,6 +282,16 @@ function StockMovementScreen({ mode }: { mode: MovementMode }) {
       left.localeCompare(right, 'pt-BR', { sensitivity: 'base' }),
     );
   }, [modeVisibleItems]);
+
+  useEffect(() => {
+    if (categoryFilter === FILTER_ALL || categoryFilter === FILTER_UNCATEGORIZED) {
+      return;
+    }
+
+    if (!availableCategories.includes(categoryFilter)) {
+      setCategoryFilter(FILTER_ALL);
+    }
+  }, [availableCategories, categoryFilter]);
 
   const normalizedSearchQuery = useMemo(() => normalizeSearchValue(searchQuery), [searchQuery]);
 
@@ -374,18 +379,15 @@ function StockMovementScreen({ mode }: { mode: MovementMode }) {
     setSelectedDate(value.trim());
     setIsCategoryFilterOpen(false);
     setSelectedDateError('');
-    setSubmitError('');
   }
 
   function setSearchValue(value: string) {
     setSearchQuery(value);
-    setSubmitError('');
   }
 
   function setQuantity(itemId: number, value: string) {
     setQuantities((prev) => ({ ...prev, [String(itemId)]: value }));
     setFieldErrors((prev) => ({ ...prev, [String(itemId)]: '' }));
-    setSubmitError('');
   }
 
   async function confirmFutureDateSave(): Promise<boolean> {
@@ -470,7 +472,11 @@ function StockMovementScreen({ mode }: { mode: MovementMode }) {
     }
 
     if (updates.length === 0) {
-      setSubmitError('Preencha ao menos um item visivel no filtro para salvar.');
+      showTopPopup({
+        type: 'warning',
+        message: 'Preencha ao menos um item visivel no filtro para salvar.',
+        durationMs: 3800,
+      });
       return;
     }
 
@@ -483,7 +489,6 @@ function StockMovementScreen({ mode }: { mode: MovementMode }) {
     }
 
     setIsSaving(true);
-    setSubmitError('');
 
     try {
       if (mode === 'entry') {
@@ -492,10 +497,18 @@ function StockMovementScreen({ mode }: { mode: MovementMode }) {
         await saveStockExits(updates, selectedDate);
       }
 
-      showSuccessToast(`${heroText.title} de ${formatDateLabel(selectedDate)} salva com sucesso.`);
+      showTopPopup({
+        type: 'success',
+        message: `${heroText.title} de ${formatDateLabel(selectedDate)} salva com sucesso.`,
+        durationMs: 3000,
+      });
       await loadMovementItems(selectedDate);
     } catch (error) {
-      setSubmitError(error instanceof Error ? error.message : 'Nao foi possivel salvar movimentacao.');
+      showTopPopup({
+        type: 'error',
+        message: error instanceof Error ? error.message : 'Nao foi possivel salvar movimentacao.',
+        durationMs: 4200,
+      });
     } finally {
       setIsSaving(false);
     }
@@ -503,12 +516,6 @@ function StockMovementScreen({ mode }: { mode: MovementMode }) {
 
   return (
     <View style={styles.container}>
-      {isToastVisible ? (
-        <View style={styles.toastContainer}>
-          <Text style={styles.toastText}>{toastMessage}</Text>
-        </View>
-      ) : null}
-
       <FlatList
         data={filteredItems}
         keyExtractor={(item) => String(item.id)}
@@ -556,7 +563,6 @@ function StockMovementScreen({ mode }: { mode: MovementMode }) {
                 options={availableCategories}
                 onChange={(nextValue) => {
                   setCategoryFilter(nextValue);
-                  setSubmitError('');
                 }}
                 isOpen={isCategoryFilterOpen}
                 onToggle={() => setIsCategoryFilterOpen((prev) => !prev)}
@@ -619,8 +625,6 @@ function StockMovementScreen({ mode }: { mode: MovementMode }) {
                 )}
               </Pressable>
             ) : null}
-
-            {submitError ? <Text style={styles.errorText}>{submitError}</Text> : null}
 
             <Text style={styles.listTitle}>Itens para movimentar ({filteredItems.length})</Text>
           </View>

@@ -14,6 +14,7 @@ import {
 } from 'react-native';
 import {
   archiveDailyHistoryDate,
+  archiveDailyHistoryDateByMovement,
   archiveDailyHistoryEntry,
   listDailyHistoryGrouped,
   listFortnightlyHistoryGrouped,
@@ -23,6 +24,7 @@ import {
 import { syncAppData } from '../database/sync.service';
 import { SyncStatusCard } from '../components/SyncStatusCard';
 import { StockEmphasis } from '../components/StockEmphasis';
+import { useTopPopup } from '../components/TopPopupProvider';
 import type { DailyHistoryEntry, DailyHistoryGroup, PeriodHistoryGroup } from '../types/inventory';
 import {
   formatDateLabel,
@@ -127,6 +129,7 @@ export function HistoryScreen({ canManageHistoryActions = false }: HistoryScreen
   const [fallbackPromptValue, setFallbackPromptValue] = useState('');
   const fallbackPromptResolverRef = useRef<((value: string | null) => void) | null>(null);
   const skipNextModeMonthLoadRef = useRef(false);
+  const { showTopPopup } = useTopPopup();
 
   const isDailyMode = mode === 'diario';
 
@@ -199,6 +202,30 @@ export function HistoryScreen({ canManageHistoryActions = false }: HistoryScreen
     setExpandedPeriodDays({});
     setPeriodDayFilters({});
   }, [mode, selectedMonth]);
+
+  useEffect(() => {
+    if (!successMessage) {
+      return;
+    }
+
+    showTopPopup({
+      type: 'success',
+      message: successMessage,
+      durationMs: 3000,
+    });
+  }, [showTopPopup, successMessage]);
+
+  useEffect(() => {
+    if (!errorMessage) {
+      return;
+    }
+
+    showTopPopup({
+      type: 'error',
+      message: errorMessage,
+      durationMs: 4200,
+    });
+  }, [errorMessage, showTopPopup]);
 
   function selectMode(nextMode: HistoryMode) {
     setMode(nextMode);
@@ -444,6 +471,40 @@ export function HistoryScreen({ canManageHistoryActions = false }: HistoryScreen
     }
   }
 
+  async function handleArchiveDateByMovement(date: string, movementFilter: DailyMovementFilter) {
+    if (!canManageHistoryActions) {
+      return;
+    }
+
+    setErrorMessage('');
+    setSuccessMessage('');
+
+    const movementLabel = getDailyMovementFilterLabel(movementFilter);
+    const confirmed = await confirmAction(
+      `Excluir movimentacoes de ${movementLabel}`,
+      `Deseja excluir apenas as movimentacoes de ${movementLabel} em ${formatDateLabel(date)}?`,
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    setActiveActionKey(`delete-date-movement-${date}-${movementFilter}`);
+
+    try {
+      await archiveDailyHistoryDateByMovement(date, movementFilter);
+      setSuccessMessage(`Movimentacoes de ${movementLabel} excluidas de ${formatDateLabel(date)}.`);
+      await loadHistory('diario', selectedMonth, true);
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : `Falha ao excluir movimentacoes de ${movementLabel}.`;
+      await loadHistory('diario', selectedMonth);
+      setErrorMessage(message);
+    } finally {
+      setActiveActionKey(null);
+    }
+  }
+
   const heroText = useMemo(() => {
     if (mode === 'diario') {
       return {
@@ -570,8 +631,6 @@ export function HistoryScreen({ canManageHistoryActions = false }: HistoryScreen
               </View>
             ) : null}
 
-            {successMessage ? <Text style={styles.successText}>{successMessage}</Text> : null}
-            {errorMessage ? <Text style={styles.errorText}>{errorMessage}</Text> : null}
           </View>
         }
         ListEmptyComponent={
@@ -604,6 +663,24 @@ export function HistoryScreen({ canManageHistoryActions = false }: HistoryScreen
                 <View style={styles.groupHeader}>
                   <Text style={styles.groupDate}>{formatDateLabel(dailyItem.date)}</Text>
                   <View style={styles.groupHeaderActions}>
+                    {canManageHistoryActions ? (
+                      <Pressable
+                        style={[
+                          styles.deleteMovementButton,
+                          activeActionKey ===
+                            `delete-date-movement-${dailyItem.date}-${dailyMovementFilter}`
+                            ? styles.actionDisabled
+                            : undefined,
+                          filteredEntries.length === 0 ? styles.actionDisabled : undefined,
+                        ]}
+                        onPress={() => {
+                          void handleArchiveDateByMovement(dailyItem.date, dailyMovementFilter);
+                        }}
+                        disabled={activeActionKey !== null || filteredEntries.length === 0}
+                      >
+                        <Text style={styles.deleteMovementButtonText}>Excluir movimentacao</Text>
+                      </Pressable>
+                    ) : null}
                     {canManageHistoryActions ? (
                       <Pressable
                         style={[
@@ -1135,6 +1212,19 @@ const styles = StyleSheet.create({
   },
   deleteDayButtonText: {
     color: '#991B1B',
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  deleteMovementButton: {
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    backgroundColor: '#FFF7ED',
+    borderWidth: 1,
+    borderColor: '#FDBA74',
+  },
+  deleteMovementButtonText: {
+    color: '#9A3412',
     fontSize: 11,
     fontWeight: '700',
   },

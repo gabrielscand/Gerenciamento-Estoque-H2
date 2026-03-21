@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useIsFocused } from '@react-navigation/native';
 import {
   ActivityIndicator,
@@ -8,6 +8,7 @@ import {
   Platform,
   Pressable,
   RefreshControl,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -27,6 +28,7 @@ import {
 import { syncAppData } from '../database/sync.service';
 import { SyncStatusCard } from '../components/SyncStatusCard';
 import { StockEmphasis } from '../components/StockEmphasis';
+import { useTopPopup } from '../components/TopPopupProvider';
 import type { CreateStockItemInput, StockItemListRow } from '../types/inventory';
 
 type FormState = {
@@ -45,7 +47,6 @@ const initialFormState: FormState = {
   minQuantity: '',
 };
 const MAX_AUTOCOMPLETE_SUGGESTIONS = 6;
-const TOAST_DURATION_MS = 2800;
 
 function parseDecimalInput(value: string): number | null {
   const normalized = value.trim().replace(',', '.');
@@ -134,6 +135,7 @@ type CategorySelectProps = {
   placeholder: string;
   error?: string;
   disabled?: boolean;
+  compact?: boolean;
 };
 
 function CatalogSelect({
@@ -147,47 +149,77 @@ function CatalogSelect({
   placeholder,
   error,
   disabled = false,
+  compact = false,
 }: CategorySelectProps) {
   const labelResolver = formatOptionLabel ?? ((option: string) => option);
 
   return (
     <View style={styles.selectRoot}>
       <Pressable
-        style={[styles.selectTrigger, error ? styles.inputError : undefined, disabled ? styles.selectDisabled : undefined]}
+        style={[
+          styles.selectTrigger,
+          compact ? styles.selectTriggerCompact : undefined,
+          error ? styles.inputError : undefined,
+          disabled ? styles.selectDisabled : undefined,
+        ]}
         onPress={onToggle}
         disabled={disabled}
       >
-        <Text style={value ? styles.selectTriggerText : styles.selectPlaceholderText}>
+        <Text
+          style={[
+            value ? styles.selectTriggerText : styles.selectPlaceholderText,
+            compact ? styles.selectCompactText : undefined,
+          ]}
+        >
           {value ? labelResolver(value) : placeholder}
         </Text>
         <Text style={styles.selectArrow}>{isOpen ? '▴' : '▾'}</Text>
       </Pressable>
 
       {isOpen ? (
-        <View style={styles.selectMenu}>
+        <View style={[styles.selectMenu, compact ? styles.selectMenuCompact : undefined]}>
           {options.length === 0 ? (
-            <View style={styles.selectEmptyState}>
-              <Text style={styles.selectEmptyStateText}>Nenhuma opcao cadastrada.</Text>
+            <View style={[styles.selectEmptyState, compact ? styles.selectEmptyStateCompact : undefined]}>
+              <Text style={[styles.selectEmptyStateText, compact ? styles.selectEmptyStateTextCompact : undefined]}>
+                Nenhuma opcao cadastrada.
+              </Text>
             </View>
-          ) : null}
-          {options.map((option) => {
-            const isSelected = value === option;
+          ) : (
+            <ScrollView
+              style={compact ? styles.selectMenuScroll : undefined}
+              contentContainerStyle={styles.selectMenuScrollContent}
+              nestedScrollEnabled={compact}
+            >
+              {options.map((option) => {
+                const isSelected = value === option;
 
-            return (
-              <Pressable
-                key={option}
-                style={[styles.selectOption, isSelected ? styles.selectOptionActive : undefined]}
-                onPress={() => {
-                  onChange(option);
-                  onClose();
-                }}
-              >
-                <Text style={[styles.selectOptionText, isSelected ? styles.selectOptionTextActive : undefined]}>
-                  {labelResolver(option)}
-                </Text>
-              </Pressable>
-            );
-          })}
+                return (
+                  <Pressable
+                    key={option}
+                    style={[
+                      styles.selectOption,
+                      compact ? styles.selectOptionCompact : undefined,
+                      isSelected ? styles.selectOptionActive : undefined,
+                    ]}
+                    onPress={() => {
+                      onChange(option);
+                      onClose();
+                    }}
+                  >
+                    <Text
+                      style={[
+                        styles.selectOptionText,
+                        compact ? styles.selectOptionTextCompact : undefined,
+                        isSelected ? styles.selectOptionTextActive : undefined,
+                      ]}
+                    >
+                      {labelResolver(option)}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
+          )}
         </View>
       ) : null}
     </View>
@@ -244,32 +276,8 @@ export function ItemsScreen() {
   const [isUpdating, setIsUpdating] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
-  const [feedbackMessage, setFeedbackMessage] = useState<string>('');
-  const [catalogErrorMessage, setCatalogErrorMessage] = useState('');
-  const [toastMessage, setToastMessage] = useState('');
-  const [isToastVisible, setIsToastVisible] = useState(false);
   const [archiveTarget, setArchiveTarget] = useState<StockItemListRow | null>(null);
-  const toastTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  function clearToastTimer() {
-    if (!toastTimeoutRef.current) {
-      return;
-    }
-
-    clearTimeout(toastTimeoutRef.current);
-    toastTimeoutRef.current = null;
-  }
-
-  function showSuccessToast(message: string) {
-    clearToastTimer();
-    setToastMessage(message);
-    setIsToastVisible(true);
-
-    toastTimeoutRef.current = setTimeout(() => {
-      setIsToastVisible(false);
-      toastTimeoutRef.current = null;
-    }, TOAST_DURATION_MS);
-  }
+  const { showTopPopup } = useTopPopup();
 
   async function loadCatalogOptions() {
     try {
@@ -279,11 +287,12 @@ export function ItemsScreen() {
       ]);
       setCategoryOptions(categories);
       setUnitOptions(units);
-      setCatalogErrorMessage('');
     } catch (error) {
-      setCatalogErrorMessage(
-        error instanceof Error ? error.message : 'Falha ao carregar categorias e unidades.',
-      );
+      showTopPopup({
+        type: 'error',
+        message: error instanceof Error ? error.message : 'Falha ao carregar categorias e unidades.',
+        durationMs: 4200,
+      });
     }
   }
 
@@ -298,10 +307,11 @@ export function ItemsScreen() {
       const data = await listStockItems();
       setItems(data);
     } catch (error) {
-      setCreateErrors((prev) => ({
-        ...prev,
-        submit: error instanceof Error ? error.message : 'Falha ao carregar itens.',
-      }));
+      showTopPopup({
+        type: 'error',
+        message: error instanceof Error ? error.message : 'Falha ao carregar itens.',
+        durationMs: 4200,
+      });
     } finally {
       setIsLoading(false);
     }
@@ -325,22 +335,14 @@ export function ItemsScreen() {
     void loadCatalogOptions();
   }, [isFocused]);
 
-  useEffect(() => {
-    return () => {
-      clearToastTimer();
-    };
-  }, []);
-
   function setCreateField<K extends keyof FormState>(key: K, value: FormState[K]) {
     setCreateForm((prev) => ({ ...prev, [key]: value }));
     setCreateErrors((prev) => ({ ...prev, [key]: undefined, submit: undefined }));
-    setFeedbackMessage('');
   }
 
   function setEditField<K extends keyof FormState>(key: K, value: FormState[K]) {
     setEditForm((prev) => ({ ...prev, [key]: value }));
     setEditErrors((prev) => ({ ...prev, [key]: undefined, submit: undefined }));
-    setFeedbackMessage('');
   }
 
   function startEditing(item: StockItemListRow) {
@@ -357,7 +359,6 @@ export function ItemsScreen() {
     setIsEditUnitOpen(false);
     setEditErrors({});
     setCreateErrors((prev) => ({ ...prev, submit: undefined }));
-    setFeedbackMessage('');
   }
 
   function cancelEditing() {
@@ -411,14 +412,19 @@ export function ItemsScreen() {
       setCreateForm(initialFormState);
       setIsCreateCategoryOpen(false);
       setCreateErrors({});
-      setFeedbackMessage('Item cadastrado com sucesso.');
+      showTopPopup({
+        type: 'success',
+        message: 'Item cadastrado com sucesso.',
+        durationMs: 3000,
+      });
       await loadItems();
       await loadCatalogOptions();
     } catch (error) {
-      setCreateErrors((prev) => ({
-        ...prev,
-        submit: error instanceof Error ? error.message : 'Nao foi possivel salvar o item.',
-      }));
+      showTopPopup({
+        type: 'error',
+        message: error instanceof Error ? error.message : 'Nao foi possivel salvar o item.',
+        durationMs: 4200,
+      });
     } finally {
       setIsCreating(false);
     }
@@ -448,15 +454,19 @@ export function ItemsScreen() {
 
       await updateStockItem(itemId, validationResult.parsed);
       cancelEditing();
-      setFeedbackMessage('');
-      showSuccessToast('Item atualizado com sucesso.');
+      showTopPopup({
+        type: 'success',
+        message: 'Item atualizado com sucesso.',
+        durationMs: 3000,
+      });
       await loadItems();
       await loadCatalogOptions();
     } catch (error) {
-      setEditErrors((prev) => ({
-        ...prev,
-        submit: error instanceof Error ? error.message : 'Nao foi possivel atualizar o item.',
-      }));
+      showTopPopup({
+        type: 'error',
+        message: error instanceof Error ? error.message : 'Nao foi possivel atualizar o item.',
+        durationMs: 4200,
+      });
     } finally {
       setIsUpdating(false);
     }
@@ -486,20 +496,24 @@ export function ItemsScreen() {
 
     setIsDeleting(true);
     setEditErrors((prev) => ({ ...prev, submit: undefined }));
-    setFeedbackMessage('');
 
     try {
       await archiveStockItem(archiveTarget.id);
       setArchiveTarget(null);
       cancelEditing();
-      setFeedbackMessage('Item arquivado com sucesso.');
+      showTopPopup({
+        type: 'success',
+        message: 'Item arquivado com sucesso.',
+        durationMs: 3000,
+      });
       await loadItems();
       await loadCatalogOptions();
     } catch (error) {
-      setEditErrors((prev) => ({
-        ...prev,
-        submit: error instanceof Error ? error.message : 'Nao foi possivel excluir o item.',
-      }));
+      showTopPopup({
+        type: 'error',
+        message: error instanceof Error ? error.message : 'Nao foi possivel excluir o item.',
+        durationMs: 4200,
+      });
     } finally {
       setIsDeleting(false);
     }
@@ -553,12 +567,6 @@ export function ItemsScreen() {
 
   return (
     <View style={styles.container}>
-      {isToastVisible ? (
-        <View style={styles.toastContainer}>
-          <Text style={styles.toastText}>{toastMessage}</Text>
-        </View>
-      ) : null}
-
       <FlatList
         data={filteredItems}
         keyExtractor={(item) => String(item.id)}
@@ -613,6 +621,7 @@ export function ItemsScreen() {
                   placeholder="Selecione a unidade"
                   error={createErrors.unit}
                   disabled={isCreating}
+                  compact
                 />
                 {createErrors.unit ? <Text style={styles.errorText}>{createErrors.unit}</Text> : null}
               </View>
@@ -635,11 +644,10 @@ export function ItemsScreen() {
                   placeholder="Selecione uma categoria"
                   error={createErrors.category}
                   disabled={isCreating}
+                  compact
                 />
                 {createErrors.category ? <Text style={styles.errorText}>{createErrors.category}</Text> : null}
               </View>
-
-              {catalogErrorMessage ? <Text style={styles.errorText}>{catalogErrorMessage}</Text> : null}
 
               <View style={styles.fieldGroup}>
                 <Text style={styles.label}>Quantidade minima</Text>
@@ -652,9 +660,6 @@ export function ItemsScreen() {
                 />
                 {createErrors.minQuantity ? <Text style={styles.errorText}>{createErrors.minQuantity}</Text> : null}
               </View>
-
-              {feedbackMessage ? <Text style={styles.successText}>{feedbackMessage}</Text> : null}
-              {createErrors.submit ? <Text style={styles.errorText}>{createErrors.submit}</Text> : null}
 
               <Pressable
                 style={[styles.submitButton, isCreating ? styles.submitButtonDisabled : undefined]}
@@ -801,6 +806,7 @@ export function ItemsScreen() {
                       placeholder="Selecione a unidade"
                       error={editErrors.unit}
                       disabled={isUpdating || isDeleting}
+                      compact
                     />
                     {editErrors.unit ? <Text style={styles.errorText}>{editErrors.unit}</Text> : null}
                   </View>
@@ -823,6 +829,7 @@ export function ItemsScreen() {
                       placeholder="Selecione uma categoria"
                       error={editErrors.category}
                       disabled={isUpdating || isDeleting}
+                      compact
                     />
                     {editErrors.category ? <Text style={styles.errorText}>{editErrors.category}</Text> : null}
                   </View>
@@ -838,8 +845,6 @@ export function ItemsScreen() {
                     />
                     {editErrors.minQuantity ? <Text style={styles.errorText}>{editErrors.minQuantity}</Text> : null}
                   </View>
-
-                  {editErrors.submit ? <Text style={styles.errorText}>{editErrors.submit}</Text> : null}
 
                   <View style={styles.editActions}>
                     <Pressable style={styles.cancelButton} onPress={cancelEditing} disabled={isUpdating || isDeleting}>
@@ -1021,6 +1026,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
   },
+  selectTriggerCompact: {
+    borderRadius: 10,
+    minHeight: 38,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+  },
   selectDisabled: {
     opacity: 0.7,
   },
@@ -1032,6 +1043,9 @@ const styles = StyleSheet.create({
   selectPlaceholderText: {
     color: '#7C3AED',
     fontSize: 15,
+  },
+  selectCompactText: {
+    fontSize: 13,
   },
   selectArrow: {
     color: '#6D28D9',
@@ -1045,6 +1059,15 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     overflow: 'hidden',
   },
+  selectMenuCompact: {
+    borderRadius: 10,
+  },
+  selectMenuScroll: {
+    maxHeight: 190,
+  },
+  selectMenuScrollContent: {
+    paddingVertical: 2,
+  },
   selectEmptyState: {
     paddingHorizontal: 12,
     paddingVertical: 10,
@@ -1052,15 +1075,26 @@ const styles = StyleSheet.create({
     borderBottomColor: '#F3E8FF',
     backgroundColor: '#FAF5FF',
   },
+  selectEmptyStateCompact: {
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+  },
   selectEmptyStateText: {
     color: '#7C3AED',
     fontSize: 13,
+  },
+  selectEmptyStateTextCompact: {
+    fontSize: 12,
   },
   selectOption: {
     paddingHorizontal: 12,
     paddingVertical: 10,
     borderBottomWidth: 1,
     borderBottomColor: '#F3E8FF',
+  },
+  selectOptionCompact: {
+    paddingHorizontal: 10,
+    paddingVertical: 8,
   },
   selectOptionActive: {
     backgroundColor: '#EDE9FE',
@@ -1069,6 +1103,9 @@ const styles = StyleSheet.create({
     color: '#4C1D95',
     fontSize: 14,
     fontWeight: '600',
+  },
+  selectOptionTextCompact: {
+    fontSize: 13,
   },
   selectOptionTextActive: {
     color: '#5B21B6',

@@ -1420,6 +1420,72 @@ export async function archiveDailyHistoryDate(date: string): Promise<void> {
   await syncAfterDailyHistoryMutation();
 }
 
+export async function archiveDailyHistoryDateByMovement(
+  date: string,
+  movementFilter: 'entry' | 'exit',
+): Promise<void> {
+  if (!isValidDateString(date)) {
+    throw new Error('Data de vistoria invalida.');
+  }
+
+  const movementTypes =
+    movementFilter === 'entry'
+      ? ['entry', 'initial', 'legacy_snapshot']
+      : ['exit', 'consumption'];
+  const movementLabel = movementFilter === 'entry' ? 'Entrada' : 'Saida';
+  const placeholders = movementTypes.map(() => '?').join(', ');
+
+  const database = await getDatabase();
+  await database.withTransactionAsync(async () => {
+    const affectedRows = await database.getAllAsync<{ item_id: number }>(
+      `
+        SELECT item_id
+        FROM daily_stock_entries
+        WHERE date = ?
+          AND is_deleted = 0
+          AND movement_type IN (${placeholders});
+      `,
+      date,
+      ...movementTypes,
+    );
+
+    if (affectedRows.length === 0) {
+      throw new Error(`Nenhuma movimentacao de ${movementLabel} encontrada para exclusao neste dia.`);
+    }
+
+    const affectedItemIds = Array.from(new Set(affectedRows.map((row) => row.item_id)));
+
+    const timestamp = nowIsoString();
+    const result = await database.runAsync(
+      `
+        UPDATE daily_stock_entries
+        SET
+          is_deleted = 1,
+          deleted_at = ?,
+          updated_at = ?,
+          sync_status = 'pending'
+        WHERE date = ?
+          AND is_deleted = 0
+          AND movement_type IN (${placeholders});
+      `,
+      timestamp,
+      timestamp,
+      date,
+      ...movementTypes,
+    );
+
+    if ((result.changes ?? 0) === 0) {
+      throw new Error(`Nenhuma movimentacao de ${movementLabel} encontrada para exclusao neste dia.`);
+    }
+
+    for (const itemId of affectedItemIds) {
+      await recalculateItemStockTimeline(database, itemId, 'delete');
+    }
+  });
+
+  await syncAfterDailyHistoryMutation();
+}
+
 export async function listDailyHistoryGrouped(): Promise<DailyHistoryGroup[]> {
   const database = await getDatabase();
   const totalItemsRow = await database.getFirstAsync<{ totalItems: number }>(

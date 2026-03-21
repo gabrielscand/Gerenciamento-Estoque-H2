@@ -34,6 +34,7 @@ import {
 } from '../database/items.repository';
 import type { CatalogOption } from '../database/items.repository';
 import { SyncStatusCard } from '../components/SyncStatusCard';
+import { useTopPopup } from '../components/TopPopupProvider';
 import { syncAppData } from '../database/sync.service';
 
 type AdminPanelScreenProps = {
@@ -211,6 +212,7 @@ export function AdminPanelScreen({ currentUser, onUsersChanged }: AdminPanelScre
   const [catalogSuccess, setCatalogSuccess] = useState('');
   const [feedbackMessage, setFeedbackMessage] = useState('');
   const [catalogArchiveTarget, setCatalogArchiveTarget] = useState<CatalogArchiveTarget | null>(null);
+  const { showTopPopup } = useTopPopup();
 
   async function loadUsers(syncFirst: boolean = false) {
     setIsLoading(true);
@@ -263,6 +265,66 @@ export function AdminPanelScreen({ currentUser, onUsersChanged }: AdminPanelScre
 
     return unsubscribe;
   }, []);
+
+  useEffect(() => {
+    if (!feedbackMessage) {
+      return;
+    }
+
+    showTopPopup({
+      type: 'success',
+      message: feedbackMessage,
+      durationMs: 3000,
+    });
+  }, [feedbackMessage, showTopPopup]);
+
+  useEffect(() => {
+    if (!catalogSuccess) {
+      return;
+    }
+
+    showTopPopup({
+      type: 'success',
+      message: catalogSuccess,
+      durationMs: 3000,
+    });
+  }, [catalogSuccess, showTopPopup]);
+
+  useEffect(() => {
+    if (!catalogError) {
+      return;
+    }
+
+    showTopPopup({
+      type: 'error',
+      message: catalogError,
+      durationMs: 4200,
+    });
+  }, [catalogError, showTopPopup]);
+
+  useEffect(() => {
+    if (!createErrors.submit) {
+      return;
+    }
+
+    showTopPopup({
+      type: 'error',
+      message: createErrors.submit,
+      durationMs: 4200,
+    });
+  }, [createErrors.submit, showTopPopup]);
+
+  useEffect(() => {
+    if (!editErrors.submit) {
+      return;
+    }
+
+    showTopPopup({
+      type: 'error',
+      message: editErrors.submit,
+      durationMs: 4200,
+    });
+  }, [editErrors.submit, showTopPopup]);
 
   function setCreateField<K extends keyof UserFormState>(key: K, value: UserFormState[K]) {
     setCreateForm((prev) => ({ ...prev, [key]: value }));
@@ -704,9 +766,6 @@ export function AdminPanelScreen({ currentUser, onUsersChanged }: AdminPanelScre
                 </Text>
               </Pressable>
 
-              {createErrors.submit ? <Text style={styles.errorText}>{createErrors.submit}</Text> : null}
-              {feedbackMessage ? <Text style={styles.successText}>{feedbackMessage}</Text> : null}
-
               <Pressable
                 style={[styles.submitButton, isSubmitting ? styles.submitButtonDisabled : undefined]}
                 disabled={isSubmitting}
@@ -773,9 +832,6 @@ export function AdminPanelScreen({ currentUser, onUsersChanged }: AdminPanelScre
                   )}
                 </Pressable>
               </View>
-
-              {catalogError ? <Text style={styles.errorText}>{catalogError}</Text> : null}
-              {catalogSuccess ? <Text style={styles.successText}>{catalogSuccess}</Text> : null}
 
               <View style={styles.catalogListSection}>
                 <Pressable style={styles.catalogEditorToggle} onPress={toggleCategoriesEditor}>
@@ -1035,8 +1091,6 @@ export function AdminPanelScreen({ currentUser, onUsersChanged }: AdminPanelScre
                       style={styles.input}
                     />
                   </View>
-
-                  {editErrors.submit ? <Text style={styles.errorText}>{editErrors.submit}</Text> : null}
 
                   <View style={styles.editActions}>
                     <Pressable
