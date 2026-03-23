@@ -2,6 +2,8 @@ import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import type { ReactNode } from 'react';
+import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import { canAccessTab } from '../database/auth.repository';
 import type { AppUser, AppTabPermissionKey } from '../types/inventory';
 import { AdminPanelScreen } from '../screens/AdminPanelScreen';
@@ -10,6 +12,8 @@ import { HistoryScreen } from '../screens/HistoryScreen';
 import { ItemsScreen } from '../screens/ItemsScreen';
 import { EntryScreen, ExitScreen } from '../screens/MovementScreen';
 import { StockScreen } from '../screens/StockScreen';
+import { MotionEntrance, ScreenShell, SectionSurface } from '../components/ui-kit';
+import { tokens } from '../theme/tokens';
 
 type RootTabParamList = {
   Admin: undefined;
@@ -30,32 +34,83 @@ type TabsProps = {
   onUsersChanged?: () => Promise<void> | void;
 };
 
-function TabLabel({ focused, title }: { focused: boolean; title: string }) {
-  return (
-    <View style={[styles.labelContainer, focused ? styles.labelContainerActive : undefined]}>
-      <View style={[styles.indicator, focused ? styles.indicatorActive : undefined]} />
-      <Text style={[styles.labelText, focused ? styles.labelTextActive : undefined]}>{title}</Text>
-    </View>
-  );
-}
-
-function NoAccessScreen() {
-  return (
-    <View style={styles.noAccessContainer}>
-      <Text style={styles.noAccessTitle}>Sem abas liberadas</Text>
-      <Text style={styles.noAccessText}>
-        Sua conta ainda nao tem permissao para visualizar abas do sistema.
-      </Text>
-    </View>
-  );
-}
-
 type ScreenConfig = {
   name: keyof RootTabParamList;
   title: string;
   permission?: AppTabPermissionKey;
   render: () => ReactNode;
 };
+
+function getTabIcon(tabName: string): keyof typeof Ionicons.glyphMap {
+  if (tabName === 'Painel ADM') {
+    return 'shield-checkmark-outline';
+  }
+  if (tabName === 'Dashboard') {
+    return 'grid-outline';
+  }
+  if (tabName === 'Estoque') {
+    return 'cube-outline';
+  }
+  if (tabName === 'Itens') {
+    return 'albums-outline';
+  }
+  if (tabName === 'Entrada') {
+    return 'arrow-down-circle-outline';
+  }
+  if (tabName === 'Saida') {
+    return 'arrow-up-circle-outline';
+  }
+  if (tabName === 'Historico') {
+    return 'time-outline';
+  }
+
+  return 'ellipse-outline';
+}
+
+function TabLabel({ focused, title }: { focused: boolean; title: string }) {
+  const icon = getTabIcon(title);
+
+  if (focused) {
+    return (
+      <LinearGradient
+        colors={[tokens.colors.accentStrong, tokens.colors.accent]}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={styles.tabLabelActive}
+      >
+        <View style={styles.tabLabelIndicator} />
+        <Ionicons name={icon} size={17} color={tokens.colors.white} />
+        <Text style={styles.tabLabelTextActive}>{title}</Text>
+      </LinearGradient>
+    );
+  }
+
+  return (
+    <View style={styles.tabLabelIdle}>
+      <Ionicons name={icon} size={16} color={tokens.colors.accent} />
+      <Text style={styles.tabLabelTextIdle}>{title}</Text>
+    </View>
+  );
+}
+
+function NoAccessScreen() {
+  return (
+    <ScreenShell>
+      <View style={styles.noAccessContainer}>
+        <MotionEntrance>
+          <SectionSurface>
+            <View style={styles.noAccessContent}>
+              <Text style={styles.noAccessTitle}>Sem abas liberadas</Text>
+              <Text style={styles.noAccessText}>
+                Sua conta ainda nao tem permissao para visualizar abas do sistema.
+              </Text>
+            </View>
+          </SectionSurface>
+        </MotionEntrance>
+      </View>
+    </ScreenShell>
+  );
+}
 
 export function Tabs({ currentUser, onLogout, onUsersChanged }: TabsProps) {
   const screenConfigs: ScreenConfig[] = [];
@@ -133,46 +188,30 @@ export function Tabs({ currentUser, onLogout, onUsersChanged }: TabsProps) {
       <Tab.Navigator
         initialRouteName={initialRouteName}
         screenOptions={{
-          headerTitleAlign: 'center',
+          headerTitleAlign: 'left',
           headerStyle: {
-            backgroundColor: '#F5F3FF',
+            backgroundColor: tokens.colors.accentSoft,
+          },
+          headerTitleStyle: {
+            color: tokens.colors.accentDeep,
+            fontWeight: '800',
+            fontSize: 18,
           },
           headerShadowVisible: false,
-          headerTitleStyle: {
-            fontWeight: '700',
-            color: '#4C1D95',
-          },
-          tabBarStyle: {
-            height: 82,
-            paddingBottom: 12,
-            paddingTop: 12,
-            paddingHorizontal: 12,
-            backgroundColor: '#F3E8FF',
-            borderTopColor: '#E9D5FF',
-            borderTopWidth: 1,
-          },
-          tabBarItemStyle: {
-            borderRadius: 16,
-            marginHorizontal: 4,
-          },
-          tabBarIcon: () => null,
-          tabBarShowLabel: true,
-          tabBarLabel: ({ focused, children }) => (
-            <TabLabel focused={focused} title={String(children)} />
-          ),
           headerRight: () => (
             <View style={styles.headerUserActions}>
               <View style={styles.currentUserBadge}>
+                <Ionicons name="person-circle-outline" size={14} color={tokens.colors.accentStrong} />
                 <Text
                   style={styles.currentUserText}
                   numberOfLines={1}
                   ellipsizeMode="tail"
                 >
-                  Usuario: {currentUser.username}
+                  {currentUser.username}
                 </Text>
               </View>
               <Pressable
-                style={styles.logoutButton}
+                style={({ pressed }) => [styles.logoutButton, pressed ? styles.logoutButtonPressed : undefined]}
                 onPress={() => {
                   void onLogout();
                 }}
@@ -180,6 +219,24 @@ export function Tabs({ currentUser, onLogout, onUsersChanged }: TabsProps) {
                 <Text style={styles.logoutButtonText}>Sair</Text>
               </Pressable>
             </View>
+          ),
+          tabBarStyle: {
+            height: 88,
+            paddingTop: 10,
+            paddingBottom: 12,
+            paddingHorizontal: 12,
+            backgroundColor: tokens.colors.surface,
+            borderTopColor: tokens.colors.borderSoft,
+            borderTopWidth: 1,
+          },
+          tabBarItemStyle: {
+            marginHorizontal: 3,
+            borderRadius: tokens.radius.lg,
+          },
+          tabBarShowLabel: true,
+          tabBarIcon: () => null,
+          tabBarLabel: ({ focused, children }) => (
+            <TabLabel focused={focused} title={String(children)} />
           ),
         }}
       >
@@ -201,99 +258,101 @@ export function Tabs({ currentUser, onLogout, onUsersChanged }: TabsProps) {
 }
 
 const styles = StyleSheet.create({
-  labelContainer: {
-    minWidth: 68,
-    minHeight: 44,
-    borderRadius: 14,
-    paddingHorizontal: 8,
-    paddingVertical: 7,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#EDE9FE',
-    borderWidth: 1,
-    borderColor: '#DDD6FE',
-    gap: 4,
-  },
-  labelContainerActive: {
-    backgroundColor: '#6D28D9',
-    borderColor: '#5B21B6',
-    shadowColor: '#4C1D95',
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
-    shadowOffset: {
-      width: 0,
-      height: 4,
-    },
-    elevation: 3,
-  },
-  indicator: {
-    width: 16,
-    height: 3,
-    borderRadius: 999,
-    backgroundColor: 'transparent',
-  },
-  indicatorActive: {
-    backgroundColor: '#DDD6FE',
-  },
-  labelText: {
-    color: '#6D28D9',
-    fontSize: 11,
-    fontWeight: '700',
-  },
-  labelTextActive: {
-    color: '#FFFFFF',
-    fontSize: 12,
-    fontWeight: '800',
-  },
-  logoutButton: {
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: '#C4B5FD',
-    backgroundColor: '#F5F3FF',
-    paddingHorizontal: 11,
-    paddingVertical: 6,
-  },
-  logoutButtonText: {
-    color: '#5B21B6',
-    fontSize: 12,
-    fontWeight: '700',
-  },
   headerUserActions: {
-    marginRight: 12,
+    marginRight: 10,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    maxWidth: 250,
+    maxWidth: 260,
   },
   currentUserBadge: {
-    maxWidth: 160,
-    borderRadius: 999,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    maxWidth: 140,
+    borderRadius: tokens.radius.pill,
     borderWidth: 1,
-    borderColor: '#DDD6FE',
-    backgroundColor: '#FFFFFF',
+    borderColor: tokens.colors.borderSoft,
+    backgroundColor: '#f7f0fc',
     paddingHorizontal: 10,
     paddingVertical: 6,
   },
   currentUserText: {
-    color: '#5B21B6',
+    color: tokens.colors.accentStrong,
     fontSize: 12,
+    fontWeight: '700',
+  },
+  logoutButton: {
+    borderRadius: tokens.radius.pill,
+    borderWidth: 1,
+    borderColor: tokens.colors.borderStrong,
+    backgroundColor: tokens.colors.surface,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+  },
+  logoutButtonPressed: {
+    opacity: 0.8,
+  },
+  logoutButtonText: {
+    color: tokens.colors.accentStrong,
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  tabLabelActive: {
+    minWidth: 74,
+    minHeight: 50,
+    borderRadius: tokens.radius.lg,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 3,
+  },
+  tabLabelIndicator: {
+    width: 20,
+    height: 3,
+    borderRadius: tokens.radius.pill,
+    backgroundColor: 'rgba(255,255,255,0.85)',
+  },
+  tabLabelTextActive: {
+    color: tokens.colors.white,
+    fontSize: 11,
+    fontWeight: '800',
+  },
+  tabLabelIdle: {
+    minWidth: 72,
+    minHeight: 48,
+    borderRadius: tokens.radius.lg,
+    borderWidth: 1,
+    borderColor: tokens.colors.borderSoft,
+    backgroundColor: '#f8f2fd',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 3,
+    paddingHorizontal: 8,
+  },
+  tabLabelTextIdle: {
+    color: tokens.colors.accent,
+    fontSize: 11,
     fontWeight: '700',
   },
   noAccessContainer: {
     flex: 1,
     justifyContent: 'center',
-    paddingHorizontal: 24,
-    gap: 10,
-    backgroundColor: '#F5F3FF',
+    paddingHorizontal: 18,
+  },
+  noAccessContent: {
+    alignItems: 'center',
+    gap: 8,
   },
   noAccessTitle: {
-    color: '#4C1D95',
+    color: tokens.colors.accentDeep,
     fontSize: 22,
     fontWeight: '800',
     textAlign: 'center',
   },
   noAccessText: {
-    color: '#6D28D9',
+    color: tokens.colors.textSecondary,
     fontSize: 14,
     lineHeight: 20,
     textAlign: 'center',

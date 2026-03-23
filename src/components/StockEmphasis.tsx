@@ -1,4 +1,5 @@
 import { StyleSheet, Text, View } from 'react-native';
+import { tokens } from '../theme/tokens';
 
 export type StockEmphasisTone = 'normal' | 'warning' | 'empty';
 
@@ -70,23 +71,23 @@ export function StockEmphasis({
 
 const styles = StyleSheet.create({
   container: {
-    borderRadius: 11,
+    borderRadius: 14,
     borderWidth: 1,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    gap: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    gap: 2,
   },
   containerNormal: {
-    backgroundColor: '#F5F3FF',
-    borderColor: '#C4B5FD',
+    backgroundColor: '#F7F0FC',
+    borderColor: tokens.colors.borderStrong,
   },
   containerWarning: {
-    backgroundColor: '#FAE8FF',
-    borderColor: '#E879F9',
+    backgroundColor: '#FDEFD9',
+    borderColor: '#E5BA82',
   },
   containerEmpty: {
-    backgroundColor: '#F8FAFC',
-    borderColor: '#CBD5E1',
+    backgroundColor: '#FBF8FD',
+    borderColor: tokens.colors.borderSoft,
   },
   label: {
     fontSize: 10,
@@ -95,39 +96,39 @@ const styles = StyleSheet.create({
     letterSpacing: 0.25,
   },
   labelNormal: {
-    color: '#6D28D9',
+    color: tokens.colors.accent,
   },
   labelWarning: {
-    color: '#A21CAF',
+    color: '#8D4F0E',
   },
   labelEmpty: {
-    color: '#475569',
+    color: tokens.colors.textMuted,
   },
   value: {
-    fontSize: 19,
-    fontWeight: '800',
-    lineHeight: 22,
+    fontSize: 21,
+    fontWeight: '900',
+    lineHeight: 24,
   },
   valueNormal: {
-    color: '#4C1D95',
+    color: tokens.colors.accentDeep,
   },
   valueWarning: {
-    color: '#86198F',
+    color: '#7A420C',
   },
   valueEmpty: {
-    color: '#334155',
+    color: tokens.colors.textSecondary,
   },
   helper: {
     fontSize: 11,
     fontWeight: '600',
   },
   helperNormal: {
-    color: '#6D28D9',
+    color: tokens.colors.accent,
   },
   helperWarning: {
-    color: '#A21CAF',
+    color: '#8D4F0E',
   },
   helperEmpty: {
-    color: '#64748B',
+    color: tokens.colors.textMuted,
   },
 });

@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { Animated, Platform, Pressable, StatusBar, StyleSheet, Text, View } from 'react-native';
 import type { ReactNode } from 'react';
+import { tokens } from '../theme/tokens';
 
 export type TopPopupType = 'success' | 'error' | 'warning' | 'info';
 
@@ -47,18 +48,18 @@ function getPopupTopOffset(): number {
 
 function getPopupPalette(type: TopPopupType): { backgroundColor: string; borderColor: string } {
   if (type === 'success') {
-    return { backgroundColor: '#065F46', borderColor: '#34D399' };
+    return { backgroundColor: tokens.colors.success, borderColor: '#98D6B4' };
   }
 
   if (type === 'error') {
-    return { backgroundColor: '#7F1D1D', borderColor: '#FCA5A5' };
+    return { backgroundColor: tokens.colors.danger, borderColor: '#EFA0A0' };
   }
 
   if (type === 'warning') {
-    return { backgroundColor: '#78350F', borderColor: '#FCD34D' };
+    return { backgroundColor: tokens.colors.warning, borderColor: '#F3D38A' };
   }
 
-  return { backgroundColor: '#1E3A8A', borderColor: '#93C5FD' };
+  return { backgroundColor: tokens.colors.accentDeep, borderColor: tokens.colors.borderStrong };
 }
 
 export function TopPopupProvider({ children }: { children: ReactNode }) {
@@ -267,23 +268,23 @@ const styles = StyleSheet.create({
   },
   popupCard: {
     borderWidth: 1,
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    shadowColor: '#000000',
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 11,
+    shadowColor: tokens.colors.black,
     shadowOpacity: 0.2,
     shadowRadius: 10,
     shadowOffset: { width: 0, height: 4 },
     elevation: 4,
   },
   popupTitle: {
-    color: '#FFFFFF',
+    color: tokens.colors.white,
     fontSize: 12,
     fontWeight: '700',
     marginBottom: 2,
   },
   popupMessage: {
-    color: '#FFFFFF',
+    color: tokens.colors.white,
     fontSize: 13,
     fontWeight: '600',
     lineHeight: 18,

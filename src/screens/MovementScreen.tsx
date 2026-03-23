@@ -30,6 +30,8 @@ import {
   isValidDateString,
 } from '../utils/date';
 import { DateField } from '../components/DateField';
+import { HeroHeader, KpiTile, MotionEntrance, ScreenShell } from '../components/ui-kit';
+import { tokens } from '../theme/tokens';
 
 type MovementMode = 'entry' | 'exit';
 type QuantityFormMap = Record<string, string>;
@@ -515,7 +517,7 @@ function StockMovementScreen({ mode }: { mode: MovementMode }) {
   }
 
   return (
-    <View style={styles.container}>
+    <ScreenShell>
       <FlatList
         data={filteredItems}
         keyExtractor={(item) => String(item.id)}
@@ -531,15 +533,20 @@ function StockMovementScreen({ mode }: { mode: MovementMode }) {
           <View style={styles.headerBlock}>
             <SyncStatusCard />
 
-            <View style={styles.heroCard}>
-              <Text style={styles.title}>{heroText.title}</Text>
-              <Text style={styles.subtitle}>Data selecionada: {formatDateLabel(selectedDate)}</Text>
-              <Text style={styles.description}>{heroText.description}</Text>
-              <Text style={styles.summaryText}>
-                {summary.countedItems} avaliados | {summary.okCount} OK | {summary.needPurchase} comprar | Falta total:{' '}
-                {formatQuantity(summary.totalMissingQuantity)}
-              </Text>
-            </View>
+            <MotionEntrance delay={80}>
+              <HeroHeader
+                title={heroText.title}
+                subtitle={`Data selecionada: ${formatDateLabel(selectedDate)}`}
+                description={heroText.description}
+              >
+                <View style={styles.heroKpis}>
+                  <KpiTile label="Avaliados" value={String(summary.countedItems)} />
+                  <KpiTile label="OK" value={String(summary.okCount)} />
+                  <KpiTile label="Comprar" value={String(summary.needPurchase)} />
+                  <KpiTile label="Faltante" value={formatQuantity(summary.totalMissingQuantity)} />
+                </View>
+              </HeroHeader>
+            </MotionEntrance>
 
             <View style={styles.dateCard}>
               <DateField
@@ -749,14 +756,14 @@ function StockMovementScreen({ mode }: { mode: MovementMode }) {
         }}
         contentContainerStyle={styles.listContent}
       />
-    </View>
+    </ScreenShell>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F5F3FF',
+    backgroundColor: 'transparent',
   },
   toastContainer: {
     position: 'absolute',
@@ -764,12 +771,12 @@ const styles = StyleSheet.create({
     left: 16,
     right: 16,
     zIndex: 10,
-    backgroundColor: '#4C1D95',
+    backgroundColor: '#3A0D49',
     borderRadius: 12,
     paddingHorizontal: 12,
     paddingVertical: 10,
     borderWidth: 1,
-    borderColor: '#C4B5FD',
+    borderColor: '#B690D2',
   },
   toastText: {
     color: '#FFFFFF',
@@ -787,25 +794,22 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   heroCard: {
-    backgroundColor: '#6D28D9',
-    borderRadius: 18,
-    padding: 16,
-    gap: 6,
+    display: 'none',
   },
   title: {
     fontSize: 24,
     fontWeight: '800',
-    color: '#F5F3FF',
+    color: '#F5EEFB',
   },
   subtitle: {
     fontSize: 13,
-    color: '#DDD6FE',
+    color: '#D8C3EA',
     fontWeight: '600',
   },
   description: {
     fontSize: 14,
     lineHeight: 20,
-    color: '#EDE9FE',
+    color: '#EDE0F9',
   },
   summaryText: {
     marginTop: 4,
@@ -814,37 +818,39 @@ const styles = StyleSheet.create({
     fontSize: 13,
   },
   dateCard: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: tokens.colors.surface,
     borderWidth: 1,
-    borderColor: '#DDD6FE',
-    borderRadius: 14,
+    borderColor: tokens.colors.borderSoft,
+    borderRadius: 18,
     padding: 12,
     gap: 10,
+    ...tokens.shadow.card,
   },
   todayButton: {
-    borderRadius: 10,
+    borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#C4B5FD',
-    backgroundColor: '#F5F3FF',
+    borderColor: tokens.colors.borderStrong,
+    backgroundColor: '#F7EFFB',
     paddingVertical: 8,
     alignItems: 'center',
   },
   todayButtonText: {
-    color: '#5B21B6',
-    fontWeight: '700',
+    color: tokens.colors.accentStrong,
+    fontWeight: '800',
     fontSize: 13,
   },
   filterCard: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: tokens.colors.surface,
     borderWidth: 1,
-    borderColor: '#DDD6FE',
-    borderRadius: 14,
+    borderColor: tokens.colors.borderSoft,
+    borderRadius: 18,
     padding: 12,
     gap: 8,
+    ...tokens.shadow.card,
   },
   filterLabel: {
     fontSize: 13,
-    color: '#6D28D9',
+    color: '#77158E',
     fontWeight: '700',
   },
   filterSelectRoot: {
@@ -854,8 +860,8 @@ const styles = StyleSheet.create({
     minHeight: 42,
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: '#C4B5FD',
-    backgroundColor: '#FAF5FF',
+    borderColor: '#B690D2',
+    backgroundColor: '#F8F1FD',
     paddingHorizontal: 12,
     paddingVertical: 9,
     flexDirection: 'row',
@@ -865,12 +871,12 @@ const styles = StyleSheet.create({
   },
   filterSelectText: {
     flex: 1,
-    color: '#3B0764',
+    color: '#2A0834',
     fontSize: 14,
     fontWeight: '600',
   },
   filterSelectArrow: {
-    color: '#6D28D9',
+    color: '#77158E',
     fontSize: 12,
     fontWeight: '800',
   },
@@ -878,7 +884,7 @@ const styles = StyleSheet.create({
     marginTop: 6,
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: '#C4B5FD',
+    borderColor: '#B690D2',
     backgroundColor: '#FFFFFF',
     overflow: 'hidden',
   },
@@ -887,24 +893,25 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
   },
   filterSelectOptionActive: {
-    backgroundColor: '#EDE9FE',
+    backgroundColor: '#EDE0F9',
   },
   filterSelectOptionText: {
-    color: '#4C1D95',
+    color: '#3A0D49',
     fontSize: 13,
     fontWeight: '600',
   },
   filterSelectOptionTextActive: {
-    color: '#5B21B6',
+    color: '#5F1175',
     fontWeight: '700',
   },
   searchCard: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: tokens.colors.surface,
     borderWidth: 1,
-    borderColor: '#DDD6FE',
-    borderRadius: 14,
+    borderColor: tokens.colors.borderSoft,
+    borderRadius: 18,
     padding: 12,
     gap: 8,
+    ...tokens.shadow.card,
   },
   searchHeader: {
     flexDirection: 'row',
@@ -914,36 +921,36 @@ const styles = StyleSheet.create({
   },
   searchLabel: {
     fontSize: 13,
-    color: '#6D28D9',
+    color: '#77158E',
     fontWeight: '700',
   },
   clearSearchButton: {
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: '#C4B5FD',
-    backgroundColor: '#F5F3FF',
+    borderColor: '#B690D2',
+    backgroundColor: '#F5EEFB',
     paddingHorizontal: 10,
     paddingVertical: 5,
   },
   clearSearchButtonText: {
-    color: '#5B21B6',
+    color: '#5F1175',
     fontSize: 12,
     fontWeight: '700',
   },
   searchInput: {
     borderWidth: 1,
-    borderColor: '#C4B5FD',
-    backgroundColor: '#FAF5FF',
+    borderColor: '#B690D2',
+    backgroundColor: '#F8F1FD',
     borderRadius: 10,
     paddingHorizontal: 12,
     paddingVertical: 10,
-    color: '#3B0764',
+    color: '#2A0834',
     fontSize: 14,
   },
   searchSuggestionsContainer: {
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: '#DDD6FE',
+    borderColor: '#D8C3EA',
     overflow: 'hidden',
     backgroundColor: '#FFFFFF',
   },
@@ -951,20 +958,20 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 10,
     borderBottomWidth: 1,
-    borderBottomColor: '#F3E8FF',
+    borderBottomColor: '#EAD9F6',
   },
   searchSuggestionButtonLast: {
     borderBottomWidth: 0,
   },
   searchSuggestionText: {
-    color: '#4C1D95',
+    color: '#3A0D49',
     fontSize: 13,
     fontWeight: '600',
   },
   submitButton: {
-    borderRadius: 12,
-    minHeight: 44,
-    backgroundColor: '#7C3AED',
+    borderRadius: 14,
+    minHeight: 46,
+    backgroundColor: tokens.colors.accent,
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 12,
@@ -979,22 +986,24 @@ const styles = StyleSheet.create({
   },
   listTitle: {
     fontSize: 16,
-    fontWeight: '700',
-    color: '#4C1D95',
+    fontWeight: '800',
+    color: tokens.colors.accentDeep,
   },
   emptyText: {
     textAlign: 'center',
-    color: '#6D28D9',
+    color: tokens.colors.accent,
     fontSize: 14,
     marginTop: 16,
+    fontWeight: '700',
   },
   itemCard: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: tokens.colors.surface,
     borderWidth: 1,
-    borderColor: '#DDD6FE',
-    borderRadius: 14,
+    borderColor: tokens.colors.borderSoft,
+    borderRadius: 18,
     padding: 14,
     gap: 6,
+    ...tokens.shadow.card,
   },
   itemHeader: {
     flexDirection: 'row',
@@ -1005,40 +1014,40 @@ const styles = StyleSheet.create({
   itemName: {
     flex: 1,
     fontSize: 17,
-    fontWeight: '700',
-    color: '#3B0764',
+    fontWeight: '800',
+    color: tokens.colors.accentDeep,
   },
   itemMeta: {
     fontSize: 13,
-    color: '#5B21B6',
+    color: '#5F1175',
   },
   inputLabel: {
     marginTop: 8,
     fontSize: 14,
-    color: '#6D28D9',
+    color: '#77158E',
     fontWeight: '800',
   },
   input: {
     minHeight: 52,
     borderWidth: 1.5,
-    borderColor: '#A78BFA',
-    backgroundColor: '#F5F3FF',
-    borderRadius: 12,
+    borderColor: tokens.colors.borderStrong,
+    backgroundColor: '#F9F3FD',
+    borderRadius: 14,
     paddingHorizontal: 12,
     paddingVertical: 12,
-    color: '#3B0764',
+    color: tokens.colors.accentDeep,
     fontSize: 17,
     fontWeight: '700',
   },
   inputFocused: {
-    borderColor: '#7C3AED',
-    backgroundColor: '#EDE9FE',
+    borderColor: tokens.colors.accent,
+    backgroundColor: '#F0E5FA',
   },
   inputError: {
-    borderColor: '#EF4444',
+    borderColor: '#D74A4A',
   },
   errorText: {
-    color: '#B91C1C',
+    color: '#B02323',
     fontSize: 12,
     lineHeight: 17,
   },
@@ -1048,17 +1057,22 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
   },
   statusPending: {
-    backgroundColor: '#E9D5FF',
+    backgroundColor: '#E8DAF3',
   },
   statusNeedPurchase: {
-    backgroundColor: '#F5D0FE',
+    backgroundColor: '#FCE8E8',
   },
   statusOk: {
-    backgroundColor: '#DDD6FE',
+    backgroundColor: '#E8F6EE',
   },
   statusText: {
-    color: '#4C1D95',
+    color: tokens.colors.accentDeep,
     fontSize: 12,
     fontWeight: '700',
+  },
+  heroKpis: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
   },
 });

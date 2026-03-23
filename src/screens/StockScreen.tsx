@@ -7,6 +7,8 @@ import { syncAppData } from '../database/sync.service';
 import { SyncStatusCard } from '../components/SyncStatusCard';
 import { StockEmphasis } from '../components/StockEmphasis';
 import { useTopPopup } from '../components/TopPopupProvider';
+import { HeroHeader, KpiTile, MotionEntrance, ScreenShell } from '../components/ui-kit';
+import { tokens } from '../theme/tokens';
 import type { StockCurrentOverviewRow } from '../types/inventory';
 
 function formatQuantity(value: number): string {
@@ -75,7 +77,7 @@ export function StockScreen() {
   }, [items]);
 
   return (
-    <View style={styles.container}>
+    <ScreenShell>
       <FlatList
         data={items}
         keyExtractor={(item) => String(item.id)}
@@ -91,17 +93,20 @@ export function StockScreen() {
           <View style={styles.headerBlock}>
             <SyncStatusCard />
 
-            <View style={styles.heroCard}>
-              <Text style={styles.title}>Estoque Atual</Text>
-              <Text style={styles.description}>
-                Veja o saldo consolidado de cada item. Quando o saldo atual ficar menor ou igual ao minimo, o item
-                sera marcado para compra.
-              </Text>
-              <Text style={styles.summaryText}>
-                Itens: {summary.totalItems} | Com saldo: {summary.initializedItems} | Comprar:{' '}
-                {summary.needPurchaseItems} | Faltante total: {formatQuantity(summary.totalMissingQuantity)}
-              </Text>
-            </View>
+            <MotionEntrance delay={80}>
+              <HeroHeader
+                title="Estoque Atual"
+                subtitle="Saldo consolidado"
+                description="Acompanhe rapidamente os itens no limite minimo e o faltante para compra."
+              >
+                <View style={styles.heroKpis}>
+                  <KpiTile label="Itens" value={String(summary.totalItems)} />
+                  <KpiTile label="Com saldo" value={String(summary.initializedItems)} />
+                  <KpiTile label="Comprar" value={String(summary.needPurchaseItems)} />
+                  <KpiTile label="Faltante" value={formatQuantity(summary.totalMissingQuantity)} />
+                </View>
+              </HeroHeader>
+            </MotionEntrance>
           </View>
         }
         ListEmptyComponent={
@@ -161,14 +166,14 @@ export function StockScreen() {
         }}
         contentContainerStyle={styles.listContent}
       />
-    </View>
+    </ScreenShell>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F5F3FF',
+    backgroundColor: 'transparent',
   },
   listContent: {
     padding: 16,
@@ -180,18 +185,15 @@ const styles = StyleSheet.create({
     marginBottom: 6,
   },
   heroCard: {
-    backgroundColor: '#5B21B6',
-    borderRadius: 18,
-    padding: 16,
-    gap: 8,
+    display: 'none',
   },
   title: {
-    color: '#F5F3FF',
+    color: '#F5EEFB',
     fontSize: 24,
     fontWeight: '800',
   },
   description: {
-    color: '#EDE9FE',
+    color: '#EDE0F9',
     fontSize: 14,
     lineHeight: 20,
   },
@@ -202,23 +204,25 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   errorText: {
-    color: '#B91C1C',
+    color: '#B02323',
     fontSize: 12,
     lineHeight: 17,
   },
   emptyText: {
     textAlign: 'center',
-    color: '#6D28D9',
+    color: tokens.colors.accent,
     fontSize: 14,
     marginTop: 16,
+    fontWeight: '700',
   },
   itemCard: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: tokens.colors.surface,
     borderWidth: 1,
-    borderColor: '#DDD6FE',
-    borderRadius: 14,
+    borderColor: tokens.colors.borderSoft,
+    borderRadius: 18,
     padding: 14,
     gap: 6,
+    ...tokens.shadow.card,
   },
   itemHeader: {
     flexDirection: 'row',
@@ -229,12 +233,12 @@ const styles = StyleSheet.create({
   itemName: {
     flex: 1,
     fontSize: 17,
-    fontWeight: '700',
-    color: '#3B0764',
+    fontWeight: '800',
+    color: tokens.colors.accentDeep,
   },
   itemMeta: {
     fontSize: 13,
-    color: '#5B21B6',
+    color: tokens.colors.textSecondary,
   },
   statusBadge: {
     borderRadius: 999,
@@ -242,32 +246,37 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
   },
   statusPending: {
-    backgroundColor: '#E9D5FF',
+    backgroundColor: '#E8DAF3',
   },
   statusNeedPurchase: {
-    backgroundColor: '#F5D0FE',
+    backgroundColor: '#FCE8E8',
   },
   statusOk: {
-    backgroundColor: '#DDD6FE',
+    backgroundColor: '#E8F6EE',
   },
   statusText: {
-    color: '#4C1D95',
+    color: tokens.colors.accentDeep,
     fontSize: 12,
     fontWeight: '700',
   },
   purchaseHint: {
     marginTop: 4,
     alignSelf: 'flex-start',
-    backgroundColor: '#FEE2E2',
+    backgroundColor: tokens.colors.dangerSoft,
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: '#FECACA',
+    borderColor: '#F5B9B9',
     paddingHorizontal: 10,
     paddingVertical: 5,
   },
   purchaseHintText: {
-    color: '#991B1B',
+    color: tokens.colors.danger,
     fontSize: 12,
     fontWeight: '700',
+  },
+  heroKpis: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
   },
 });

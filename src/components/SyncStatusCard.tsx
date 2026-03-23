@@ -1,5 +1,6 @@
 import { useEffect, useState, useSyncExternalStore } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
+import { tokens } from '../theme/tokens';
 import {
   getSyncStateSnapshot,
   refreshSyncStateFromDatabase,
@@ -96,7 +97,7 @@ export function SyncStatusCard() {
           disabled={syncState.isSyncing || isRefreshing}
         >
           {syncState.isSyncing || isRefreshing ? (
-            <ActivityIndicator color="#FFFFFF" size="small" />
+            <ActivityIndicator color={tokens.colors.white} size="small" />
           ) : (
             <Text style={styles.actionButtonText}>{buttonLabel}</Text>
           )}
@@ -108,46 +109,47 @@ export function SyncStatusCard() {
 
 const styles = StyleSheet.create({
   card: {
-    borderRadius: 16,
+    borderRadius: 18,
     borderWidth: 1,
-    padding: 14,
+    padding: 15,
     gap: 12,
+    ...tokens.shadow.card,
   },
   textBlock: {
     gap: 4,
   },
   title: {
     fontSize: 15,
-    fontWeight: '700',
-    color: '#312E81',
+    fontWeight: '800',
+    color: tokens.colors.accentDeep,
   },
   description: {
     fontSize: 13,
     lineHeight: 18,
-    color: '#4338CA',
+    color: tokens.colors.accentStrong,
   },
   infoCard: {
-    backgroundColor: '#EEF2FF',
-    borderColor: '#C7D2FE',
+    backgroundColor: '#F9F3FD',
+    borderColor: tokens.colors.borderSoft,
   },
   successCard: {
-    backgroundColor: '#ECFDF5',
-    borderColor: '#A7F3D0',
+    backgroundColor: tokens.colors.successSoft,
+    borderColor: '#B8E7CF',
   },
   warningCard: {
-    backgroundColor: '#FFF7ED',
-    borderColor: '#FED7AA',
+    backgroundColor: tokens.colors.warningSoft,
+    borderColor: '#F3D38A',
   },
   errorCard: {
-    backgroundColor: '#FEF2F2',
-    borderColor: '#FECACA',
+    backgroundColor: tokens.colors.dangerSoft,
+    borderColor: '#F5B9B9',
   },
   actionButton: {
     alignSelf: 'flex-start',
     minHeight: 40,
     paddingHorizontal: 14,
-    borderRadius: 10,
-    backgroundColor: '#6D28D9',
+    borderRadius: 12,
+    backgroundColor: tokens.colors.accent,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -155,8 +157,8 @@ const styles = StyleSheet.create({
     opacity: 0.7,
   },
   actionButtonText: {
-    color: '#FFFFFF',
+    color: tokens.colors.white,
     fontSize: 13,
-    fontWeight: '700',
+    fontWeight: '800',
   },
 });

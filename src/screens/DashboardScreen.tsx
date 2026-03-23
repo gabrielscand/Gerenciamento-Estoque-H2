@@ -14,6 +14,8 @@ import {
 import { BarChart, LineChart } from 'react-native-chart-kit';
 import { SyncStatusCard } from '../components/SyncStatusCard';
 import { useTopPopup } from '../components/TopPopupProvider';
+import { HeroHeader, KpiTile, MotionEntrance, ScreenShell } from '../components/ui-kit';
+import { tokens } from '../theme/tokens';
 import { getDashboardAnalytics } from '../database/items.repository';
 import { syncAppData } from '../database/sync.service';
 import type {
@@ -312,8 +314,8 @@ export function DashboardScreen() {
       backgroundGradientFrom: '#FFFFFF',
       backgroundGradientTo: '#FFFFFF',
       decimalPlaces: 1,
-      color: (opacity = 1) => `rgba(76, 29, 149, ${opacity})`,
-      labelColor: (opacity = 1) => `rgba(76, 29, 149, ${opacity})`,
+      color: (opacity = 1) => `rgba(119, 21, 142, ${opacity})`,
+      labelColor: (opacity = 1) => `rgba(95, 17, 117, ${opacity})`,
       propsForLabels: {
         fontSize: '11',
         fontWeight: '700',
@@ -333,19 +335,23 @@ export function DashboardScreen() {
       propsForDots: {
         r: '3',
         strokeWidth: '1',
-        stroke: '#5B21B6',
+        stroke: '#5F1175',
       },
       propsForBackgroundLines: {
-        stroke: '#E9D5FF',
+        stroke: '#D8C3EA',
       },
       barPercentage: 0.75,
     }),
     [],
   );
   const activeInfoContent = activeChartInfo ? DASHBOARD_CHART_INFO_CONTENT[activeChartInfo] : null;
+  const totalEntry = dashboardData?.totals.entryQuantity ?? 0;
+  const totalExit = dashboardData?.totals.exitQuantity ?? 0;
+  const totalMovement = dashboardData?.totals.movementTotal ?? 0;
+  const totalItems = dashboardData?.totals.activeItems ?? 0;
 
   return (
-    <View style={styles.container}>
+    <ScreenShell>
       <ScrollView
         contentContainerStyle={styles.content}
         refreshControl={
@@ -359,11 +365,20 @@ export function DashboardScreen() {
       >
         <SyncStatusCard />
 
-        <View style={styles.heroCard}>
-          <Text style={styles.heroTitle}>Dashboard</Text>
-          <Text style={styles.heroSubtitle}>Curva ABC e ranking mensal de compras e saidas</Text>
-          <Text style={styles.heroSummary}>Periodo selecionado: {monthInputValue}</Text>
-        </View>
+        <MotionEntrance delay={80}>
+          <HeroHeader
+            title="Dashboard"
+            subtitle="Analise mensal"
+            description="Curva ABC e ranking de compras/saidas para apoiar reposicao e giro."
+          >
+            <View style={styles.heroKpis}>
+              <KpiTile label="Entrada" value={formatQuantity(totalEntry)} />
+              <KpiTile label="Saida" value={formatQuantity(totalExit)} />
+              <KpiTile label="Movimentacao" value={formatQuantity(totalMovement)} />
+              <KpiTile label="Itens ativos" value={String(totalItems)} />
+            </View>
+          </HeroHeader>
+        </MotionEntrance>
 
         <View style={styles.controlsCard}>
           <Text style={styles.cardTitle}>Periodo do dashboard</Text>
@@ -611,14 +626,14 @@ export function DashboardScreen() {
           </View>
         </View>
       </Modal>
-    </View>
+    </ScreenShell>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F5F3FF',
+    backgroundColor: 'transparent',
   },
   content: {
     padding: 16,
@@ -626,10 +641,7 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   heroCard: {
-    borderRadius: 18,
-    padding: 16,
-    backgroundColor: '#5B21B6',
-    gap: 8,
+    display: 'none',
   },
   heroTitle: {
     color: '#FFFFFF',
@@ -637,65 +649,67 @@ const styles = StyleSheet.create({
     fontWeight: '800',
   },
   heroSubtitle: {
-    color: '#EDE9FE',
+    color: '#EDE0F9',
     fontSize: 14,
     lineHeight: 20,
   },
   heroSummary: {
-    color: '#DDD6FE',
+    color: '#D8C3EA',
     fontSize: 13,
     fontWeight: '700',
   },
   controlsCard: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: tokens.colors.surface,
     borderWidth: 1,
-    borderColor: '#DDD6FE',
-    borderRadius: 14,
+    borderColor: tokens.colors.borderSoft,
+    borderRadius: 18,
     padding: 12,
     gap: 8,
+    ...tokens.shadow.card,
   },
   cardTitle: {
     fontSize: 16,
     fontWeight: '800',
-    color: '#4C1D95',
+    color: '#3A0D49',
   },
   cardSubtitle: {
     fontSize: 12,
-    color: '#6D28D9',
+    color: '#77158E',
     lineHeight: 18,
   },
   monthInput: {
     borderWidth: 1,
-    borderColor: '#C4B5FD',
-    backgroundColor: '#FAF5FF',
+    borderColor: '#B690D2',
+    backgroundColor: '#F8F1FD',
     borderRadius: 12,
     paddingHorizontal: 12,
     paddingVertical: 10,
-    color: '#3B0764',
+    color: '#2A0834',
   },
   inputError: {
-    borderColor: '#DC2626',
+    borderColor: '#CF2D2D',
   },
   currentMonthButton: {
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: '#C4B5FD',
-    backgroundColor: '#F5F3FF',
+    borderColor: '#B690D2',
+    backgroundColor: '#F5EEFB',
     paddingVertical: 8,
     alignItems: 'center',
   },
   currentMonthButtonText: {
-    color: '#5B21B6',
+    color: '#5F1175',
     fontWeight: '700',
     fontSize: 13,
   },
   metricCard: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: tokens.colors.surface,
     borderWidth: 1,
-    borderColor: '#DDD6FE',
-    borderRadius: 14,
+    borderColor: tokens.colors.borderSoft,
+    borderRadius: 18,
     padding: 12,
     gap: 8,
+    ...tokens.shadow.card,
   },
   metricButtons: {
     flexDirection: 'row',
@@ -705,19 +719,19 @@ const styles = StyleSheet.create({
     flex: 1,
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: '#C4B5FD',
-    backgroundColor: '#F5F3FF',
+    borderColor: '#B690D2',
+    backgroundColor: '#F5EEFB',
     minHeight: 42,
     justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: 8,
   },
   metricButtonActive: {
-    backgroundColor: '#6D28D9',
-    borderColor: '#5B21B6',
+    backgroundColor: '#77158E',
+    borderColor: '#5F1175',
   },
   metricButtonText: {
-    color: '#5B21B6',
+    color: '#5F1175',
     fontSize: 12,
     fontWeight: '700',
     textAlign: 'center',
@@ -726,12 +740,12 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
   },
   errorText: {
-    color: '#B91C1C',
+    color: '#B02323',
     fontSize: 12,
     lineHeight: 17,
   },
   emptyText: {
-    color: '#6D28D9',
+    color: '#77158E',
     fontSize: 13,
     lineHeight: 18,
     textAlign: 'center',
@@ -743,30 +757,32 @@ const styles = StyleSheet.create({
   },
   kpiCard: {
     width: '48%',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: tokens.colors.surface,
     borderWidth: 1,
-    borderColor: '#DDD6FE',
-    borderRadius: 12,
+    borderColor: tokens.colors.borderSoft,
+    borderRadius: 16,
     padding: 12,
     gap: 4,
+    ...tokens.shadow.card,
   },
   kpiLabel: {
-    color: '#6D28D9',
+    color: '#77158E',
     fontSize: 12,
     fontWeight: '700',
   },
   kpiValue: {
-    color: '#3B0764',
+    color: '#2A0834',
     fontSize: 17,
     fontWeight: '800',
   },
   chartCard: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: tokens.colors.surface,
     borderWidth: 1,
-    borderColor: '#DDD6FE',
-    borderRadius: 14,
+    borderColor: tokens.colors.borderSoft,
+    borderRadius: 18,
     padding: 12,
     gap: 10,
+    ...tokens.shadow.card,
   },
   chartHeaderRow: {
     flexDirection: 'row',
@@ -779,16 +795,16 @@ const styles = StyleSheet.create({
     height: 28,
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: '#C4B5FD',
-    backgroundColor: '#F5F3FF',
+    borderColor: '#B690D2',
+    backgroundColor: '#F5EEFB',
     alignItems: 'center',
     justifyContent: 'center',
   },
   chartInfoButtonPressed: {
-    backgroundColor: '#EDE9FE',
+    backgroundColor: '#EDE0F9',
   },
   chartInfoButtonText: {
-    color: '#5B21B6',
+    color: '#5F1175',
     fontSize: 13,
     fontWeight: '800',
   },
@@ -800,9 +816,9 @@ const styles = StyleSheet.create({
   },
   abcRow: {
     borderWidth: 1,
-    borderColor: '#E9D5FF',
+    borderColor: '#D8C3EA',
     borderRadius: 10,
-    backgroundColor: '#FAF5FF',
+    backgroundColor: '#F8F1FD',
     paddingHorizontal: 10,
     paddingVertical: 8,
     flexDirection: 'row',
@@ -814,12 +830,12 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   abcItemName: {
-    color: '#3B0764',
+    color: '#2A0834',
     fontSize: 13,
     fontWeight: '700',
   },
   abcItemMeta: {
-    color: '#6D28D9',
+    color: '#77158E',
     fontSize: 12,
   },
   abcBadge: {
@@ -830,55 +846,57 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
   },
   abcBadgeA: {
-    backgroundColor: '#DCFCE7',
+    backgroundColor: '#EDF8F2',
   },
   abcBadgeB: {
-    backgroundColor: '#FEF9C3',
+    backgroundColor: '#FFF7D7',
   },
   abcBadgeC: {
-    backgroundColor: '#FEE2E2',
+    backgroundColor: '#FDECEC',
   },
   abcBadgeText: {
-    color: '#4C1D95',
+    color: '#3A0D49',
     fontSize: 12,
     fontWeight: '800',
   },
   emptyCard: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: tokens.colors.surface,
     borderWidth: 1,
-    borderColor: '#DDD6FE',
-    borderRadius: 14,
+    borderColor: tokens.colors.borderSoft,
+    borderRadius: 18,
     padding: 16,
     gap: 8,
     alignItems: 'center',
+    ...tokens.shadow.card,
   },
   emptyTitle: {
-    color: '#4C1D95',
+    color: '#3A0D49',
     fontSize: 16,
     fontWeight: '800',
     textAlign: 'center',
   },
   infoModalBackdrop: {
     flex: 1,
-    backgroundColor: 'rgba(15, 23, 42, 0.35)',
+    backgroundColor: tokens.colors.overlay,
     paddingHorizontal: 20,
     justifyContent: 'center',
   },
   infoModalCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
+    backgroundColor: tokens.colors.surface,
+    borderRadius: 20,
     borderWidth: 1,
-    borderColor: '#DDD6FE',
+    borderColor: tokens.colors.borderSoft,
     padding: 16,
     gap: 12,
+    ...tokens.shadow.card,
   },
   infoModalTitle: {
-    color: '#3B0764',
+    color: '#2A0834',
     fontSize: 18,
     fontWeight: '800',
   },
   infoModalDescription: {
-    color: '#5B21B6',
+    color: '#5F1175',
     fontSize: 14,
     lineHeight: 20,
   },
@@ -886,15 +904,20 @@ const styles = StyleSheet.create({
     marginTop: 2,
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: '#C4B5FD',
-    backgroundColor: '#F5F3FF',
+    borderColor: '#B690D2',
+    backgroundColor: '#F5EEFB',
     minHeight: 40,
     alignItems: 'center',
     justifyContent: 'center',
   },
   infoModalCloseButtonText: {
-    color: '#5B21B6',
+    color: '#5F1175',
     fontSize: 13,
     fontWeight: '800',
+  },
+  heroKpis: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
   },
 });

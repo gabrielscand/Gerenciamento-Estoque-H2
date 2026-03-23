@@ -11,6 +11,8 @@ import { refreshSyncStateFromDatabase, syncAppData } from './src/database/sync.s
 import { Tabs } from './src/navigation/Tabs';
 import { LoginScreen } from './src/screens/LoginScreen';
 import { TopPopupProvider } from './src/components/TopPopupProvider';
+import { MotionEntrance, ScreenShell, SectionSurface } from './src/components/ui-kit';
+import { tokens } from './src/theme/tokens';
 import type { AppUser } from './src/types/inventory';
 
 type InitStatus = 'loading' | 'ready' | 'error';
@@ -83,11 +85,19 @@ export default function App() {
   if (initStatus === 'loading') {
     return (
       <TopPopupProvider>
-        <View style={styles.centeredContainer}>
-          <StatusBar style="dark" />
-          <ActivityIndicator size="large" />
-          <Text style={styles.infoText}>Inicializando banco local...</Text>
-        </View>
+        <ScreenShell>
+          <View style={styles.centeredContainer}>
+            <StatusBar style="dark" />
+            <MotionEntrance>
+              <SectionSurface>
+                <View style={styles.statusBlock}>
+                  <ActivityIndicator size="large" color={tokens.colors.accent} />
+                  <Text style={styles.infoText}>Inicializando banco local...</Text>
+                </View>
+              </SectionSurface>
+            </MotionEntrance>
+          </View>
+        </ScreenShell>
       </TopPopupProvider>
     );
   }
@@ -95,11 +105,19 @@ export default function App() {
   if (initStatus === 'error') {
     return (
       <TopPopupProvider>
-        <View style={styles.centeredContainer}>
-          <StatusBar style="dark" />
-          <Text style={styles.errorTitle}>Falha ao iniciar o aplicativo</Text>
-          <Text style={styles.errorMessage}>{errorMessage}</Text>
-        </View>
+        <ScreenShell>
+          <View style={styles.centeredContainer}>
+            <StatusBar style="dark" />
+            <MotionEntrance>
+              <SectionSurface>
+                <View style={styles.statusBlock}>
+                  <Text style={styles.errorTitle}>Falha ao iniciar o aplicativo</Text>
+                  <Text style={styles.errorMessage}>{errorMessage}</Text>
+                </View>
+              </SectionSurface>
+            </MotionEntrance>
+          </View>
+        </ScreenShell>
       </TopPopupProvider>
     );
   }
@@ -142,25 +160,32 @@ export default function App() {
 const styles = StyleSheet.create({
   centeredContainer: {
     flex: 1,
-    backgroundColor: '#fff',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 24,
-    gap: 12,
+    paddingHorizontal: 22,
+  },
+  statusBlock: {
+    minWidth: 280,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    paddingVertical: 12,
   },
   infoText: {
     fontSize: 16,
-    color: '#111827',
+    color: tokens.colors.text,
+    fontWeight: '700',
   },
   errorTitle: {
     fontSize: 20,
-    fontWeight: '700',
-    color: '#991B1B',
+    fontWeight: '800',
+    color: tokens.colors.danger,
     textAlign: 'center',
   },
   errorMessage: {
     fontSize: 14,
-    color: '#374151',
+    color: tokens.colors.textSecondary,
     textAlign: 'center',
+    lineHeight: 20,
   },
 });

@@ -7,6 +7,7 @@ import {
   parseDateStringToDate,
   parseDisplayDateToIso,
 } from '../utils/date';
+import { tokens } from '../theme/tokens';
 
 type DateFieldProps = {
   value: string;
@@ -113,36 +114,36 @@ const styles = StyleSheet.create({
   },
   label: {
     fontSize: 13,
-    color: '#6D28D9',
-    fontWeight: '700',
+    color: tokens.colors.accent,
+    fontWeight: '800',
   },
   input: {
     borderWidth: 1,
-    borderColor: '#C4B5FD',
-    backgroundColor: '#FAF5FF',
+    borderColor: tokens.colors.borderStrong,
+    backgroundColor: '#FAF5FD',
     borderRadius: 12,
     paddingHorizontal: 12,
     paddingVertical: 10,
-    color: '#3B0764',
+    color: tokens.colors.accentDeep,
   },
   mobileButton: {
     borderWidth: 1,
-    borderColor: '#C4B5FD',
-    backgroundColor: '#FAF5FF',
+    borderColor: tokens.colors.borderStrong,
+    backgroundColor: '#FAF5FD',
     borderRadius: 12,
     paddingHorizontal: 12,
     paddingVertical: 10,
   },
   mobileButtonText: {
-    color: '#3B0764',
+    color: tokens.colors.accentDeep,
     fontSize: 14,
-    fontWeight: '600',
+    fontWeight: '700',
   },
   inputError: {
-    borderColor: '#DC2626',
+    borderColor: '#D74A4A',
   },
   errorText: {
-    color: '#B91C1C',
+    color: tokens.colors.danger,
     fontSize: 12,
   },
 });

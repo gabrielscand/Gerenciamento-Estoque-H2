@@ -14,6 +14,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { getCategoryLabel } from '../constants/categories';
 import {
   archiveStockItem,
@@ -29,6 +30,8 @@ import { syncAppData } from '../database/sync.service';
 import { SyncStatusCard } from '../components/SyncStatusCard';
 import { StockEmphasis } from '../components/StockEmphasis';
 import { useTopPopup } from '../components/TopPopupProvider';
+import { HeroHeader, KpiTile, MotionEntrance, ScreenShell } from '../components/ui-kit';
+import { tokens } from '../theme/tokens';
 import type { CreateStockItemInput, StockItemListRow } from '../types/inventory';
 
 type FormState = {
@@ -173,7 +176,7 @@ function CatalogSelect({
         >
           {value ? labelResolver(value) : placeholder}
         </Text>
-        <Text style={styles.selectArrow}>{isOpen ? '▴' : '▾'}</Text>
+        <Text style={styles.selectArrow}>{isOpen ? '^' : 'v'}</Text>
       </Pressable>
 
       {isOpen ? (
@@ -564,9 +567,15 @@ export function ItemsScreen() {
       MAX_AUTOCOMPLETE_SUGGESTIONS,
     );
   })();
+  const totalItems = items.length;
+  const withCategory = items.filter((item) => !!item.category).length;
+  const withStock = items.filter((item) => item.currentStockQuantity !== null).length;
+  const needPurchaseNow = items.filter(
+    (item) => item.currentStockQuantity !== null && (item.currentStockQuantity as number) <= item.minQuantity,
+  ).length;
 
   return (
-    <View style={styles.container}>
+    <ScreenShell>
       <FlatList
         data={filteredItems}
         keyExtractor={(item) => String(item.id)}
@@ -582,13 +591,20 @@ export function ItemsScreen() {
           <View style={styles.headerBlock}>
             <SyncStatusCard />
 
-            <View style={styles.heroCard}>
-              <Text style={styles.title}>Cadastro de Itens</Text>
-              <Text style={styles.subtitle}>
-                Cadastre itens com nome, unidade e quantidade minima. O saldo atual sera atualizado pelas abas de
-                Entrada e Saida.
-              </Text>
-            </View>
+            <MotionEntrance delay={80}>
+              <HeroHeader
+                title="Cadastro de Itens"
+                subtitle="Base de produtos e insumos"
+                description="Configure nome, unidade, categoria e minimo para abastecer a operacao."
+              >
+                <View style={styles.heroKpis}>
+                  <KpiTile label="Itens" value={String(totalItems)} />
+                  <KpiTile label="Com categoria" value={String(withCategory)} />
+                  <KpiTile label="Com saldo" value={String(withStock)} />
+                  <KpiTile label="Comprar agora" value={String(needPurchaseNow)} />
+                </View>
+              </HeroHeader>
+            </MotionEntrance>
 
             <View style={styles.formCard}>
               <Text style={styles.formTitle}>Novo item</Text>
@@ -746,7 +762,7 @@ export function ItemsScreen() {
                 <Text style={styles.itemName}>{item.name}</Text>
                 {!isEditing ? (
                   <Pressable style={styles.iconButton} onPress={() => startEditing(item)}>
-                    <Text style={styles.iconButtonText}>✎</Text>
+                    <Ionicons name="create-outline" size={16} color={tokens.colors.accentDeep} />
                   </Pressable>
                 ) : null}
               </View>
@@ -927,14 +943,14 @@ export function ItemsScreen() {
           </View>
         </View>
       </Modal>
-    </View>
+    </ScreenShell>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F5F3FF',
+    backgroundColor: 'transparent',
   },
   toastContainer: {
     position: 'absolute',
@@ -942,12 +958,12 @@ const styles = StyleSheet.create({
     left: 16,
     right: 16,
     zIndex: 10,
-    backgroundColor: '#4C1D95',
+    backgroundColor: '#3A0D49',
     borderRadius: 12,
     paddingHorizontal: 12,
     paddingVertical: 10,
     borderWidth: 1,
-    borderColor: '#C4B5FD',
+    borderColor: '#B690D2',
   },
   toastText: {
     color: '#FFFFFF',
@@ -965,50 +981,48 @@ const styles = StyleSheet.create({
     marginBottom: 6,
   },
   heroCard: {
-    backgroundColor: '#5B21B6',
-    borderRadius: 18,
-    padding: 16,
-    gap: 8,
+    display: 'none',
   },
   title: {
-    color: '#F5F3FF',
+    color: '#F5EEFB',
     fontSize: 24,
     fontWeight: '800',
   },
   subtitle: {
-    color: '#EDE9FE',
+    color: '#EDE0F9',
     fontSize: 14,
     lineHeight: 20,
   },
   formCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 18,
+    backgroundColor: tokens.colors.surface,
+    borderRadius: 20,
     borderWidth: 1,
-    borderColor: '#DDD6FE',
+    borderColor: tokens.colors.borderSoft,
     padding: 16,
     gap: 10,
+    ...tokens.shadow.card,
   },
   formTitle: {
     fontSize: 18,
     fontWeight: '700',
-    color: '#4C1D95',
+    color: '#3A0D49',
   },
   fieldGroup: {
     gap: 6,
   },
   label: {
     fontSize: 13,
-    color: '#6D28D9',
-    fontWeight: '600',
+    color: tokens.colors.accent,
+    fontWeight: '800',
   },
   input: {
     borderWidth: 1,
-    borderColor: '#C4B5FD',
-    backgroundColor: '#FAF5FF',
+    borderColor: '#B690D2',
+    backgroundColor: '#F8F1FD',
     borderRadius: 12,
     paddingHorizontal: 12,
     paddingVertical: 10,
-    color: '#3B0764',
+    color: '#2A0834',
     fontSize: 15,
   },
   selectRoot: {
@@ -1016,8 +1030,8 @@ const styles = StyleSheet.create({
   },
   selectTrigger: {
     borderWidth: 1,
-    borderColor: '#C4B5FD',
-    backgroundColor: '#FAF5FF',
+    borderColor: '#B690D2',
+    backgroundColor: '#F8F1FD',
     borderRadius: 12,
     paddingHorizontal: 12,
     paddingVertical: 10,
@@ -1036,25 +1050,25 @@ const styles = StyleSheet.create({
     opacity: 0.7,
   },
   selectTriggerText: {
-    color: '#3B0764',
+    color: '#2A0834',
     fontSize: 15,
     fontWeight: '600',
   },
   selectPlaceholderText: {
-    color: '#7C3AED',
+    color: '#8A2AA3',
     fontSize: 15,
   },
   selectCompactText: {
     fontSize: 13,
   },
   selectArrow: {
-    color: '#6D28D9',
+    color: '#77158E',
     fontSize: 12,
     fontWeight: '700',
   },
   selectMenu: {
     borderWidth: 1,
-    borderColor: '#DDD6FE',
+    borderColor: '#D8C3EA',
     borderRadius: 12,
     backgroundColor: '#FFFFFF',
     overflow: 'hidden',
@@ -1072,15 +1086,15 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 10,
     borderBottomWidth: 1,
-    borderBottomColor: '#F3E8FF',
-    backgroundColor: '#FAF5FF',
+    borderBottomColor: '#EAD9F6',
+    backgroundColor: '#F8F1FD',
   },
   selectEmptyStateCompact: {
     paddingHorizontal: 10,
     paddingVertical: 8,
   },
   selectEmptyStateText: {
-    color: '#7C3AED',
+    color: '#8A2AA3',
     fontSize: 13,
   },
   selectEmptyStateTextCompact: {
@@ -1090,17 +1104,17 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 10,
     borderBottomWidth: 1,
-    borderBottomColor: '#F3E8FF',
+    borderBottomColor: '#EAD9F6',
   },
   selectOptionCompact: {
     paddingHorizontal: 10,
     paddingVertical: 8,
   },
   selectOptionActive: {
-    backgroundColor: '#EDE9FE',
+    backgroundColor: '#EDE0F9',
   },
   selectOptionText: {
-    color: '#4C1D95',
+    color: '#3A0D49',
     fontSize: 14,
     fontWeight: '600',
   },
@@ -1108,17 +1122,17 @@ const styles = StyleSheet.create({
     fontSize: 13,
   },
   selectOptionTextActive: {
-    color: '#5B21B6',
+    color: '#5F1175',
     fontWeight: '700',
   },
   inputError: {
-    borderColor: '#EF4444',
+    borderColor: '#D74A4A',
   },
   submitButton: {
     marginTop: 6,
-    backgroundColor: '#7C3AED',
-    borderRadius: 12,
-    minHeight: 44,
+    backgroundColor: tokens.colors.accent,
+    borderRadius: 14,
+    minHeight: 46,
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 12,
@@ -1132,8 +1146,8 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   successText: {
-    color: '#5B21B6',
-    backgroundColor: '#EDE9FE',
+    color: '#5F1175',
+    backgroundColor: '#EDE0F9',
     borderRadius: 10,
     paddingHorizontal: 10,
     paddingVertical: 8,
@@ -1141,17 +1155,18 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   errorText: {
-    color: '#B91C1C',
+    color: '#B02323',
     fontSize: 12,
     lineHeight: 17,
   },
   searchCard: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: tokens.colors.surface,
     borderWidth: 1,
-    borderColor: '#DDD6FE',
-    borderRadius: 14,
+    borderColor: tokens.colors.borderSoft,
+    borderRadius: 18,
     padding: 12,
     gap: 8,
+    ...tokens.shadow.card,
   },
   searchHeader: {
     flexDirection: 'row',
@@ -1161,36 +1176,36 @@ const styles = StyleSheet.create({
   },
   searchLabel: {
     fontSize: 13,
-    color: '#6D28D9',
+    color: '#77158E',
     fontWeight: '700',
   },
   clearSearchButton: {
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: '#C4B5FD',
-    backgroundColor: '#F5F3FF',
+    borderColor: '#B690D2',
+    backgroundColor: '#F5EEFB',
     paddingHorizontal: 10,
     paddingVertical: 5,
   },
   clearSearchButtonText: {
-    color: '#5B21B6',
+    color: '#5F1175',
     fontSize: 12,
     fontWeight: '700',
   },
   searchInput: {
     borderWidth: 1,
-    borderColor: '#C4B5FD',
-    backgroundColor: '#FAF5FF',
+    borderColor: '#B690D2',
+    backgroundColor: '#F8F1FD',
     borderRadius: 10,
     paddingHorizontal: 12,
     paddingVertical: 10,
-    color: '#3B0764',
+    color: '#2A0834',
     fontSize: 14,
   },
   searchSuggestionsContainer: {
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: '#DDD6FE',
+    borderColor: '#D8C3EA',
     overflow: 'hidden',
     backgroundColor: '#FFFFFF',
   },
@@ -1198,35 +1213,37 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 10,
     borderBottomWidth: 1,
-    borderBottomColor: '#F3E8FF',
+    borderBottomColor: '#EAD9F6',
   },
   searchSuggestionButtonLast: {
     borderBottomWidth: 0,
   },
   searchSuggestionText: {
-    color: '#4C1D95',
+    color: '#3A0D49',
     fontSize: 13,
     fontWeight: '600',
   },
   listTitle: {
     fontSize: 18,
-    fontWeight: '700',
-    color: '#4C1D95',
+    fontWeight: '800',
+    color: tokens.colors.accentDeep,
     marginTop: 4,
   },
   emptyText: {
     textAlign: 'center',
-    color: '#6D28D9',
+    color: tokens.colors.accent,
     fontSize: 14,
     marginTop: 20,
+    fontWeight: '700',
   },
   itemCard: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: tokens.colors.surface,
     borderWidth: 1,
-    borderColor: '#DDD6FE',
-    borderRadius: 14,
+    borderColor: tokens.colors.borderSoft,
+    borderRadius: 18,
     padding: 14,
     gap: 8,
+    ...tokens.shadow.card,
   },
   itemHeader: {
     flexDirection: 'row',
@@ -1237,28 +1254,22 @@ const styles = StyleSheet.create({
   itemName: {
     flex: 1,
     fontSize: 17,
-    fontWeight: '700',
-    color: '#3B0764',
+    fontWeight: '800',
+    color: tokens.colors.accentDeep,
   },
   iconButton: {
     width: 32,
     height: 32,
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: '#C4B5FD',
-    backgroundColor: '#F5F3FF',
+    borderColor: '#B690D2',
+    backgroundColor: '#F5EEFB',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  iconButtonText: {
-    color: '#4C1D95',
-    fontSize: 16,
-    fontWeight: '700',
-    lineHeight: 18,
-  },
   itemMeta: {
     fontSize: 13,
-    color: '#5B21B6',
+    color: tokens.colors.textSecondary,
   },
   pendingCategoryBadge: {
     alignSelf: 'flex-start',
@@ -1282,16 +1293,16 @@ const styles = StyleSheet.create({
   cancelButton: {
     flex: 1,
     borderWidth: 1,
-    borderColor: '#C4B5FD',
-    borderRadius: 12,
+    borderColor: '#B690D2',
+    borderRadius: 14,
     minHeight: 44,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#F5F3FF',
+    backgroundColor: '#F5EEFB',
     marginTop: 6,
   },
   cancelButtonText: {
-    color: '#5B21B6',
+    color: '#5F1175',
     fontSize: 15,
     fontWeight: '700',
   },
@@ -1301,8 +1312,8 @@ const styles = StyleSheet.create({
   deleteButton: {
     flex: 1,
     marginTop: 6,
-    backgroundColor: '#B91C1C',
-    borderRadius: 12,
+    backgroundColor: '#B02323',
+    borderRadius: 14,
     minHeight: 44,
     alignItems: 'center',
     justifyContent: 'center',
@@ -1310,30 +1321,31 @@ const styles = StyleSheet.create({
   },
   modalBackdrop: {
     flex: 1,
-    backgroundColor: 'rgba(15, 23, 42, 0.35)',
+    backgroundColor: tokens.colors.overlay,
     paddingHorizontal: 20,
     justifyContent: 'center',
   },
   modalCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
+    backgroundColor: tokens.colors.surface,
+    borderRadius: 20,
     borderWidth: 1,
-    borderColor: '#DDD6FE',
+    borderColor: tokens.colors.borderSoft,
     padding: 16,
     gap: 12,
+    ...tokens.shadow.card,
   },
   modalTitle: {
-    color: '#3B0764',
+    color: '#2A0834',
     fontSize: 18,
     fontWeight: '800',
   },
   modalDescription: {
-    color: '#5B21B6',
+    color: '#5F1175',
     fontSize: 14,
     lineHeight: 20,
   },
   modalItemName: {
-    color: '#4C1D95',
+    color: '#3A0D49',
     fontSize: 15,
     fontWeight: '700',
   },
@@ -1344,31 +1356,36 @@ const styles = StyleSheet.create({
   modalSecondaryButton: {
     flex: 1,
     borderWidth: 1,
-    borderColor: '#C4B5FD',
-    borderRadius: 10,
+    borderColor: '#B690D2',
+    borderRadius: 12,
     minHeight: 44,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#F5F3FF',
+    backgroundColor: '#F5EEFB',
     paddingHorizontal: 12,
   },
   modalSecondaryButtonText: {
-    color: '#5B21B6',
+    color: '#5F1175',
     fontSize: 14,
     fontWeight: '700',
   },
   modalDangerButton: {
     flex: 1,
-    borderRadius: 10,
+    borderRadius: 12,
     minHeight: 44,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#B91C1C',
+    backgroundColor: '#B02323',
     paddingHorizontal: 12,
   },
   modalDangerButtonText: {
     color: '#FFFFFF',
     fontSize: 14,
     fontWeight: '700',
+  },
+  heroKpis: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
   },
 });

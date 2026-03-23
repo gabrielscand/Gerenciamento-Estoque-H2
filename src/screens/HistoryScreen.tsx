@@ -25,6 +25,8 @@ import { syncAppData } from '../database/sync.service';
 import { SyncStatusCard } from '../components/SyncStatusCard';
 import { StockEmphasis } from '../components/StockEmphasis';
 import { useTopPopup } from '../components/TopPopupProvider';
+import { HeroHeader, KpiTile, MotionEntrance, ScreenShell } from '../components/ui-kit';
+import { tokens } from '../theme/tokens';
 import type { DailyHistoryEntry, DailyHistoryGroup, PeriodHistoryGroup } from '../types/inventory';
 import {
   formatDateLabel,
@@ -527,9 +529,11 @@ export function HistoryScreen({ canManageHistoryActions = false }: HistoryScreen
         'Visualize os dias com entrada e saida no mes, com todos os itens movimentados e status de compra.',
     };
   }, [mode]);
+  const totalGroups = isDailyMode ? dailyGroups.length : periodGroups.length;
+  const periodLabel = isDailyMode ? 'Dia' : mode === 'quinzenal' ? 'Quinzena' : 'Mes';
 
   return (
-    <View style={styles.container}>
+    <ScreenShell>
       <FlatList<DailyHistoryGroup | PeriodHistoryGroup>
         data={isDailyMode ? dailyGroups : periodGroups}
         keyExtractor={(item) => ('date' in item ? item.date : item.id)}
@@ -545,10 +549,25 @@ export function HistoryScreen({ canManageHistoryActions = false }: HistoryScreen
           <View style={styles.headerBlock}>
             <SyncStatusCard />
 
-            <View style={styles.heroCard}>
-              <Text style={styles.title}>{heroText.title}</Text>
-              <Text style={styles.description}>{heroText.description}</Text>
-            </View>
+            <MotionEntrance delay={80}>
+              <HeroHeader
+                title={heroText.title}
+                subtitle={`Visao: ${periodLabel}`}
+                description={heroText.description}
+              >
+                <View style={styles.heroKpis}>
+                  <KpiTile label="Registros" value={String(totalGroups)} />
+                  <KpiTile
+                    label="Filtro"
+                    value={isDailyMode ? getDailyMovementFilterLabel(dailyMovementFilter) : 'Completo'}
+                  />
+                  <KpiTile
+                    label="Mes"
+                    value={isDailyMode ? '--' : formatMonthLabel(selectedMonth)}
+                  />
+                </View>
+              </HeroHeader>
+            </MotionEntrance>
 
             <View style={styles.modeSwitcher}>
               <Pressable
@@ -1033,14 +1052,14 @@ export function HistoryScreen({ canManageHistoryActions = false }: HistoryScreen
           </View>
         </Modal>
       ) : null}
-    </View>
+    </ScreenShell>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F5F3FF',
+    backgroundColor: 'transparent',
   },
   listContent: {
     padding: 16,
@@ -1052,24 +1071,21 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   heroCard: {
-    backgroundColor: '#6D28D9',
-    borderRadius: 18,
-    padding: 16,
-    gap: 8,
+    display: 'none',
   },
   title: {
     fontSize: 24,
     fontWeight: '800',
-    color: '#F5F3FF',
+    color: '#F5EEFB',
   },
   description: {
     fontSize: 14,
     lineHeight: 20,
-    color: '#EDE9FE',
+    color: '#EDE0F9',
   },
   modeSwitcher: {
     flexDirection: 'row',
-    backgroundColor: '#EDE9FE',
+    backgroundColor: '#EDE0F9',
     borderRadius: 12,
     padding: 4,
     gap: 6,
@@ -1082,10 +1098,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   modeButtonActive: {
-    backgroundColor: '#7C3AED',
+    backgroundColor: '#8A2AA3',
   },
   modeText: {
-    color: '#6D28D9',
+    color: '#77158E',
     fontWeight: '700',
     fontSize: 12,
   },
@@ -1094,12 +1110,12 @@ const styles = StyleSheet.create({
   },
   dailyFilterSwitcher: {
     flexDirection: 'row',
-    backgroundColor: '#F3E8FF',
+    backgroundColor: '#EAD9F6',
     borderRadius: 12,
     padding: 4,
     gap: 6,
     borderWidth: 1,
-    borderColor: '#DDD6FE',
+    borderColor: '#D8C3EA',
   },
   dailyFilterButton: {
     flex: 1,
@@ -1109,10 +1125,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   dailyFilterButtonActive: {
-    backgroundColor: '#6D28D9',
+    backgroundColor: '#77158E',
   },
   dailyFilterText: {
-    color: '#6D28D9',
+    color: '#77158E',
     fontWeight: '700',
     fontSize: 12,
   },
@@ -1120,43 +1136,44 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
   },
   monthCard: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: tokens.colors.surface,
     borderWidth: 1,
-    borderColor: '#DDD6FE',
-    borderRadius: 14,
+    borderColor: tokens.colors.borderSoft,
+    borderRadius: 18,
     padding: 12,
     gap: 8,
+    ...tokens.shadow.card,
   },
   monthLabel: {
     fontSize: 13,
-    color: '#6D28D9',
+    color: '#77158E',
     fontWeight: '700',
   },
   monthInput: {
     borderWidth: 1,
-    borderColor: '#C4B5FD',
-    backgroundColor: '#FAF5FF',
+    borderColor: '#B690D2',
+    backgroundColor: '#F8F1FD',
     borderRadius: 12,
     paddingHorizontal: 12,
     paddingVertical: 10,
-    color: '#3B0764',
+    color: '#2A0834',
   },
   monthButton: {
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: '#C4B5FD',
-    backgroundColor: '#F5F3FF',
+    borderColor: '#B690D2',
+    backgroundColor: '#F5EEFB',
     paddingVertical: 8,
     alignItems: 'center',
   },
   monthButtonText: {
-    color: '#5B21B6',
+    color: '#5F1175',
     fontWeight: '700',
     fontSize: 13,
   },
   successText: {
-    color: '#065F46',
-    backgroundColor: '#D1FAE5',
+    color: '#2F8A5F',
+    backgroundColor: '#EDF8F2',
     borderRadius: 10,
     paddingHorizontal: 10,
     paddingVertical: 8,
@@ -1164,26 +1181,28 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   inputError: {
-    borderColor: '#DC2626',
+    borderColor: '#CF2D2D',
   },
   errorText: {
-    color: '#B91C1C',
+    color: '#B02323',
     fontSize: 12,
     lineHeight: 17,
   },
   emptyText: {
     textAlign: 'center',
-    color: '#6D28D9',
+    color: tokens.colors.accent,
     fontSize: 14,
     marginTop: 16,
+    fontWeight: '700',
   },
   groupCard: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: tokens.colors.surface,
     borderWidth: 1,
-    borderColor: '#DDD6FE',
-    borderRadius: 14,
+    borderColor: tokens.colors.borderSoft,
+    borderRadius: 18,
     padding: 14,
     gap: 8,
+    ...tokens.shadow.card,
   },
   groupHeader: {
     flexDirection: 'row',
@@ -1195,7 +1214,7 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 18,
     fontWeight: '700',
-    color: '#4C1D95',
+    color: '#3A0D49',
   },
   groupHeaderActions: {
     flexDirection: 'row',
@@ -1206,12 +1225,12 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     paddingHorizontal: 10,
     paddingVertical: 5,
-    backgroundColor: '#FEE2E2',
+    backgroundColor: '#FDECEC',
     borderWidth: 1,
-    borderColor: '#FCA5A5',
+    borderColor: '#EFA0A0',
   },
   deleteDayButtonText: {
-    color: '#991B1B',
+    color: '#A12020',
     fontSize: 11,
     fontWeight: '700',
   },
@@ -1230,18 +1249,18 @@ const styles = StyleSheet.create({
   },
   groupBadge: {
     borderRadius: 999,
-    backgroundColor: '#EDE9FE',
+    backgroundColor: '#EDE0F9',
     paddingHorizontal: 10,
     paddingVertical: 4,
   },
   groupBadgeText: {
-    color: '#5B21B6',
+    color: '#5F1175',
     fontSize: 12,
     fontWeight: '700',
   },
   groupSummary: {
     fontSize: 13,
-    color: '#6D28D9',
+    color: '#77158E',
   },
   periodDaysContainer: {
     gap: 8,
@@ -1249,8 +1268,8 @@ const styles = StyleSheet.create({
   periodDayCard: {
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: '#E9D5FF',
-    backgroundColor: '#F8F5FF',
+    borderColor: '#D8C3EA',
+    backgroundColor: '#F8F1FD',
     padding: 10,
     gap: 8,
   },
@@ -1267,7 +1286,7 @@ const styles = StyleSheet.create({
   periodDayDate: {
     fontSize: 14,
     fontWeight: '700',
-    color: '#4C1D95',
+    color: '#3A0D49',
   },
   periodDayTypeBadges: {
     flexDirection: 'row',
@@ -1285,20 +1304,20 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   periodMovementEntryActive: {
-    backgroundColor: '#16A34A',
-    borderColor: '#15803D',
+    backgroundColor: '#2C8A5A',
+    borderColor: '#237047',
   },
   periodMovementExitActive: {
-    backgroundColor: '#DC2626',
-    borderColor: '#B91C1C',
+    backgroundColor: '#CF2D2D',
+    borderColor: '#B02323',
   },
   periodMovementEntryInactive: {
-    backgroundColor: '#ECFDF5',
+    backgroundColor: '#EDF8F2',
     borderColor: '#86EFAC',
   },
   periodMovementExitInactive: {
-    backgroundColor: '#FEF2F2',
-    borderColor: '#FCA5A5',
+    backgroundColor: '#FDECEC',
+    borderColor: '#EFA0A0',
   },
   periodMovementBadgeText: {
     fontSize: 14,
@@ -1314,7 +1333,7 @@ const styles = StyleSheet.create({
     color: '#166534',
   },
   periodMovementExitTextInactive: {
-    color: '#991B1B',
+    color: '#A12020',
   },
   periodDayHeaderRight: {
     alignItems: 'flex-end',
@@ -1323,13 +1342,13 @@ const styles = StyleSheet.create({
   periodExpandText: {
     fontSize: 11,
     fontWeight: '700',
-    color: '#6D28D9',
+    color: '#77158E',
   },
   entryRow: {
-    backgroundColor: '#FAF5FF',
+    backgroundColor: '#F8F1FD',
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: '#E9D5FF',
+    borderColor: '#D8C3EA',
     paddingHorizontal: 10,
     paddingVertical: 8,
     flexDirection: 'row',
@@ -1350,22 +1369,22 @@ const styles = StyleSheet.create({
   entryName: {
     fontSize: 14,
     fontWeight: '700',
-    color: '#3B0764',
+    color: '#2A0834',
   },
   deletedBadge: {
-    backgroundColor: '#FEE2E2',
+    backgroundColor: '#FDECEC',
     borderRadius: 999,
     paddingHorizontal: 8,
     paddingVertical: 3,
   },
   deletedBadgeText: {
-    color: '#991B1B',
+    color: '#A12020',
     fontSize: 10,
     fontWeight: '700',
   },
   entryMeta: {
     fontSize: 12,
-    color: '#6D28D9',
+    color: '#77158E',
   },
   entryActions: {
     flexDirection: 'row',
@@ -1374,27 +1393,27 @@ const styles = StyleSheet.create({
   },
   entryActionButton: {
     borderRadius: 8,
-    backgroundColor: '#EDE9FE',
+    backgroundColor: '#EDE0F9',
     borderWidth: 1,
-    borderColor: '#C4B5FD',
+    borderColor: '#B690D2',
     paddingHorizontal: 10,
     paddingVertical: 6,
   },
   entryActionButtonText: {
-    color: '#5B21B6',
+    color: '#5F1175',
     fontSize: 12,
     fontWeight: '700',
   },
   entryDeleteButton: {
     borderRadius: 8,
-    backgroundColor: '#FEE2E2',
+    backgroundColor: '#FDECEC',
     borderWidth: 1,
-    borderColor: '#FCA5A5',
+    borderColor: '#EFA0A0',
     paddingHorizontal: 10,
     paddingVertical: 6,
   },
   entryDeleteButtonText: {
-    color: '#991B1B',
+    color: '#A12020',
     fontSize: 12,
     fontWeight: '700',
   },
@@ -1407,47 +1426,48 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
   },
   statusOk: {
-    backgroundColor: '#DDD6FE',
+    backgroundColor: '#D8C3EA',
   },
   statusNeedPurchase: {
-    backgroundColor: '#F5D0FE',
+    backgroundColor: '#E8CFF3',
   },
   statusText: {
     fontSize: 12,
     fontWeight: '700',
-    color: '#4C1D95',
+    color: '#3A0D49',
   },
   modalBackdrop: {
     flex: 1,
-    backgroundColor: 'rgba(17, 24, 39, 0.45)',
+    backgroundColor: tokens.colors.overlay,
     justifyContent: 'center',
     paddingHorizontal: 20,
   },
   modalCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 14,
+    backgroundColor: tokens.colors.surface,
+    borderRadius: 20,
     borderWidth: 1,
-    borderColor: '#DDD6FE',
+    borderColor: tokens.colors.borderSoft,
     padding: 14,
     gap: 10,
+    ...tokens.shadow.card,
   },
   modalTitle: {
-    color: '#4C1D95',
+    color: '#3A0D49',
     fontSize: 16,
     fontWeight: '800',
   },
   modalMessage: {
-    color: '#6D28D9',
+    color: '#77158E',
     fontSize: 13,
   },
   modalInput: {
     borderWidth: 1,
-    borderColor: '#C4B5FD',
-    backgroundColor: '#FAF5FF',
+    borderColor: '#B690D2',
+    backgroundColor: '#F8F1FD',
     borderRadius: 10,
     paddingHorizontal: 10,
     paddingVertical: 9,
-    color: '#3B0764',
+    color: '#2A0834',
   },
   modalActions: {
     flexDirection: 'row',
@@ -1456,22 +1476,22 @@ const styles = StyleSheet.create({
   modalCancelButton: {
     flex: 1,
     borderWidth: 1,
-    borderColor: '#C4B5FD',
+    borderColor: '#B690D2',
     borderRadius: 10,
-    backgroundColor: '#F5F3FF',
+    backgroundColor: '#F5EEFB',
     minHeight: 40,
     justifyContent: 'center',
     alignItems: 'center',
   },
   modalCancelButtonText: {
-    color: '#5B21B6',
+    color: '#5F1175',
     fontWeight: '700',
     fontSize: 13,
   },
   modalConfirmButton: {
     flex: 1,
     borderRadius: 10,
-    backgroundColor: '#7C3AED',
+    backgroundColor: '#8A2AA3',
     minHeight: 40,
     justifyContent: 'center',
     alignItems: 'center',
@@ -1480,5 +1500,10 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontWeight: '700',
     fontSize: 13,
+  },
+  heroKpis: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
   },
 });
