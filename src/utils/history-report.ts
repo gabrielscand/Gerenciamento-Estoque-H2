@@ -8,11 +8,18 @@ import type {
   HistoryReportItemSummary,
   HistoryReportPeriod,
 } from '../types/inventory';
-import { formatDateLabel, getTodayLocalDateString, isValidDateString } from './date';
+import {
+  formatDateLabel,
+  formatMonthLabel,
+  getMonthDateRange,
+  getTodayLocalDateString,
+  isValidDateString,
+} from './date';
 
 type ReportDateRange = {
   startDate: string;
   endDate: string;
+  selectedMonth: string | null;
 };
 
 type ReportPeriodMeta = {
@@ -30,6 +37,7 @@ type ReportSummaryPayload = {
   period: HistoryReportPeriod;
   startDate: string;
   endDate: string;
+  selectedMonth: string | null;
   generatedAt: Date;
   entries: HistoryReportEntry[];
   topEntryItems: ReportTopItem[];
@@ -44,6 +52,11 @@ export type GenerateHistoryReportPdfResult = {
   totalMovements: number;
   uri: string | null;
   shared: boolean;
+};
+
+export type GenerateHistoryReportPdfOptions = {
+  selectedMonth?: string;
+  referenceDate?: Date;
 };
 
 function formatDateTime(value: Date): string {
@@ -83,30 +96,55 @@ function shiftIsoDate(date: string, dayDelta: number): string {
   return getTodayLocalDateString(nextDate);
 }
 
-function resolveDateRange(period: HistoryReportPeriod, referenceDate: Date = new Date()): ReportDateRange {
+function resolveDateRange(
+  period: HistoryReportPeriod,
+  options: GenerateHistoryReportPdfOptions = {},
+): ReportDateRange {
+  const referenceDate = options.referenceDate ?? new Date();
   const today = getTodayLocalDateString(referenceDate);
+  const selectedMonthRange = options.selectedMonth ? getMonthDateRange(options.selectedMonth) : null;
+  const selectedMonth = selectedMonthRange ? options.selectedMonth ?? null : null;
 
   if (period === 'diario') {
     return {
       startDate: today,
       endDate: today,
+      selectedMonth: null,
     };
   }
 
   if (period === 'quinzenal') {
+    if (selectedMonthRange) {
+      return {
+        startDate: selectedMonthRange.startDate,
+        endDate: selectedMonthRange.endDate,
+        selectedMonth,
+      };
+    }
+
     return {
       startDate: shiftIsoDate(today, -14),
       endDate: today,
+      selectedMonth: null,
+    };
+  }
+
+  if (selectedMonthRange) {
+    return {
+      startDate: selectedMonthRange.startDate,
+      endDate: selectedMonthRange.endDate,
+      selectedMonth,
     };
   }
 
   return {
     startDate: shiftIsoDate(today, -29),
     endDate: today,
+    selectedMonth: null,
   };
 }
 
-function getPeriodMeta(period: HistoryReportPeriod): ReportPeriodMeta {
+function getPeriodMeta(period: HistoryReportPeriod, selectedMonth: string | null): ReportPeriodMeta {
   if (period === 'diario') {
     return {
       reportTitle: 'Relatorio Diario de Movimentacoes',
@@ -115,9 +153,23 @@ function getPeriodMeta(period: HistoryReportPeriod): ReportPeriodMeta {
   }
 
   if (period === 'quinzenal') {
+    if (selectedMonth) {
+      return {
+        reportTitle: 'Relatorio Quinzenal de Movimentacoes',
+        periodLabel: `Quinzenal de ${formatMonthLabel(selectedMonth)} (01-15 e 16-fim)`,
+      };
+    }
+
     return {
       reportTitle: 'Relatorio Quinzenal de Movimentacoes',
       periodLabel: 'Quinzenal (ultimos 15 dias)',
+    };
+  }
+
+  if (selectedMonth) {
+    return {
+      reportTitle: 'Relatorio Mensal de Movimentacoes',
+      periodLabel: `Mensal de ${formatMonthLabel(selectedMonth)}`,
     };
   }
 
@@ -212,7 +264,7 @@ function buildItemSummaries(entries: HistoryReportEntry[]): HistoryReportItemSum
 }
 
 function buildPdfHtml(payload: ReportSummaryPayload): string {
-  const periodMeta = getPeriodMeta(payload.period);
+  const periodMeta = getPeriodMeta(payload.period, payload.selectedMonth);
   const periodRangeLabel = `${formatDateLabel(payload.startDate)} a ${formatDateLabel(payload.endDate)}`;
 
   const topEntryListHtml =
@@ -436,8 +488,171 @@ function buildPdfHtml(payload: ReportSummaryPayload): string {
   `;
 }
 
+type PdfTextOptions = {
+  fontSize?: number;
+  bold?: boolean;
+  indent?: number;
+  lineGap?: number;
+};
+
+type PdfCursor = {
+  x: number;
+  y: number;
+  top: number;
+  maxY: number;
+  width: number;
+};
+
+function ensurePdfSpace(doc: any, cursor: PdfCursor, neededHeight: number): void {
+  if (cursor.y + neededHeight <= cursor.maxY) {
+    return;
+  }
+
+  doc.addPage();
+  cursor.y = cursor.top;
+}
+
+function writePdfText(doc: any, cursor: PdfCursor, text: string, options: PdfTextOptions = {}): void {
+  const fontSize = options.fontSize ?? 10;
+  const indent = options.indent ?? 0;
+  const lineGap = options.lineGap ?? 4;
+  const lineHeight = fontSize + lineGap;
+  const availableWidth = Math.max(40, cursor.width - indent);
+  const lines: string[] = doc.splitTextToSize(text, availableWidth);
+
+  doc.setFont('helvetica', options.bold ? 'bold' : 'normal');
+  doc.setFontSize(fontSize);
+  doc.setTextColor(42, 8, 52);
+
+  for (const line of lines) {
+    ensurePdfSpace(doc, cursor, lineHeight);
+    doc.text(line, cursor.x + indent, cursor.y);
+    cursor.y += lineHeight;
+  }
+}
+
+function addPdfSpacer(cursor: PdfCursor, size: number = 6): void {
+  cursor.y += size;
+}
+
+function buildPdfFileName(period: HistoryReportPeriod, startDate: string, endDate: string): string {
+  return `relatorio-${period}-${startDate}-${endDate}.pdf`;
+}
+
+async function generateWebPdf(payload: ReportSummaryPayload): Promise<void> {
+  const { jsPDF } = await import('jspdf');
+  const doc = new jsPDF({ unit: 'pt', format: 'a4' });
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const pageHeight = doc.internal.pageSize.getHeight();
+  const left = 40;
+  const right = 40;
+  const top = 44;
+  const bottom = 44;
+  const periodMeta = getPeriodMeta(payload.period, payload.selectedMonth);
+  const periodRangeLabel = `${formatDateLabel(payload.startDate)} a ${formatDateLabel(payload.endDate)}`;
+  const cursor: PdfCursor = {
+    x: left,
+    y: top,
+    top,
+    maxY: pageHeight - bottom,
+    width: pageWidth - left - right,
+  };
+
+  writePdfText(doc, cursor, periodMeta.reportTitle, { fontSize: 20, bold: true, lineGap: 6 });
+  writePdfText(doc, cursor, 'Relatorio de estoque | H2 Campinas', { fontSize: 11 });
+  addPdfSpacer(cursor, 8);
+
+  writePdfText(doc, cursor, '1. Informacoes gerais', { fontSize: 14, bold: true, lineGap: 6 });
+  writePdfText(doc, cursor, `Tipo: ${periodMeta.periodLabel}`);
+  writePdfText(doc, cursor, `Periodo analisado: ${periodRangeLabel}`);
+  writePdfText(doc, cursor, `Data de geracao: ${formatDateTime(payload.generatedAt)}`);
+  writePdfText(doc, cursor, `Total de movimentacoes: ${String(payload.entries.length)}`);
+  addPdfSpacer(cursor, 8);
+
+  writePdfText(doc, cursor, '2. Destaques principais', { fontSize: 14, bold: true, lineGap: 6 });
+  writePdfText(doc, cursor, 'Itens com maior entrada:', { bold: true });
+  if (payload.topEntryItems.length === 0) {
+    writePdfText(doc, cursor, '- Sem entradas no periodo.', { indent: 10 });
+  } else {
+    payload.topEntryItems.forEach((item, index) => {
+      writePdfText(
+        doc,
+        cursor,
+        `- ${index + 1}. ${item.name} | ${formatQuantity(item.quantity)} ${item.unit}`,
+        { indent: 10 },
+      );
+    });
+  }
+
+  writePdfText(doc, cursor, 'Itens com maior saida:', { bold: true });
+  if (payload.topExitItems.length === 0) {
+    writePdfText(doc, cursor, '- Sem saidas no periodo.', { indent: 10 });
+  } else {
+    payload.topExitItems.forEach((item, index) => {
+      writePdfText(
+        doc,
+        cursor,
+        `- ${index + 1}. ${item.name} | ${formatQuantity(item.quantity)} ${item.unit}`,
+        { indent: 10 },
+      );
+    });
+  }
+  addPdfSpacer(cursor, 8);
+
+  writePdfText(doc, cursor, '3. Lista completa de movimentacoes', { fontSize: 14, bold: true, lineGap: 6 });
+  if (payload.entries.length === 0) {
+    writePdfText(doc, cursor, 'Sem movimentacoes no periodo selecionado.', { indent: 10 });
+  } else {
+    payload.entries.forEach((entry) => {
+      writePdfText(
+        doc,
+        cursor,
+        `- ${formatDateLabel(entry.date)} | ${entry.name} | ${getMovementLabel(entry.movementType)} | ${formatQuantity(entry.quantity)} ${entry.unit}`,
+        { indent: 10 },
+      );
+    });
+  }
+  addPdfSpacer(cursor, 8);
+
+  writePdfText(doc, cursor, '4. Resumo por item (todos os itens do periodo)', {
+    fontSize: 14,
+    bold: true,
+    lineGap: 6,
+  });
+  if (payload.itemSummaries.length === 0) {
+    writePdfText(doc, cursor, 'Nenhum item movimentado neste periodo.', { indent: 10 });
+  } else {
+    payload.itemSummaries.forEach((item) => {
+      const highlights: string[] = [];
+      if (item.isTopEntry) {
+        highlights.push('Maior entrada');
+      }
+      if (item.isTopExit) {
+        highlights.push('Maior saida');
+      }
+
+      writePdfText(
+        doc,
+        cursor,
+        `- ${item.name} | Entradas: ${formatQuantity(item.totalEntryQuantity)} ${item.unit} | Saidas: ${formatQuantity(item.totalExitQuantity)} ${item.unit}`,
+        { indent: 10, bold: true },
+      );
+      writePdfText(
+        doc,
+        cursor,
+        `  Datas: ${item.movementDates.map((date) => formatDateLabel(date)).join(', ') || '-'}`,
+        { indent: 16 },
+      );
+      writePdfText(doc, cursor, `  Destaque: ${highlights.join(' / ') || '-'}`, { indent: 16 });
+    });
+  }
+
+  doc.save(buildPdfFileName(payload.period, payload.startDate, payload.endDate));
+}
+
 export async function generateHistoryReportPdf(
   period: HistoryReportPeriod,
+  options: GenerateHistoryReportPdfOptions = {},
 ): Promise<GenerateHistoryReportPdfResult> {
   const syncOk = await syncAppData();
 
@@ -445,26 +660,29 @@ export async function generateHistoryReportPdf(
     throw new Error('Falha ao sincronizar com o Supabase. Nao foi possivel gerar o relatorio.');
   }
 
-  const { startDate, endDate } = resolveDateRange(period);
+  const { startDate, endDate, selectedMonth } = resolveDateRange(period, options);
   const entries = await listHistoryEntriesByDateRange(startDate, endDate);
   const itemSummaries = buildItemSummaries(entries);
   const topEntryItems = getTopItems(itemSummaries, 'entry', 5);
   const topExitItems = getTopItems(itemSummaries, 'exit', 5);
   const generatedAt = new Date();
 
-  const html = buildPdfHtml({
+  const payload: ReportSummaryPayload = {
     period,
     startDate,
     endDate,
+    selectedMonth,
     generatedAt,
     entries,
     topEntryItems,
     topExitItems,
     itemSummaries,
-  });
+  };
+
+  const html = buildPdfHtml(payload);
 
   if (Platform.OS === 'web') {
-    await Print.printAsync({ html });
+    await generateWebPdf(payload);
 
     return {
       period,

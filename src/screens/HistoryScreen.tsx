@@ -538,7 +538,7 @@ export function HistoryScreen({ canManageHistoryActions = false }: HistoryScreen
     setIsGeneratingReport(true);
 
     try {
-      const result = await generateHistoryReportPdf(period);
+      const result = await generateHistoryReportPdf(period, { selectedMonth });
       const periodLabel = getHistoryReportPeriodLabel(period);
 
       showTopPopup({
