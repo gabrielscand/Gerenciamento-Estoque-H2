@@ -21,6 +21,7 @@ import type {
   DailyCountUpdateInput,
   DailyHistoryEntry,
   DailyHistoryGroup,
+  HistoryReportEntry,
   PeriodHistoryDay,
   PeriodHistoryDayEntry,
   PeriodHistoryGroup,
@@ -116,6 +117,16 @@ type PeriodHistoryDayDetailRow = {
   stockAfterQuantity: number | null;
   missingQuantity: number;
   itemDeleted: number;
+};
+
+type HistoryReportEntryRow = {
+  id: number;
+  date: string;
+  itemId: number;
+  name: string;
+  unit: string;
+  quantity: number;
+  movementType: string | null;
 };
 
 type DashboardSummaryRow = {
@@ -343,6 +354,12 @@ function isEntryLikeMovementType(movementType: DailyHistoryEntry['movementType']
 
 function isExitLikeMovementType(movementType: DailyHistoryEntry['movementType']): boolean {
   return movementType === 'exit' || movementType === 'consumption';
+}
+
+function toReportMovementType(
+  movementType: DailyHistoryEntry['movementType'],
+): HistoryReportEntry['movementType'] {
+  return isEntryLikeMovementType(movementType) ? 'entry' : 'exit';
 }
 
 function roundQuantity(value: number): number {
@@ -1576,6 +1593,50 @@ export async function listDailyHistoryGrouped(): Promise<DailyHistoryGroup[]> {
     totalMissingQuantity: summary.totalMissingQuantity,
     entries: entriesByDate.get(summary.date) ?? [],
   }));
+}
+
+export async function listHistoryEntriesByDateRange(
+  startDate: string,
+  endDate: string,
+): Promise<HistoryReportEntry[]> {
+  if (!isValidDateString(startDate) || !isValidDateString(endDate) || startDate > endDate) {
+    throw new Error('Periodo invalido para gerar relatorio.');
+  }
+
+  const database = await getDatabase();
+  const rows = await database.getAllAsync<HistoryReportEntryRow>(
+    `
+      SELECT
+        daily_stock_entries.id AS id,
+        daily_stock_entries.date AS date,
+        stock_items.id AS itemId,
+        stock_items.name AS name,
+        stock_items.unit AS unit,
+        daily_stock_entries.quantity AS quantity,
+        daily_stock_entries.movement_type AS movementType
+      FROM daily_stock_entries
+      INNER JOIN stock_items ON stock_items.id = daily_stock_entries.item_id
+      WHERE daily_stock_entries.is_deleted = 0
+        AND daily_stock_entries.date BETWEEN ? AND ?
+      ORDER BY daily_stock_entries.date DESC, daily_stock_entries.created_at ASC, daily_stock_entries.id ASC;
+    `,
+    startDate,
+    endDate,
+  );
+
+  return rows.map((row) => {
+    const normalizedMovementType = normalizeMovementType(row.movementType, 'exit');
+
+    return {
+      id: row.id,
+      date: row.date,
+      itemId: row.itemId,
+      name: row.name,
+      unit: row.unit,
+      quantity: row.quantity,
+      movementType: toReportMovementType(normalizedMovementType),
+    };
+  });
 }
 
 async function loadPeriodEntries(

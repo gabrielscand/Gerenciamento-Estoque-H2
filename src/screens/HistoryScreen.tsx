@@ -25,15 +25,21 @@ import { syncAppData } from '../database/sync.service';
 import { SyncStatusCard } from '../components/SyncStatusCard';
 import { StockEmphasis } from '../components/StockEmphasis';
 import { useTopPopup } from '../components/TopPopupProvider';
-import { HeroHeader, KpiTile, MotionEntrance, ScreenShell } from '../components/ui-kit';
+import { AppButton, HeroHeader, KpiTile, MotionEntrance, ScreenShell } from '../components/ui-kit';
 import { tokens } from '../theme/tokens';
-import type { DailyHistoryEntry, DailyHistoryGroup, PeriodHistoryGroup } from '../types/inventory';
+import type {
+  DailyHistoryEntry,
+  DailyHistoryGroup,
+  HistoryReportPeriod,
+  PeriodHistoryGroup,
+} from '../types/inventory';
 import {
   formatDateLabel,
   formatMonthLabel,
   getCurrentMonthString,
   parseDisplayMonthToIso,
 } from '../utils/date';
+import { generateHistoryReportPdf } from '../utils/history-report';
 
 type HistoryMode = 'diario' | 'quinzenal' | 'mensal';
 type DailyMovementFilter = 'entry' | 'exit';
@@ -91,6 +97,18 @@ function getDailyMovementFilterLabel(filter: DailyMovementFilter): string {
   return filter === 'entry' ? 'Entrada' : 'Saida';
 }
 
+function getHistoryReportPeriodLabel(period: HistoryReportPeriod): string {
+  if (period === 'diario') {
+    return 'Diario';
+  }
+
+  if (period === 'quinzenal') {
+    return 'Quinzenal';
+  }
+
+  return 'Mensal';
+}
+
 function parseDecimalInput(value: string): number | null {
   const normalized = value.trim().replace(',', '.');
 
@@ -121,6 +139,8 @@ export function HistoryScreen({ canManageHistoryActions = false }: HistoryScreen
   const [monthInputError, setMonthInputError] = useState('');
   const [dailyGroups, setDailyGroups] = useState<DailyHistoryGroup[]>([]);
   const [periodGroups, setPeriodGroups] = useState<PeriodHistoryGroup[]>([]);
+  const [isReportPickerOpen, setIsReportPickerOpen] = useState(false);
+  const [isGeneratingReport, setIsGeneratingReport] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
@@ -507,6 +527,39 @@ export function HistoryScreen({ canManageHistoryActions = false }: HistoryScreen
     }
   }
 
+  async function handleGenerateReport(period: HistoryReportPeriod) {
+    if (isGeneratingReport) {
+      return;
+    }
+
+    setIsReportPickerOpen(false);
+    setErrorMessage('');
+    setSuccessMessage('');
+    setIsGeneratingReport(true);
+
+    try {
+      const result = await generateHistoryReportPdf(period);
+      const periodLabel = getHistoryReportPeriodLabel(period);
+
+      showTopPopup({
+        type: 'success',
+        message:
+          Platform.OS === 'web'
+            ? `Relatorio ${periodLabel.toLowerCase()} enviado para visualizacao/impressao.`
+            : result.totalMovements === 0
+              ? `Relatorio ${periodLabel.toLowerCase()} gerado sem movimentacoes no periodo.`
+            : result.shared
+              ? `Relatorio ${periodLabel.toLowerCase()} gerado e pronto para compartilhar.`
+              : `Relatorio ${periodLabel.toLowerCase()} gerado com sucesso.`,
+        durationMs: 3600,
+      });
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : 'Falha ao gerar relatorio.');
+    } finally {
+      setIsGeneratingReport(false);
+    }
+  }
+
   const heroText = useMemo(() => {
     if (mode === 'diario') {
       return {
@@ -649,6 +702,16 @@ export function HistoryScreen({ canManageHistoryActions = false }: HistoryScreen
                 {monthInputError ? <Text style={styles.errorText}>{monthInputError}</Text> : null}
               </View>
             ) : null}
+
+            <View style={styles.reportButtonWrap}>
+              <AppButton
+                label={isGeneratingReport ? 'Gerando relatorio...' : 'Gerar Relatorio'}
+                onPress={() => {
+                  setIsReportPickerOpen(true);
+                }}
+                disabled={isGeneratingReport}
+              />
+            </View>
 
           </View>
         }
@@ -1023,6 +1086,74 @@ export function HistoryScreen({ canManageHistoryActions = false }: HistoryScreen
         contentContainerStyle={styles.listContent}
       />
 
+      {isReportPickerOpen ? (
+        <Modal
+          visible
+          transparent
+          animationType="fade"
+          onRequestClose={() => {
+            if (!isGeneratingReport) {
+              setIsReportPickerOpen(false);
+            }
+          }}
+        >
+          <View style={styles.modalBackdrop}>
+            <View style={styles.modalCard}>
+              <Text style={styles.modalTitle}>Gerar Relatorio</Text>
+              <Text style={styles.modalMessage}>Escolha o periodo para montar o PDF.</Text>
+              <View style={styles.reportPeriodActions}>
+                <Pressable
+                  style={[
+                    styles.reportPeriodButton,
+                    isGeneratingReport ? styles.actionDisabled : undefined,
+                  ]}
+                  onPress={() => {
+                    void handleGenerateReport('diario');
+                  }}
+                  disabled={isGeneratingReport}
+                >
+                  <Text style={styles.reportPeriodButtonText}>Diario</Text>
+                </Pressable>
+                <Pressable
+                  style={[
+                    styles.reportPeriodButton,
+                    isGeneratingReport ? styles.actionDisabled : undefined,
+                  ]}
+                  onPress={() => {
+                    void handleGenerateReport('quinzenal');
+                  }}
+                  disabled={isGeneratingReport}
+                >
+                  <Text style={styles.reportPeriodButtonText}>Quinzenal</Text>
+                </Pressable>
+                <Pressable
+                  style={[
+                    styles.reportPeriodButton,
+                    isGeneratingReport ? styles.actionDisabled : undefined,
+                  ]}
+                  onPress={() => {
+                    void handleGenerateReport('mensal');
+                  }}
+                  disabled={isGeneratingReport}
+                >
+                  <Text style={styles.reportPeriodButtonText}>Mensal</Text>
+                </Pressable>
+              </View>
+              <Pressable
+                style={[
+                  styles.modalCancelButton,
+                  isGeneratingReport ? styles.actionDisabled : undefined,
+                ]}
+                onPress={() => setIsReportPickerOpen(false)}
+                disabled={isGeneratingReport}
+              >
+                <Text style={styles.modalCancelButtonText}>Cancelar</Text>
+              </Pressable>
+            </View>
+          </View>
+        </Modal>
+      ) : null}
+
       {fallbackPromptConfig ? (
         <Modal visible transparent animationType="fade" onRequestClose={() => closeFallbackPrompt(null)}>
           <View style={styles.modalBackdrop}>
@@ -1170,6 +1301,9 @@ const styles = StyleSheet.create({
     color: '#5F1175',
     fontWeight: '700',
     fontSize: 13,
+  },
+  reportButtonWrap: {
+    marginTop: 2,
   },
   successText: {
     color: '#2F8A5F',
@@ -1472,6 +1606,23 @@ const styles = StyleSheet.create({
   modalActions: {
     flexDirection: 'row',
     gap: 10,
+  },
+  reportPeriodActions: {
+    gap: 8,
+  },
+  reportPeriodButton: {
+    borderRadius: 10,
+    backgroundColor: '#8A2AA3',
+    minHeight: 42,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#6D1F89',
+  },
+  reportPeriodButtonText: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+    fontSize: 14,
   },
   modalCancelButton: {
     flex: 1,

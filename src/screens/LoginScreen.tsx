@@ -1,11 +1,14 @@
 import { useState } from 'react';
 import {
   ActivityIndicator,
+  KeyboardAvoidingView,
   Platform,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
+  useWindowDimensions,
   View,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -20,9 +23,11 @@ type LoginScreenProps = {
 };
 
 export function LoginScreen({ onLoginSuccess }: LoginScreenProps) {
+  const { width } = useWindowDimensions();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [isPasswordVisible, setIsPasswordVisible] = useState(false);
+  const [focusedField, setFocusedField] = useState<'username' | 'password' | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { showTopPopup } = useTopPopup();
 
@@ -55,112 +60,147 @@ export function LoginScreen({ onLoginSuccess }: LoginScreenProps) {
 
   return (
     <ScreenShell>
-      <View style={styles.container}>
-        <MotionEntrance>
-          <HeroHeader
-            title="H2 Estoque"
-            subtitle="Acesso seguro"
-            description="Controle operacional com sincronizacao e historico completo."
-          />
-        </MotionEntrance>
+      <KeyboardAvoidingView
+        style={styles.keyboardContainer}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      >
+        <ScrollView
+          contentContainerStyle={styles.scrollContent}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
+          <View style={[styles.contentWrap, { maxWidth: width >= 960 ? 540 : 460 }]}>
+            <MotionEntrance>
+              <HeroHeader
+                title="Login"
+                subtitle="Acesso seguro"
+                description="Informe usuario e senha para continuar no sistema."
+              />
+            </MotionEntrance>
 
-        <MotionEntrance delay={80}>
-          <SectionSurface>
-            <View style={styles.cardContent}>
-              <Text style={styles.formTitle}>Entrar no sistema</Text>
-              <Text style={styles.formSubtitle}>Informe usuario e senha para continuar.</Text>
+            <MotionEntrance delay={80}>
+              <SectionSurface>
+                <View style={styles.formContent}>
+                  <View style={styles.inputGroup}>
+                    <Text style={styles.label}>Usuario</Text>
+                    <View
+                      style={[
+                        styles.inputPill,
+                        focusedField === 'username' ? styles.inputPillFocused : undefined,
+                      ]}
+                    >
+                      <View style={styles.leadingIconCircle}>
+                        <Ionicons name="person-outline" size={18} color={tokens.colors.accent} />
+                      </View>
+                      <TextInput
+                        value={username}
+                        onChangeText={setUsername}
+                        autoCapitalize="none"
+                        autoCorrect={false}
+                        placeholder="Digite seu usuario"
+                        placeholderTextColor={tokens.colors.textMuted}
+                        style={styles.pillInput}
+                        onFocus={() => setFocusedField('username')}
+                        onBlur={() => {
+                          setFocusedField((current) => (current === 'username' ? null : current));
+                        }}
+                      />
+                    </View>
+                  </View>
 
-              <View style={styles.fieldGroup}>
-                <Text style={styles.label}>Usuario</Text>
-                <TextInput
-                  value={username}
-                  onChangeText={setUsername}
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                  placeholder="Digite seu usuario"
-                  placeholderTextColor={tokens.colors.textMuted}
-                  style={styles.input}
-                />
-              </View>
+                  <View style={styles.inputGroup}>
+                    <Text style={styles.label}>Senha</Text>
+                    <View
+                      style={[
+                        styles.inputPill,
+                        focusedField === 'password' ? styles.inputPillFocused : undefined,
+                      ]}
+                    >
+                      <View style={styles.leadingIconCircle}>
+                        <Ionicons name="lock-closed-outline" size={16} color={tokens.colors.accent} />
+                      </View>
+                      <TextInput
+                        value={password}
+                        onChangeText={setPassword}
+                        onSubmitEditing={() => {
+                          void handleSubmit();
+                        }}
+                        onKeyPress={(event) => {
+                          handlePasswordKeyPress(event.nativeEvent.key);
+                        }}
+                        secureTextEntry={!isPasswordVisible}
+                        autoCapitalize="none"
+                        autoCorrect={false}
+                        placeholder="Digite sua senha"
+                        placeholderTextColor={tokens.colors.textMuted}
+                        returnKeyType="done"
+                        style={styles.pillInput}
+                        onFocus={() => setFocusedField('password')}
+                        onBlur={() => {
+                          setFocusedField((current) => (current === 'password' ? null : current));
+                        }}
+                      />
+                      <Pressable
+                        style={styles.trailingIconButton}
+                        onPress={() => setIsPasswordVisible((previous) => !previous)}
+                        accessibilityRole="button"
+                        accessibilityLabel={isPasswordVisible ? 'Ocultar senha' : 'Mostrar senha'}
+                      >
+                        <Ionicons
+                          name={isPasswordVisible ? 'eye' : 'eye-off'}
+                          size={18}
+                          color={tokens.colors.accent}
+                        />
+                      </Pressable>
+                    </View>
+                  </View>
 
-              <View style={styles.fieldGroup}>
-                <Text style={styles.label}>Senha</Text>
-                <View style={styles.passwordInputContainer}>
-                  <TextInput
-                    value={password}
-                    onChangeText={setPassword}
-                    onSubmitEditing={() => {
-                      void handleSubmit();
-                    }}
-                    onKeyPress={(event) => {
-                      handlePasswordKeyPress(event.nativeEvent.key);
-                    }}
-                    secureTextEntry={!isPasswordVisible}
-                    autoCapitalize="none"
-                    autoCorrect={false}
-                    placeholder="Digite sua senha"
-                    placeholderTextColor={tokens.colors.textMuted}
-                    returnKeyType="done"
-                    style={[styles.input, styles.passwordInput]}
-                  />
-                  <Pressable
-                    style={styles.passwordToggleButton}
-                    onPress={() => setIsPasswordVisible((previous) => !previous)}
-                    accessibilityRole="button"
-                    accessibilityLabel={isPasswordVisible ? 'Ocultar senha' : 'Mostrar senha'}
-                  >
-                    <Ionicons
-                      name={isPasswordVisible ? 'eye' : 'eye-off'}
-                      size={20}
-                      color={tokens.colors.accent}
+                  {isSubmitting ? (
+                    <View style={styles.loadingButton}>
+                      <ActivityIndicator color={tokens.colors.white} />
+                    </View>
+                  ) : (
+                    <AppButton
+                      label="LOGIN"
+                      onPress={() => {
+                        void handleSubmit();
+                      }}
                     />
-                  </Pressable>
+                  )}
                 </View>
-              </View>
+              </SectionSurface>
+            </MotionEntrance>
 
-              {isSubmitting ? (
-                <View style={styles.loadingButton}>
-                  <ActivityIndicator color={tokens.colors.white} />
-                </View>
-              ) : (
-                <AppButton
-                  label="Entrar"
-                  onPress={() => {
-                    void handleSubmit();
-                  }}
-                />
-              )}
+            <View style={styles.footerHintWrap}>
+              <Text style={styles.footerHint}>Use as mesmas credenciais ja cadastradas no sistema.</Text>
             </View>
-          </SectionSurface>
-        </MotionEntrance>
-      </View>
+          </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
     </ScreenShell>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  keyboardContainer: {
     flex: 1,
+  },
+  scrollContent: {
+    flexGrow: 1,
     justifyContent: 'center',
-    paddingHorizontal: 18,
-    gap: 14,
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 24,
   },
-  cardContent: {
-    gap: 12,
+  contentWrap: {
+    width: '100%',
+    gap: tokens.spacing.sm,
   },
-  formTitle: {
-    color: tokens.colors.accentDeep,
-    fontSize: 22,
-    fontWeight: '900',
-    letterSpacing: 0.2,
+  formContent: {
+    gap: tokens.spacing.md,
   },
-  formSubtitle: {
-    color: tokens.colors.textSecondary,
-    fontSize: 13,
-    lineHeight: 19,
-  },
-  fieldGroup: {
-    gap: 6,
+  inputGroup: {
+    gap: tokens.spacing.xs,
   },
   label: {
     color: tokens.colors.accent,
@@ -168,41 +208,66 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     letterSpacing: 0.2,
   },
-  input: {
-    minHeight: 46,
+  inputPill: {
+    minHeight: 54,
+    borderRadius: 999,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: tokens.colors.surface,
     borderWidth: 1,
     borderColor: tokens.colors.borderStrong,
-    backgroundColor: '#F8F2FC',
-    borderRadius: 12,
-    color: tokens.colors.accentDeep,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    fontSize: 15,
+    paddingLeft: 8,
+    paddingRight: 8,
+    ...tokens.shadow.card,
   },
-  passwordInputContainer: {
-    position: 'relative',
-    justifyContent: 'center',
+  inputPillFocused: {
+    borderColor: tokens.colors.accent,
   },
-  passwordInput: {
-    paddingRight: 46,
-  },
-  passwordToggleButton: {
-    position: 'absolute',
-    right: 8,
-    height: 32,
-    width: 32,
-    borderRadius: 16,
+  leadingIconCircle: {
+    height: 36,
+    width: 36,
+    borderRadius: 18,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#F0E3FA',
+    backgroundColor: tokens.colors.accentSoft,
     borderWidth: 1,
-    borderColor: '#D8C3EA',
+    borderColor: tokens.colors.borderSoft,
+  },
+  pillInput: {
+    flex: 1,
+    minHeight: 46,
+    marginLeft: 8,
+    marginRight: 6,
+    paddingVertical: 8,
+    color: tokens.colors.accentDeep,
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  trailingIconButton: {
+    height: 34,
+    width: 34,
+    borderRadius: 17,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: tokens.colors.accentSoft,
+    borderWidth: 1,
+    borderColor: tokens.colors.borderSoft,
   },
   loadingButton: {
-    borderRadius: 12,
     minHeight: 44,
+    borderRadius: tokens.radius.md,
     backgroundColor: tokens.colors.accent,
-    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: tokens.colors.accentStrong,
     alignItems: 'center',
+    justifyContent: 'center',
+  },
+  footerHintWrap: {
+    paddingHorizontal: tokens.spacing.sm,
+  },
+  footerHint: {
+    color: tokens.colors.textMuted,
+    fontSize: 12,
+    textAlign: 'center',
   },
 });

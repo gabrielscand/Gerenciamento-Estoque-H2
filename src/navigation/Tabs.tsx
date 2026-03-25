@@ -1,13 +1,12 @@
 import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import type { ReactNode } from 'react';
 import { Ionicons } from '@expo/vector-icons';
-import { LinearGradient } from 'expo-linear-gradient';
 import { canAccessTab } from '../database/auth.repository';
-import type { AppUser, AppTabPermissionKey } from '../types/inventory';
+import type { AppUser } from '../types/inventory';
 import { AdminPanelScreen } from '../screens/AdminPanelScreen';
 import { DashboardScreen } from '../screens/DashboardScreen';
+import { HomeMenuScreen, type HomeMenuCard } from '../screens/HomeMenuScreen';
 import { HistoryScreen } from '../screens/HistoryScreen';
 import { ItemsScreen } from '../screens/ItemsScreen';
 import { EntryScreen, ExitScreen } from '../screens/MovementScreen';
@@ -16,6 +15,7 @@ import { MotionEntrance, ScreenShell, SectionSurface } from '../components/ui-ki
 import { tokens } from '../theme/tokens';
 
 type RootTabParamList = {
+  Home: undefined;
   Admin: undefined;
   Dashboard: undefined;
   Stock: undefined;
@@ -33,65 +33,6 @@ type TabsProps = {
   onLogout: () => Promise<void> | void;
   onUsersChanged?: () => Promise<void> | void;
 };
-
-type ScreenConfig = {
-  name: keyof RootTabParamList;
-  title: string;
-  permission?: AppTabPermissionKey;
-  render: () => ReactNode;
-};
-
-function getTabIcon(tabName: string): keyof typeof Ionicons.glyphMap {
-  if (tabName === 'Painel ADM') {
-    return 'shield-checkmark-outline';
-  }
-  if (tabName === 'Dashboard') {
-    return 'grid-outline';
-  }
-  if (tabName === 'Estoque') {
-    return 'cube-outline';
-  }
-  if (tabName === 'Itens') {
-    return 'albums-outline';
-  }
-  if (tabName === 'Entrada') {
-    return 'arrow-down-circle-outline';
-  }
-  if (tabName === 'Saida') {
-    return 'arrow-up-circle-outline';
-  }
-  if (tabName === 'Historico') {
-    return 'time-outline';
-  }
-
-  return 'ellipse-outline';
-}
-
-function TabLabel({ focused, title }: { focused: boolean; title: string }) {
-  const icon = getTabIcon(title);
-
-  if (focused) {
-    return (
-      <LinearGradient
-        colors={[tokens.colors.accentStrong, tokens.colors.accent]}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-        style={styles.tabLabelActive}
-      >
-        <View style={styles.tabLabelIndicator} />
-        <Ionicons name={icon} size={17} color={tokens.colors.white} />
-        <Text style={styles.tabLabelTextActive}>{title}</Text>
-      </LinearGradient>
-    );
-  }
-
-  return (
-    <View style={styles.tabLabelIdle}>
-      <Ionicons name={icon} size={16} color={tokens.colors.accent} />
-      <Text style={styles.tabLabelTextIdle}>{title}</Text>
-    </View>
-  );
-}
 
 function NoAccessScreen() {
   return (
@@ -113,81 +54,22 @@ function NoAccessScreen() {
 }
 
 export function Tabs({ currentUser, onLogout, onUsersChanged }: TabsProps) {
-  const screenConfigs: ScreenConfig[] = [];
+  const canDashboard = canAccessTab(currentUser, 'dashboard');
+  const canStock = canAccessTab(currentUser, 'stock');
+  const canItems = canAccessTab(currentUser, 'items');
+  const canEntry = canAccessTab(currentUser, 'entry');
+  const canExit = canAccessTab(currentUser, 'exit');
+  const canHistory = canAccessTab(currentUser, 'history');
+  const canAdmin = currentUser.isAdmin;
+  const hasAnyAccess = canDashboard || canStock || canItems || canEntry || canExit || canHistory || canAdmin;
 
-  if (currentUser.isAdmin) {
-    screenConfigs.push({
-      name: 'Admin',
-      title: 'Painel ADM',
-      render: () => (
-        <AdminPanelScreen
-          currentUser={currentUser}
-          onUsersChanged={onUsersChanged}
-        />
-      ),
-    });
-  }
-
-  const operationalScreens: ScreenConfig[] = [
-    {
-      name: 'Dashboard',
-      title: 'Dashboard',
-      permission: 'dashboard',
-      render: () => <DashboardScreen />,
-    },
-    {
-      name: 'Stock',
-      title: 'Estoque',
-      permission: 'stock',
-      render: () => <StockScreen />,
-    },
-    {
-      name: 'Items',
-      title: 'Itens',
-      permission: 'items',
-      render: () => <ItemsScreen />,
-    },
-    {
-      name: 'Entry',
-      title: 'Entrada',
-      permission: 'entry',
-      render: () => <EntryScreen />,
-    },
-    {
-      name: 'Exit',
-      title: 'Saida',
-      permission: 'exit',
-      render: () => <ExitScreen />,
-    },
-    {
-      name: 'History',
-      title: 'Historico',
-      permission: 'history',
-      render: () => <HistoryScreen canManageHistoryActions={currentUser.isAdmin} />,
-    },
-  ];
-
-  for (const config of operationalScreens) {
-    if (config.permission && canAccessTab(currentUser, config.permission)) {
-      screenConfigs.push(config);
-    }
-  }
-
-  if (screenConfigs.length === 0) {
-    screenConfigs.push({
-      name: 'NoAccess',
-      title: 'Sem acesso',
-      render: () => <NoAccessScreen />,
-    });
-  }
-
-  const initialRouteName = screenConfigs[0]?.name ?? 'NoAccess';
+  const initialRouteName: keyof RootTabParamList = hasAnyAccess ? 'Home' : 'NoAccess';
 
   return (
     <NavigationContainer>
       <Tab.Navigator
         initialRouteName={initialRouteName}
-        screenOptions={{
+        screenOptions={({ navigation, route }) => ({
           headerTitleAlign: 'left',
           headerStyle: {
             backgroundColor: tokens.colors.accentSoft,
@@ -198,20 +80,44 @@ export function Tabs({ currentUser, onLogout, onUsersChanged }: TabsProps) {
             fontSize: 18,
           },
           headerShadowVisible: false,
+          headerLeft:
+            route.name === 'Home' || route.name === 'NoAccess'
+              ? undefined
+              : () => (
+                <Pressable
+                  style={({ pressed }) => [styles.menuButton, pressed ? styles.headerButtonPressed : undefined]}
+                  onPress={() => {
+                    navigation.navigate('Home');
+                  }}
+                >
+                  <Ionicons name="grid-outline" size={16} color={tokens.colors.accentStrong} />
+                  <Text style={styles.menuButtonText}>Menu</Text>
+                </Pressable>
+              ),
           headerRight: () => (
             <View style={styles.headerUserActions}>
+              {canHistory && route.name !== 'History' ? (
+                <Pressable
+                  style={({ pressed }) => [
+                    styles.historyButton,
+                    pressed ? styles.headerButtonPressed : undefined,
+                  ]}
+                  onPress={() => {
+                    navigation.navigate('History');
+                  }}
+                >
+                  <Ionicons name="time-outline" size={14} color={tokens.colors.accentStrong} />
+                  <Text style={styles.historyButtonText}>Histórico</Text>
+                </Pressable>
+              ) : null}
               <View style={styles.currentUserBadge}>
                 <Ionicons name="person-circle-outline" size={14} color={tokens.colors.accentStrong} />
-                <Text
-                  style={styles.currentUserText}
-                  numberOfLines={1}
-                  ellipsizeMode="tail"
-                >
+                <Text style={styles.currentUserText} numberOfLines={1} ellipsizeMode="tail">
                   {currentUser.username}
                 </Text>
               </View>
               <Pressable
-                style={({ pressed }) => [styles.logoutButton, pressed ? styles.logoutButtonPressed : undefined]}
+                style={({ pressed }) => [styles.logoutButton, pressed ? styles.headerButtonPressed : undefined]}
                 onPress={() => {
                   void onLogout();
                 }}
@@ -221,37 +127,127 @@ export function Tabs({ currentUser, onLogout, onUsersChanged }: TabsProps) {
             </View>
           ),
           tabBarStyle: {
-            height: 88,
-            paddingTop: 10,
-            paddingBottom: 12,
-            paddingHorizontal: 12,
-            backgroundColor: tokens.colors.surface,
-            borderTopColor: tokens.colors.borderSoft,
-            borderTopWidth: 1,
+            display: 'none',
           },
-          tabBarItemStyle: {
-            marginHorizontal: 3,
-            borderRadius: tokens.radius.lg,
-          },
-          tabBarShowLabel: true,
-          tabBarIcon: () => null,
-          tabBarLabel: ({ focused, children }) => (
-            <TabLabel focused={focused} title={String(children)} />
-          ),
-        }}
+        })}
       >
-        {screenConfigs.map((screen) => (
+        {hasAnyAccess ? (
           <Tab.Screen
-            key={screen.name}
-            name={screen.name}
+            name="Home"
             options={{
-              title: screen.title,
-              tabBarLabel: ({ focused }) => <TabLabel focused={focused} title={screen.title} />,
+              title: 'Menu principal',
             }}
           >
-            {() => screen.render()}
+            {({ navigation }) => {
+              const cards: HomeMenuCard[] = [];
+
+              if (canEntry) {
+                cards.push({
+                  key: 'entry',
+                  title: 'Entradas',
+                  icon: 'cart-outline',
+                  onPress: () => navigation.navigate('Entry'),
+                });
+              }
+
+              if (canExit) {
+                cards.push({
+                  key: 'exit',
+                  title: 'Saídas',
+                  icon: 'storefront-outline',
+                  onPress: () => navigation.navigate('Exit'),
+                });
+              }
+
+              if (canItems) {
+                cards.push({
+                  key: 'items',
+                  title: 'Itens',
+                  icon: 'briefcase-outline',
+                  onPress: () => navigation.navigate('Items'),
+                });
+              }
+
+              if (canStock) {
+                cards.push({
+                  key: 'stock',
+                  title: 'Estoque',
+                  icon: 'cube-outline',
+                  onPress: () => navigation.navigate('Stock'),
+                });
+              }
+
+              if (canDashboard) {
+                cards.push({
+                  key: 'dashboard',
+                  title: 'Dashboard',
+                  icon: 'pricetag-outline',
+                  onPress: () => navigation.navigate('Dashboard'),
+                });
+              }
+
+              if (canAdmin) {
+                cards.push({
+                  key: 'admin',
+                  title: 'Painel ADM',
+                  icon: 'book-outline',
+                  onPress: () => navigation.navigate('Admin'),
+                });
+              }
+
+              return <HomeMenuScreen cards={cards} />;
+            }}
           </Tab.Screen>
-        ))}
+
+        ) : null}
+
+        {canEntry ? (
+          <Tab.Screen name="Entry" options={{ title: 'Entradas' }}>
+            {() => <EntryScreen />}
+          </Tab.Screen>
+        ) : null}
+
+        {canExit ? (
+          <Tab.Screen name="Exit" options={{ title: 'Saídas' }}>
+            {() => <ExitScreen />}
+          </Tab.Screen>
+        ) : null}
+
+        {canItems ? (
+          <Tab.Screen name="Items" options={{ title: 'Itens' }}>
+            {() => <ItemsScreen />}
+          </Tab.Screen>
+        ) : null}
+
+        {canStock ? (
+          <Tab.Screen name="Stock" options={{ title: 'Estoque' }}>
+            {() => <StockScreen />}
+          </Tab.Screen>
+        ) : null}
+
+        {canDashboard ? (
+          <Tab.Screen name="Dashboard" options={{ title: 'Dashboard' }}>
+            {() => <DashboardScreen />}
+          </Tab.Screen>
+        ) : null}
+
+        {canAdmin ? (
+          <Tab.Screen name="Admin" options={{ title: 'Painel ADM' }}>
+            {() => <AdminPanelScreen currentUser={currentUser} onUsersChanged={onUsersChanged} />}
+          </Tab.Screen>
+        ) : null}
+
+        {canHistory ? (
+          <Tab.Screen name="History" options={{ title: 'Histórico' }}>
+            {() => <HistoryScreen canManageHistoryActions={currentUser.isAdmin} />}
+          </Tab.Screen>
+        ) : null}
+
+        {!hasAnyAccess ? (
+          <Tab.Screen name="NoAccess" options={{ title: 'Sem acesso' }}>
+            {() => <NoAccessScreen />}
+          </Tab.Screen>
+        ) : null}
       </Tab.Navigator>
     </NavigationContainer>
   );
@@ -263,7 +259,40 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    maxWidth: 260,
+    maxWidth: 320,
+  },
+  menuButton: {
+    marginLeft: 10,
+    borderRadius: tokens.radius.pill,
+    borderWidth: 1,
+    borderColor: tokens.colors.borderStrong,
+    backgroundColor: tokens.colors.surface,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+  },
+  menuButtonText: {
+    color: tokens.colors.accentStrong,
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  historyButton: {
+    borderRadius: tokens.radius.pill,
+    borderWidth: 1,
+    borderColor: tokens.colors.borderStrong,
+    backgroundColor: tokens.colors.surface,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+  },
+  historyButtonText: {
+    color: tokens.colors.accentStrong,
+    fontSize: 12,
+    fontWeight: '700',
   },
   currentUserBadge: {
     flexDirection: 'row',
@@ -273,7 +302,7 @@ const styles = StyleSheet.create({
     borderRadius: tokens.radius.pill,
     borderWidth: 1,
     borderColor: tokens.colors.borderSoft,
-    backgroundColor: '#f7f0fc',
+    backgroundColor: tokens.colors.accentSoft,
     paddingHorizontal: 10,
     paddingVertical: 6,
   },
@@ -290,50 +319,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 6,
   },
-  logoutButtonPressed: {
+  headerButtonPressed: {
     opacity: 0.8,
   },
   logoutButtonText: {
     color: tokens.colors.accentStrong,
     fontSize: 12,
-    fontWeight: '700',
-  },
-  tabLabelActive: {
-    minWidth: 74,
-    minHeight: 50,
-    borderRadius: tokens.radius.lg,
-    paddingHorizontal: 8,
-    paddingVertical: 6,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 3,
-  },
-  tabLabelIndicator: {
-    width: 20,
-    height: 3,
-    borderRadius: tokens.radius.pill,
-    backgroundColor: 'rgba(255,255,255,0.85)',
-  },
-  tabLabelTextActive: {
-    color: tokens.colors.white,
-    fontSize: 11,
-    fontWeight: '800',
-  },
-  tabLabelIdle: {
-    minWidth: 72,
-    minHeight: 48,
-    borderRadius: tokens.radius.lg,
-    borderWidth: 1,
-    borderColor: tokens.colors.borderSoft,
-    backgroundColor: '#f8f2fd',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 3,
-    paddingHorizontal: 8,
-  },
-  tabLabelTextIdle: {
-    color: tokens.colors.accent,
-    fontSize: 11,
     fontWeight: '700',
   },
   noAccessContainer: {

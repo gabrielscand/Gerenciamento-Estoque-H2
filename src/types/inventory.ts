@@ -238,3 +238,27 @@ export interface DailyStockEntry {
   createdAt: string;
   updatedAt: string;
 }
+
+export type HistoryReportPeriod = 'diario' | 'quinzenal' | 'mensal';
+export type HistoryReportMovementType = 'entry' | 'exit';
+
+export interface HistoryReportEntry {
+  id: number;
+  date: string;
+  itemId: number;
+  name: string;
+  unit: string;
+  quantity: number;
+  movementType: HistoryReportMovementType;
+}
+
+export interface HistoryReportItemSummary {
+  itemId: number;
+  name: string;
+  unit: string;
+  totalEntryQuantity: number;
+  totalExitQuantity: number;
+  movementDates: string[];
+  isTopEntry: boolean;
+  isTopExit: boolean;
+}
