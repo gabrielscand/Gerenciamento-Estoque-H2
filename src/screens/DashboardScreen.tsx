@@ -9,12 +9,13 @@ import {
   Text,
   TextInput,
   View,
-  useWindowDimensions,
 } from 'react-native';
-import { BarChart, LineChart } from 'react-native-chart-kit';
 import { SyncStatusCard } from '../components/SyncStatusCard';
 import { useTopPopup } from '../components/TopPopupProvider';
 import { HeroHeader, KpiTile, MotionEntrance, ScreenShell } from '../components/ui-kit';
+import { InteractiveBarChart } from '../components/charts/InteractiveBarChart';
+import { InteractiveAbcChart } from '../components/charts/InteractiveAbcChart';
+import { DailySeriesChart } from '../components/charts/DailySeriesChart';
 import { tokens } from '../theme/tokens';
 import { getDashboardAnalytics } from '../database/items.repository';
 import { syncAppData } from '../database/sync.service';
@@ -120,21 +121,7 @@ function buildAbcPoints(
   });
 }
 
-function abbreviateLabel(name: string): string {
-  const words = name.trim().split(/\s+/);
-
-  if (words.length === 0) {
-    return '';
-  }
-
-  if (words.length === 1) {
-    return words[0].slice(0, 8);
-  }
-
-  return `${words[0].slice(0, 4)} ${words[1].slice(0, 4)}`.trim();
-}
-
-type DashboardChartInfoKey = 'abcCurve' | 'topEntries' | 'topExits';
+type DashboardChartInfoKey = 'abcCurve' | 'topEntries' | 'topExits' | 'dailySeries';
 
 const DASHBOARD_CHART_INFO_CONTENT: Record<
   DashboardChartInfoKey,
@@ -143,17 +130,22 @@ const DASHBOARD_CHART_INFO_CONTENT: Record<
   abcCurve: {
     title: 'Curva ABC',
     description:
-      'Mostra a participacao acumulada dos itens no periodo. Classe A concentra os itens mais relevantes (ate 80%), B ate 95% e C os demais.',
+      'Mostra a participacao acumulada dos itens no periodo. Classe A concentra os itens mais relevantes (ate 80%), B ate 95% e C os demais. Toque nos pontos para ver detalhes de cada item.',
   },
   topEntries: {
     title: 'Itens mais comprados no mes',
     description:
-      'Ranking dos itens com maior entrada no mes selecionado. Quanto maior a barra, maior a quantidade comprada.',
+      'Ranking dos itens com maior entrada no mes selecionado. Toque nas barras para ver a quantidade e o percentual do total.',
   },
   topExits: {
     title: 'Itens que mais sairam no mes',
     description:
-      'Ranking dos itens com maior saida no mes selecionado. Quanto maior a barra, maior o consumo no periodo.',
+      'Ranking dos itens com maior saida no mes selecionado. Toque nas barras para ver a quantidade e o percentual do total.',
+  },
+  dailySeries: {
+    title: 'Movimentacao diaria',
+    description:
+      'Mostra as entradas (verde) e saidas (vermelho) empilhadas por dia. Toque numa barra para ver os valores detalhados daquele dia.',
   },
 };
 
@@ -189,8 +181,6 @@ export function DashboardScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState('');
   const isFocused = useIsFocused();
-  const { width } = useWindowDimensions();
-  const chartWidth = Math.max(280, width - 56);
   const { showTopPopup } = useTopPopup();
 
   async function loadDashboard(month: string, syncFirst: boolean = false) {
@@ -299,51 +289,28 @@ export function DashboardScreen() {
   );
   const hasMovement = (dashboardData?.totals.movementEntries ?? 0) > 0;
 
-  const abcCurveLabels = useMemo(() => {
-    if (abcPoints.length === 0) {
-      return [];
-    }
-
-    const labelStep = Math.max(1, Math.ceil(abcPoints.length / 8));
-
-    return abcPoints.map((point, index) => (index % labelStep === 0 ? String(point.rank) : ''));
-  }, [abcPoints]);
-
-  const chartConfig = useMemo(
-    () => ({
-      backgroundGradientFrom: '#FFFFFF',
-      backgroundGradientTo: '#FFFFFF',
-      decimalPlaces: 1,
-      color: (opacity = 1) => `rgba(119, 21, 142, ${opacity})`,
-      labelColor: (opacity = 1) => `rgba(95, 17, 117, ${opacity})`,
-      propsForLabels: {
-        fontSize: '11',
-        fontWeight: '700',
-      },
-      propsForHorizontalLabels: {
-        fontSize: '11',
-        fontWeight: '700',
-      },
-      propsForVerticalLabels: {
-        fontSize: '11',
-        fontWeight: '700',
-      },
-      propsForValues: {
-        fontSize: '11',
-        fontWeight: '700',
-      },
-      propsForDots: {
-        r: '3',
-        strokeWidth: '1',
-        stroke: '#5F1175',
-      },
-      propsForBackgroundLines: {
-        stroke: '#D8C3EA',
-      },
-      barPercentage: 0.75,
-    }),
-    [],
+  const entryBarData = useMemo(
+    () =>
+      topEntryItems.map((item) => ({
+        id: item.itemId,
+        label: item.name,
+        value: item.entryQuantity,
+        unit: item.unit,
+      })),
+    [topEntryItems],
   );
+
+  const exitBarData = useMemo(
+    () =>
+      topExitItems.map((item) => ({
+        id: item.itemId,
+        label: item.name,
+        value: item.exitQuantity,
+        unit: item.unit,
+      })),
+    [topExitItems],
+  );
+
   const activeInfoContent = activeChartInfo ? DASHBOARD_CHART_INFO_CONTENT[activeChartInfo] : null;
   const totalEntry = dashboardData?.totals.entryQuantity ?? 0;
   const totalExit = dashboardData?.totals.exitQuantity ?? 0;
@@ -453,72 +420,65 @@ export function DashboardScreen() {
 
         {!isLoading && dashboardData && hasMovement ? (
           <>
-            <View style={styles.kpiGrid}>
-              <View style={styles.kpiCard}>
-                <Text style={styles.kpiLabel}>Total entrada</Text>
-                <Text style={styles.kpiValue}>{formatQuantity(dashboardData.totals.entryQuantity)}</Text>
+            {/* ─── KPI Grid ─── */}
+            <MotionEntrance delay={100}>
+              <View style={styles.kpiGrid}>
+                <View style={styles.kpiCard}>
+                  <View style={styles.kpiIconRow}>
+                    <View style={[styles.kpiIconDot, { backgroundColor: '#DCFCE7' }]}>
+                      <Text style={[styles.kpiIconText, { color: '#15803D' }]}>▲</Text>
+                    </View>
+                    <Text style={styles.kpiLabel}>Total entrada</Text>
+                  </View>
+                  <Text style={styles.kpiValue}>{formatQuantity(dashboardData.totals.entryQuantity)}</Text>
+                </View>
+                <View style={styles.kpiCard}>
+                  <View style={styles.kpiIconRow}>
+                    <View style={[styles.kpiIconDot, { backgroundColor: '#FEE2E2' }]}>
+                      <Text style={[styles.kpiIconText, { color: '#DC2626' }]}>▼</Text>
+                    </View>
+                    <Text style={styles.kpiLabel}>Total saida</Text>
+                  </View>
+                  <Text style={styles.kpiValue}>{formatQuantity(dashboardData.totals.exitQuantity)}</Text>
+                </View>
+                <View style={styles.kpiCard}>
+                  <View style={styles.kpiIconRow}>
+                    <View style={[styles.kpiIconDot, { backgroundColor: '#EDE0F9' }]}>
+                      <Text style={[styles.kpiIconText, { color: '#5F1175' }]}>⇄</Text>
+                    </View>
+                    <Text style={styles.kpiLabel}>Movimentacao</Text>
+                  </View>
+                  <Text style={styles.kpiValue}>{formatQuantity(dashboardData.totals.movementTotal)}</Text>
+                </View>
+                <View style={styles.kpiCard}>
+                  <View style={styles.kpiIconRow}>
+                    <View style={[styles.kpiIconDot, { backgroundColor: '#F5EEFB' }]}>
+                      <Text style={[styles.kpiIconText, { color: '#77158E' }]}>▣</Text>
+                    </View>
+                    <Text style={styles.kpiLabel}>Itens ativos</Text>
+                  </View>
+                  <Text style={styles.kpiValue}>{dashboardData.totals.activeItems}</Text>
+                </View>
               </View>
-              <View style={styles.kpiCard}>
-                <Text style={styles.kpiLabel}>Total saida</Text>
-                <Text style={styles.kpiValue}>{formatQuantity(dashboardData.totals.exitQuantity)}</Text>
-              </View>
-              <View style={styles.kpiCard}>
-                <Text style={styles.kpiLabel}>Movimentacao</Text>
-                <Text style={styles.kpiValue}>{formatQuantity(dashboardData.totals.movementTotal)}</Text>
-              </View>
-              <View style={styles.kpiCard}>
-                <Text style={styles.kpiLabel}>Itens ativos</Text>
-                <Text style={styles.kpiValue}>{dashboardData.totals.activeItems}</Text>
-              </View>
-            </View>
+            </MotionEntrance>
 
-            <View style={styles.chartCard}>
-              <ChartCardHeader
-                title={`Curva ABC (${getMetricLabel(selectedMetric)})`}
-                onPressInfo={() => setActiveChartInfo('abcCurve')}
-              />
-              <Text style={styles.cardSubtitle}>
-                Classes: A ate 80%, B ate 95%, C acima de 95% de participacao acumulada.
-              </Text>
-
-              {abcPoints.length === 0 ? (
-                <Text style={styles.emptyText}>
-                  Sem dados de {getMetricLabel(selectedMetric)} para este periodo.
+            {/* ─── Curva ABC Interativa ─── */}
+            <MotionEntrance delay={200}>
+              <View style={styles.chartCard}>
+                <ChartCardHeader
+                  title={`Curva ABC (${getMetricLabel(selectedMetric)})`}
+                  onPressInfo={() => setActiveChartInfo('abcCurve')}
+                />
+                <Text style={styles.cardSubtitle}>
+                  Classes: A ate 80%, B ate 95%, C acima de 95% de participacao acumulada.
                 </Text>
-              ) : (
-                <>
-                  <LineChart
-                    data={{
-                      labels: abcCurveLabels,
-                      datasets: [
-                        {
-                          data: abcPoints.map((point) => point.cumulativePercent),
-                          color: (opacity = 1) => `rgba(91, 33, 182, ${opacity})`,
-                          strokeWidth: 3,
-                        },
-                        {
-                          data: abcPoints.map(() => 80),
-                          color: (opacity = 1) => `rgba(22, 163, 74, ${opacity})`,
-                          strokeWidth: 1,
-                        },
-                        {
-                          data: abcPoints.map(() => 95),
-                          color: (opacity = 1) => `rgba(220, 38, 38, ${opacity})`,
-                          strokeWidth: 1,
-                        },
-                      ],
-                      legend: ['Acumulado', 'Limite A', 'Limite B'],
-                    }}
-                    width={chartWidth}
-                    height={230}
-                    chartConfig={chartConfig}
-                    bezier
-                    fromZero
-                    yAxisSuffix="%"
-                    withInnerLines
-                    style={styles.chart}
-                  />
+                <InteractiveAbcChart
+                  points={abcPoints}
+                  metricLabel={getMetricLabel(selectedMetric)}
+                />
 
+                {/* ABC Item List */}
+                {abcPoints.length > 0 ? (
                   <View style={styles.abcList}>
                     {abcPoints.slice(0, 10).map((point) => (
                       <View key={`${point.itemId}-${point.rank}`} style={styles.abcRow}>
@@ -544,59 +504,55 @@ export function DashboardScreen() {
                       </View>
                     ))}
                   </View>
-                </>
-              )}
-            </View>
+                ) : null}
+              </View>
+            </MotionEntrance>
 
-            <View style={styles.chartCard}>
-              <ChartCardHeader
-                title="Itens mais comprados no mes"
-                onPressInfo={() => setActiveChartInfo('topEntries')}
-              />
-              {topEntryItems.length === 0 ? (
-                <Text style={styles.emptyText}>Sem compras registradas neste periodo.</Text>
-              ) : (
-                <BarChart
-                  data={{
-                    labels: topEntryItems.map((item) => abbreviateLabel(item.name)),
-                    datasets: [{ data: topEntryItems.map((item) => item.entryQuantity) }],
-                  }}
-                  width={chartWidth}
-                  height={240}
-                  yAxisLabel=""
-                  yAxisSuffix=""
-                  chartConfig={chartConfig}
-                  fromZero
-                  showValuesOnTopOfBars
-                  style={styles.chart}
+            {/* ─── Movimentação Diária (NOVO) ─── */}
+            <MotionEntrance delay={300}>
+              <View style={styles.chartCard}>
+                <ChartCardHeader
+                  title="Movimentacao diaria"
+                  onPressInfo={() => setActiveChartInfo('dailySeries')}
                 />
-              )}
-            </View>
+                <Text style={styles.cardSubtitle}>
+                  Entradas e saidas empilhadas por dia no mes selecionado.
+                </Text>
+                <DailySeriesChart series={dashboardData.dailySeries} />
+              </View>
+            </MotionEntrance>
 
-            <View style={styles.chartCard}>
-              <ChartCardHeader
-                title="Itens que mais sairam no mes"
-                onPressInfo={() => setActiveChartInfo('topExits')}
-              />
-              {topExitItems.length === 0 ? (
-                <Text style={styles.emptyText}>Sem saidas registradas neste periodo.</Text>
-              ) : (
-                <BarChart
-                  data={{
-                    labels: topExitItems.map((item) => abbreviateLabel(item.name)),
-                    datasets: [{ data: topExitItems.map((item) => item.exitQuantity) }],
-                  }}
-                  width={chartWidth}
-                  height={240}
-                  yAxisLabel=""
-                  yAxisSuffix=""
-                  chartConfig={chartConfig}
-                  fromZero
-                  showValuesOnTopOfBars
-                  style={styles.chart}
+            {/* ─── Top Entradas Interativo ─── */}
+            <MotionEntrance delay={400}>
+              <View style={styles.chartCard}>
+                <ChartCardHeader
+                  title="Itens mais comprados no mes"
+                  onPressInfo={() => setActiveChartInfo('topEntries')}
                 />
-              )}
-            </View>
+                <InteractiveBarChart
+                  data={entryBarData}
+                  accentFrom="#22C55E"
+                  accentTo="#16A34A"
+                  emptyMessage="Sem compras registradas neste periodo."
+                />
+              </View>
+            </MotionEntrance>
+
+            {/* ─── Top Saídas Interativo ─── */}
+            <MotionEntrance delay={500}>
+              <View style={styles.chartCard}>
+                <ChartCardHeader
+                  title="Itens que mais sairam no mes"
+                  onPressInfo={() => setActiveChartInfo('topExits')}
+                />
+                <InteractiveBarChart
+                  data={exitBarData}
+                  accentFrom="#EF4444"
+                  accentTo="#DC2626"
+                  emptyMessage="Sem saidas registradas neste periodo."
+                />
+              </View>
+            </MotionEntrance>
           </>
         ) : null}
 
@@ -762,25 +718,42 @@ const styles = StyleSheet.create({
     borderColor: tokens.colors.borderSoft,
     borderRadius: 16,
     padding: 12,
-    gap: 4,
+    gap: 6,
     ...tokens.shadow.card,
+  },
+  kpiIconRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  kpiIconDot: {
+    width: 28,
+    height: 28,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  kpiIconText: {
+    fontSize: 12,
+    fontWeight: '800',
   },
   kpiLabel: {
     color: '#77158E',
     fontSize: 12,
     fontWeight: '700',
+    flex: 1,
   },
   kpiValue: {
     color: '#2A0834',
-    fontSize: 17,
-    fontWeight: '800',
+    fontSize: 20,
+    fontWeight: '900',
   },
   chartCard: {
     backgroundColor: tokens.colors.surface,
     borderWidth: 1,
     borderColor: tokens.colors.borderSoft,
     borderRadius: 18,
-    padding: 12,
+    padding: 14,
     gap: 10,
     ...tokens.shadow.card,
   },
@@ -813,6 +786,7 @@ const styles = StyleSheet.create({
   },
   abcList: {
     gap: 8,
+    marginTop: 4,
   },
   abcRow: {
     borderWidth: 1,
@@ -846,13 +820,13 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
   },
   abcBadgeA: {
-    backgroundColor: '#EDF8F2',
+    backgroundColor: '#DCFCE7',
   },
   abcBadgeB: {
-    backgroundColor: '#FFF7D7',
+    backgroundColor: '#FEF9C3',
   },
   abcBadgeC: {
-    backgroundColor: '#FDECEC',
+    backgroundColor: '#FEE2E2',
   },
   abcBadgeText: {
     color: '#3A0D49',
