@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { SyncStatusCard } from '../components/SyncStatusCard';
 import { HeroHeader, MotionEntrance, ScreenShell, SectionSurface } from '../components/ui-kit';
 import { tokens } from '../theme/tokens';
@@ -16,11 +16,14 @@ type HomeMenuScreenProps = {
 };
 
 export function HomeMenuScreen({ cards }: HomeMenuScreenProps) {
+  const { height } = useWindowDimensions();
+  const isCompactVertical = height <= 860;
+
   return (
     <ScreenShell>
       <ScrollView
         style={styles.container}
-        contentContainerStyle={styles.content}
+        contentContainerStyle={[styles.content, isCompactVertical ? styles.contentCompact : undefined]}
         showsVerticalScrollIndicator={false}
       >
         <SyncStatusCard />
@@ -38,7 +41,7 @@ export function HomeMenuScreen({ cards }: HomeMenuScreenProps) {
             <Text style={styles.sectionTitle}>Atalhos</Text>
             <Text style={styles.sectionDescription}>Toque em um card para abrir o modulo.</Text>
 
-            <View style={styles.grid}>
+            <View style={[styles.grid, isCompactVertical ? styles.gridCompact : undefined]}>
               {cards.map((card) => {
                 return (
                   <Pressable
@@ -46,14 +49,27 @@ export function HomeMenuScreen({ cards }: HomeMenuScreenProps) {
                     onPress={card.onPress}
                     style={({ pressed }) => [
                       styles.card,
+                      isCompactVertical ? styles.cardCompact : undefined,
                       styles.cardDefault,
                       pressed ? styles.cardPressed : undefined,
                     ]}
                   >
-                    <View style={[styles.iconWrap, styles.iconWrapDefault]}>
+                    <View
+                      style={[
+                        styles.iconWrap,
+                        isCompactVertical ? styles.iconWrapCompact : undefined,
+                        styles.iconWrapDefault,
+                      ]}
+                    >
                       <Ionicons name={card.icon} size={24} color={tokens.colors.accent} />
                     </View>
-                    <Text style={[styles.cardTitle, styles.cardTitleDefault]}>
+                    <Text
+                      style={[
+                        styles.cardTitle,
+                        isCompactVertical ? styles.cardTitleCompact : undefined,
+                        styles.cardTitleDefault,
+                      ]}
+                    >
                       {card.title}
                     </Text>
                   </Pressable>
@@ -78,6 +94,11 @@ const styles = StyleSheet.create({
     paddingBottom: 24,
     gap: 12,
   },
+  contentCompact: {
+    paddingTop: 10,
+    paddingBottom: 16,
+    gap: 10,
+  },
   sectionTitle: {
     color: tokens.colors.accentDeep,
     fontSize: 19,
@@ -96,6 +117,9 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     rowGap: 12,
   },
+  gridCompact: {
+    rowGap: 8,
+  },
   card: {
     width: '48.4%',
     minHeight: 132,
@@ -107,6 +131,11 @@ const styles = StyleSheet.create({
     gap: 12,
     borderWidth: 1,
     ...tokens.shadow.card,
+  },
+  cardCompact: {
+    minHeight: 108,
+    paddingVertical: 10,
+    gap: 8,
   },
   cardDefault: {
     backgroundColor: tokens.colors.surface,
@@ -123,6 +152,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderWidth: 1,
   },
+  iconWrapCompact: {
+    height: 42,
+    width: 42,
+  },
   iconWrapDefault: {
     backgroundColor: tokens.colors.accentSoft,
     borderColor: tokens.colors.borderSoft,
@@ -131,6 +164,9 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     fontSize: 15,
     fontWeight: '800',
+  },
+  cardTitleCompact: {
+    fontSize: 14,
   },
   cardTitleDefault: {
     color: tokens.colors.accentDeep,
