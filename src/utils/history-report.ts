@@ -277,7 +277,7 @@ function buildPdfHtml(payload: ReportSummaryPayload): string {
               )} ${escapeHtml(item.unit)}</li>`,
           )
           .join('')
-      : '<li>Sem entradas no periodo.</li>';
+      : '<li>Sem entradas no período.</li>';
 
   const topExitListHtml =
     payload.topExitItems.length > 0
@@ -289,7 +289,7 @@ function buildPdfHtml(payload: ReportSummaryPayload): string {
               )} ${escapeHtml(item.unit)}</li>`,
           )
           .join('')
-      : '<li>Sem saidas no periodo.</li>';
+      : '<li>Sem saídas no período.</li>';
 
   const movementRowsHtml =
     payload.entries.length > 0
@@ -298,16 +298,16 @@ function buildPdfHtml(payload: ReportSummaryPayload): string {
             (entry) => `
               <tr>
                 <td>${escapeHtml(formatDateLabel(entry.date))}</td>
-                <td>${escapeHtml(entry.name)}</td>
-                <td>${escapeHtml(getMovementLabel(entry.movementType))}</td>
-                <td>${escapeHtml(formatQuantity(entry.quantity))} ${escapeHtml(entry.unit)}</td>
+                <td><strong>${escapeHtml(entry.name)}</strong></td>
+                <td><span class="badge ${entry.movementType === 'entry' ? 'badge-entry' : 'badge-exit'}">${escapeHtml(getMovementLabel(entry.movementType))}</span></td>
+                <td><strong>${escapeHtml(formatQuantity(entry.quantity))}</strong> <span class="unit">${escapeHtml(entry.unit)}</span></td>
               </tr>
             `,
           )
           .join('')
       : `
         <tr>
-          <td colspan="4" class="empty-cell">Sem movimentacoes no periodo selecionado.</td>
+          <td colspan="4" class="empty-cell">Sem movimentações no período selecionado.</td>
         </tr>
       `;
 
@@ -317,28 +317,23 @@ function buildPdfHtml(payload: ReportSummaryPayload): string {
           .map((item) => {
             const highlightLabels: string[] = [];
 
-            if (item.isTopEntry) {
-              highlightLabels.push('Maior entrada');
-            }
-
-            if (item.isTopExit) {
-              highlightLabels.push('Maior saida');
-            }
+            if (item.isTopEntry) highlightLabels.push('Maior entrada');
+            if (item.isTopExit) highlightLabels.push('Maior saída');
 
             return `
               <tr>
-                <td>${escapeHtml(item.name)}</td>
-                <td>${escapeHtml(formatQuantity(item.totalEntryQuantity))} ${escapeHtml(item.unit)}</td>
-                <td>${escapeHtml(formatQuantity(item.totalExitQuantity))} ${escapeHtml(item.unit)}</td>
-                <td>${escapeHtml(item.movementDates.map((date) => formatDateLabel(date)).join(', '))}</td>
-                <td>${escapeHtml(highlightLabels.join(' / ') || '-')}</td>
+                <td><strong>${escapeHtml(item.name)}</strong></td>
+                <td class="col-entry">${escapeHtml(formatQuantity(item.totalEntryQuantity))} <span class="unit">${escapeHtml(item.unit)}</span></td>
+                <td class="col-exit">${escapeHtml(formatQuantity(item.totalExitQuantity))} <span class="unit">${escapeHtml(item.unit)}</span></td>
+                <td class="col-dates">${escapeHtml(item.movementDates.map((date) => formatDateLabel(date)).join(', '))}</td>
+                <td>${highlightLabels.length > 0 ? `<span class="badge badge-highlight">${escapeHtml(highlightLabels.join(' / '))}</span>` : '-'}</td>
               </tr>
             `;
           })
           .join('')
       : `
         <tr>
-          <td colspan="5" class="empty-cell">Nenhum item movimentado neste periodo.</td>
+          <td colspan="5" class="empty-cell">Nenhum item movimentado neste período.</td>
         </tr>
       `;
 
@@ -349,108 +344,195 @@ function buildPdfHtml(payload: ReportSummaryPayload): string {
         <meta charset="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <title>${escapeHtml(periodMeta.reportTitle)}</title>
+        <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
         <style>
+          * { box-sizing: border-box; }
           body {
-            font-family: Arial, Helvetica, sans-serif;
-            color: #2a0834;
-            margin: 24px;
-            line-height: 1.4;
+            font-family: 'Inter', sans-serif;
+            color: #1a1a1a;
+            margin: 0;
+            padding: 40px;
+            line-height: 1.5;
+            background-color: #fbfcff;
+          }
+          .header {
+            text-align: center;
+            margin-bottom: 40px;
+            padding-bottom: 24px;
+            border-bottom: 2px solid #e2d9eb;
+          }
+          .logo {
+            font-size: 20px;
+            font-weight: 800;
+            color: #8c24a8;
+            letter-spacing: 1.5px;
+            text-transform: uppercase;
+            margin-bottom: 12px;
           }
           .title {
-            font-size: 26px;
+            font-size: 28px;
             font-weight: 800;
             color: #5f1175;
             margin-bottom: 8px;
           }
           .subtitle {
-            color: #77158e;
-            margin-bottom: 18px;
-            font-size: 14px;
+            color: #6f617a;
+            font-size: 15px;
+            font-weight: 500;
           }
           .section {
-            margin-top: 18px;
-            padding: 14px;
-            border: 1px solid #d8c3ea;
+            margin-top: 32px;
+            background: #ffffff;
+            padding: 24px;
             border-radius: 12px;
-            background: #fcf8ff;
+            box-shadow: 0 4px 6px -1px rgba(95, 17, 117, 0.05), 0 2px 4px -1px rgba(95, 17, 117, 0.03);
+            border: 1px solid #f0e6f7;
           }
           .section h2 {
-            margin: 0 0 10px;
+            margin: 0 0 20px;
             color: #5f1175;
-            font-size: 16px;
+            font-size: 18px;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
           }
           .highlight-grid {
             display: grid;
             grid-template-columns: 1fr 1fr;
-            gap: 12px;
+            gap: 20px;
           }
           .highlight-card {
-            border: 1px solid #d8c3ea;
-            border-radius: 10px;
-            background: #ffffff;
-            padding: 10px;
+            padding: 16px;
+            background: #faf5fd;
+            border-radius: 8px;
+            border-left: 4px solid #8c24a8;
+          }
+          .highlight-card strong {
+            display: block;
+            color: #5f1175;
+            margin-bottom: 12px;
+            font-size: 15px;
           }
           ul {
-            margin: 8px 0 0;
-            padding-left: 18px;
+            margin: 0;
+            padding-left: 20px;
+            color: #333333;
+          }
+          li {
+            margin-bottom: 6px;
           }
           table {
             width: 100%;
-            border-collapse: collapse;
-            margin-top: 8px;
-            font-size: 12px;
-            background: #ffffff;
-          }
-          th, td {
-            border: 1px solid #d8c3ea;
-            padding: 8px;
-            text-align: left;
-            vertical-align: top;
-          }
-          th {
-            background: #ede0f9;
-            color: #5f1175;
-            font-weight: 800;
-          }
-          .empty-cell {
-            text-align: center;
-            color: #6f617a;
-            font-style: italic;
-          }
-          .meta-row {
-            margin: 4px 0;
+            border-collapse: separate;
+            border-spacing: 0;
+            margin-top: 10px;
             font-size: 13px;
           }
+          th {
+            background: #5f1175;
+            color: #ffffff;
+            font-weight: 600;
+            text-align: left;
+            padding: 12px 16px;
+          }
+          th:first-child { border-top-left-radius: 8px; }
+          th:last-child { border-top-right-radius: 8px; }
+          td {
+            padding: 12px 16px;
+            border-bottom: 1px solid #f0e6f7;
+            color: #4a4a4a;
+            vertical-align: middle;
+          }
+          tr:last-child td { border-bottom: none; }
+          tr:nth-child(even) td { background-color: #faf5fd; }
+          .empty-cell {
+            text-align: center;
+            color: #8c8c8c;
+            font-style: italic;
+            padding: 30px !important;
+          }
+          .meta-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+          }
+          .meta-item {
+            background: #f8f9fa;
+            padding: 12px;
+            border-radius: 6px;
+          }
+          .meta-label {
+            font-size: 11px;
+            color: #6f617a;
+            margin-bottom: 4px;
+            text-transform: uppercase;
+            font-weight: 600;
+          }
+          .meta-value {
+            font-size: 14px;
+            color: #2a0834;
+            font-weight: 600;
+          }
+          .badge {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: 700;
+            text-transform: uppercase;
+          }
+          .badge-entry { background: #e8f5e9; color: #2e7d32; }
+          .badge-exit { background: #ffebee; color: #c62828; }
+          .badge-highlight { background: #fff3e0; color: #ef6c00; }
+          .unit { color: #888; font-size: 11px; }
+          .col-dates { line-height: 1.4; color: #666; font-size: 12px; }
         </style>
       </head>
       <body>
-        <div class="title">${escapeHtml(periodMeta.reportTitle)}</div>
-        <div class="subtitle">Relatorio de estoque | H2 Campinas</div>
+        <div class="header">
+          <div class="logo">H2 Campinas</div>
+          <div class="title">${escapeHtml(periodMeta.reportTitle)}</div>
+          <div class="subtitle">Relatório de Transações de Estoque</div>
+        </div>
 
         <section class="section">
-          <h2>1. Informacoes gerais</h2>
-          <div class="meta-row"><strong>Periodo:</strong> ${escapeHtml(periodMeta.periodLabel)}</div>
-          <div class="meta-row"><strong>Faixa de datas:</strong> ${escapeHtml(periodRangeLabel)}</div>
-          <div class="meta-row"><strong>Gerado em:</strong> ${escapeHtml(formatDateTime(payload.generatedAt))}</div>
-          <div class="meta-row"><strong>Total de movimentacoes:</strong> ${escapeHtml(String(payload.entries.length))}</div>
+          <h2>1. Informações Gerais</h2>
+          <div class="meta-grid">
+            <div class="meta-item">
+              <div class="meta-label">Período Selecionado</div>
+              <div class="meta-value">${escapeHtml(periodMeta.periodLabel)}</div>
+            </div>
+            <div class="meta-item">
+              <div class="meta-label">Faixa de Datas</div>
+              <div class="meta-value">${escapeHtml(periodRangeLabel)}</div>
+            </div>
+            <div class="meta-item">
+              <div class="meta-label">Gerado Em</div>
+              <div class="meta-value">${escapeHtml(formatDateTime(payload.generatedAt))}</div>
+            </div>
+            <div class="meta-item">
+              <div class="meta-label">Operações Registradas</div>
+              <div class="meta-value">${escapeHtml(String(payload.entries.length))}</div>
+            </div>
+          </div>
         </section>
 
         <section class="section">
-          <h2>2. Destaques principais</h2>
+          <h2>2. Quadro de Destaques</h2>
           <div class="highlight-grid">
             <div class="highlight-card">
-              <strong>Top itens com maior entrada</strong>
+              <strong>Top Itens: Maior Entrada</strong>
               <ul>${topEntryListHtml}</ul>
             </div>
             <div class="highlight-card">
-              <strong>Top itens com maior saida</strong>
+              <strong>Top Itens: Maior Saída</strong>
               <ul>${topExitListHtml}</ul>
             </div>
           </div>
         </section>
 
         <section class="section">
-          <h2>3. Lista completa de movimentacoes</h2>
+          <h2>3. Movimentações Detalhadas</h2>
           <table>
             <thead>
               <tr>
@@ -467,15 +549,15 @@ function buildPdfHtml(payload: ReportSummaryPayload): string {
         </section>
 
         <section class="section">
-          <h2>4. Resumo por item</h2>
+          <h2>4. Resumo Consolidado por Item</h2>
           <table>
             <thead>
               <tr>
                 <th>Item</th>
-                <th>Total entradas</th>
-                <th>Total saidas</th>
-                <th>Datas com movimentacao</th>
-                <th>Destaque</th>
+                <th>Total Entradas</th>
+                <th>Total Saídas</th>
+                <th>Datas com movimentação</th>
+                <th>Destaques</th>
               </tr>
             </thead>
             <tbody>
@@ -488,168 +570,173 @@ function buildPdfHtml(payload: ReportSummaryPayload): string {
   `;
 }
 
-type PdfTextOptions = {
-  fontSize?: number;
-  bold?: boolean;
-  indent?: number;
-  lineGap?: number;
-};
-
-type PdfCursor = {
-  x: number;
-  y: number;
-  top: number;
-  maxY: number;
-  width: number;
-};
-
-function ensurePdfSpace(doc: any, cursor: PdfCursor, neededHeight: number): void {
-  if (cursor.y + neededHeight <= cursor.maxY) {
-    return;
-  }
-
-  doc.addPage();
-  cursor.y = cursor.top;
-}
-
-function writePdfText(doc: any, cursor: PdfCursor, text: string, options: PdfTextOptions = {}): void {
-  const fontSize = options.fontSize ?? 10;
-  const indent = options.indent ?? 0;
-  const lineGap = options.lineGap ?? 4;
-  const lineHeight = fontSize + lineGap;
-  const availableWidth = Math.max(40, cursor.width - indent);
-  const lines: string[] = doc.splitTextToSize(text, availableWidth);
-
-  doc.setFont('helvetica', options.bold ? 'bold' : 'normal');
-  doc.setFontSize(fontSize);
-  doc.setTextColor(42, 8, 52);
-
-  for (const line of lines) {
-    ensurePdfSpace(doc, cursor, lineHeight);
-    doc.text(line, cursor.x + indent, cursor.y);
-    cursor.y += lineHeight;
-  }
-}
-
-function addPdfSpacer(cursor: PdfCursor, size: number = 6): void {
-  cursor.y += size;
-}
-
 function buildPdfFileName(period: HistoryReportPeriod, startDate: string, endDate: string): string {
   return `relatorio-${period}-${startDate}-${endDate}.pdf`;
 }
 
 async function generateWebPdf(payload: ReportSummaryPayload): Promise<void> {
   const { jsPDF } = await import('jspdf');
+  const autoTable = (await import('jspdf-autotable')).default;
   const doc = new jsPDF({ unit: 'pt', format: 'a4' });
   const pageWidth = doc.internal.pageSize.getWidth();
-  const pageHeight = doc.internal.pageSize.getHeight();
-  const left = 40;
-  const right = 40;
-  const top = 44;
-  const bottom = 44;
+  
   const periodMeta = getPeriodMeta(payload.period, payload.selectedMonth);
   const periodRangeLabel = `${formatDateLabel(payload.startDate)} a ${formatDateLabel(payload.endDate)}`;
-  const cursor: PdfCursor = {
-    x: left,
-    y: top,
-    top,
-    maxY: pageHeight - bottom,
-    width: pageWidth - left - right,
-  };
+  
+  // Header Style
+  doc.setFillColor(95, 17, 117); // #5f1175 (H2 Brand)
+  doc.rect(0, 0, pageWidth, 90, 'F');
+  
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(10);
+  doc.setTextColor(215, 190, 230);
+  doc.text('H2 CAMPINAS | GERENCIAMENTO DE ESTOQUE', 40, 35);
 
-  writePdfText(doc, cursor, periodMeta.reportTitle, { fontSize: 20, bold: true, lineGap: 6 });
-  writePdfText(doc, cursor, 'Relatorio de estoque | H2 Campinas', { fontSize: 11 });
-  addPdfSpacer(cursor, 8);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(22);
+  doc.setTextColor(255, 255, 255);
+  doc.text(periodMeta.reportTitle.toUpperCase(), 40, 65);
 
-  writePdfText(doc, cursor, '1. Informacoes gerais', { fontSize: 14, bold: true, lineGap: 6 });
-  writePdfText(doc, cursor, `Tipo: ${periodMeta.periodLabel}`);
-  writePdfText(doc, cursor, `Periodo analisado: ${periodRangeLabel}`);
-  writePdfText(doc, cursor, `Data de geracao: ${formatDateTime(payload.generatedAt)}`);
-  writePdfText(doc, cursor, `Total de movimentacoes: ${String(payload.entries.length)}`);
-  addPdfSpacer(cursor, 8);
+  let currentY = 120;
 
-  writePdfText(doc, cursor, '2. Destaques principais', { fontSize: 14, bold: true, lineGap: 6 });
-  writePdfText(doc, cursor, 'Itens com maior entrada:', { bold: true });
-  if (payload.topEntryItems.length === 0) {
-    writePdfText(doc, cursor, '- Sem entradas no periodo.', { indent: 10 });
-  } else {
-    payload.topEntryItems.forEach((item, index) => {
-      writePdfText(
-        doc,
-        cursor,
-        `- ${index + 1}. ${item.name} | ${formatQuantity(item.quantity)} ${item.unit}`,
-        { indent: 10 },
-      );
-    });
-  }
+  // 1. Informacoes Gerais 
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(14);
+  doc.setTextColor(95, 17, 117);
+  doc.text('1. INFORMAÇÕES GERAIS', 40, currentY);
+  currentY += 12;
 
-  writePdfText(doc, cursor, 'Itens com maior saida:', { bold: true });
-  if (payload.topExitItems.length === 0) {
-    writePdfText(doc, cursor, '- Sem saidas no periodo.', { indent: 10 });
-  } else {
-    payload.topExitItems.forEach((item, index) => {
-      writePdfText(
-        doc,
-        cursor,
-        `- ${index + 1}. ${item.name} | ${formatQuantity(item.quantity)} ${item.unit}`,
-        { indent: 10 },
-      );
-    });
-  }
-  addPdfSpacer(cursor, 8);
-
-  writePdfText(doc, cursor, '3. Lista completa de movimentacoes', { fontSize: 14, bold: true, lineGap: 6 });
-  if (payload.entries.length === 0) {
-    writePdfText(doc, cursor, 'Sem movimentacoes no periodo selecionado.', { indent: 10 });
-  } else {
-    payload.entries.forEach((entry) => {
-      writePdfText(
-        doc,
-        cursor,
-        `- ${formatDateLabel(entry.date)} | ${entry.name} | ${getMovementLabel(entry.movementType)} | ${formatQuantity(entry.quantity)} ${entry.unit}`,
-        { indent: 10 },
-      );
-    });
-  }
-  addPdfSpacer(cursor, 8);
-
-  writePdfText(doc, cursor, '4. Resumo por item (todos os itens do periodo)', {
-    fontSize: 14,
-    bold: true,
-    lineGap: 6,
+  autoTable(doc, {
+    startY: currentY,
+    theme: 'grid',
+    head: [['Campo', 'Valor']],
+    body: [
+      ['Período', periodMeta.periodLabel],
+      ['Faixa de datas', periodRangeLabel],
+      ['Data de geração', formatDateTime(payload.generatedAt)],
+      ['Total de movimentações', String(payload.entries.length)],
+    ],
+    headStyles: { fillColor: [95, 17, 117], textColor: 255, fontStyle: 'bold' },
+    styles: { fontSize: 10, cellPadding: 6 },
+    columnStyles: { 0: { fontStyle: 'bold', cellWidth: 150, fillColor: [250, 245, 253] } },
+    margin: { left: 40, right: 40 }
   });
-  if (payload.itemSummaries.length === 0) {
-    writePdfText(doc, cursor, 'Nenhum item movimentado neste periodo.', { indent: 10 });
-  } else {
-    payload.itemSummaries.forEach((item) => {
-      const highlights: string[] = [];
-      if (item.isTopEntry) {
-        highlights.push('Maior entrada');
-      }
-      if (item.isTopExit) {
-        highlights.push('Maior saida');
-      }
 
-      writePdfText(
-        doc,
-        cursor,
-        `- ${item.name} | Entradas: ${formatQuantity(item.totalEntryQuantity)} ${item.unit} | Saidas: ${formatQuantity(item.totalExitQuantity)} ${item.unit}`,
-        { indent: 10, bold: true },
-      );
-      writePdfText(
-        doc,
-        cursor,
-        `  Datas: ${item.movementDates.map((date) => formatDateLabel(date)).join(', ') || '-'}`,
-        { indent: 16 },
-      );
-      writePdfText(doc, cursor, `  Destaque: ${highlights.join(' / ') || '-'}`, { indent: 16 });
-    });
+  currentY = (doc as any).lastAutoTable.finalY + 30;
+
+  // 2. Destaques principais
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(14);
+  doc.setTextColor(95, 17, 117);
+  doc.text('2. QUADRO DE DESTAQUES', 40, currentY);
+  currentY += 12;
+
+  const maxDestaques = Math.max(payload.topEntryItems.length, payload.topExitItems.length, 1);
+  const destaquesBody = [];
+  for (let i = 0; i < maxDestaques; i++) {
+    const entry = payload.topEntryItems[i] 
+      ? `${i + 1}. ${payload.topEntryItems[i].name} (${formatQuantity(payload.topEntryItems[i].quantity)} ${payload.topEntryItems[i].unit})` 
+      : (i === 0 && payload.topEntryItems.length === 0 ? 'Sem entradas no período.' : '');
+    const exit = payload.topExitItems[i]
+      ? `${i + 1}. ${payload.topExitItems[i].name} (${formatQuantity(payload.topExitItems[i].quantity)} ${payload.topExitItems[i].unit})`
+      : (i === 0 && payload.topExitItems.length === 0 ? 'Sem saídas no período.' : '');
+    destaquesBody.push([entry, exit]);
   }
+
+  autoTable(doc, {
+    startY: currentY,
+    theme: 'grid',
+    head: [['Top Itens: Maior Entrada', 'Top Itens: Maior Saída']],
+    body: destaquesBody,
+    headStyles: { fillColor: [140, 36, 168], textColor: 255, fontStyle: 'bold' },
+    styles: { fontSize: 10, cellPadding: 6 },
+    margin: { left: 40, right: 40 }
+  });
+
+  currentY = (doc as any).lastAutoTable.finalY + 30;
+
+  // 3. Movimentacoes Detalhadas
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(14);
+  doc.setTextColor(95, 17, 117);
+  doc.text('3. MOVIMENTAÇÕES DETALHADAS', 40, currentY);
+  currentY += 12;
+
+  const movBody = payload.entries.length > 0 
+    ? payload.entries.map(e => [
+        formatDateLabel(e.date),
+        e.name,
+        getMovementLabel(e.movementType),
+        `${formatQuantity(e.quantity)} ${e.unit}`
+      ])
+    : [['-', 'Sem movimentacoes no periodo selecionado.', '-', '-']];
+
+  autoTable(doc, {
+    startY: currentY,
+    theme: 'striped',
+    head: [['Data', 'Item', 'Tipo', 'Quantidade']],
+    body: movBody,
+    headStyles: { fillColor: [95, 17, 117], textColor: 255 },
+    styles: { fontSize: 9, cellPadding: 6 },
+    alternateRowStyles: { fillColor: [250, 245, 253] },
+    margin: { left: 40, right: 40 },
+    didParseCell: function(data: any) {
+      if (data.section === 'body' && data.column.index === 2) {
+        if (data.cell.raw === 'Entrada') {
+          data.cell.styles.textColor = [46, 125, 50]; // Green
+          data.cell.styles.fontStyle = 'bold';
+        } else if (data.cell.raw === 'Saida') {
+          data.cell.styles.textColor = [198, 40, 40]; // Red
+          data.cell.styles.fontStyle = 'bold';
+        }
+      }
+    }
+  });
+
+  currentY = (doc as any).lastAutoTable.finalY + 30;
+
+  // 4. Resumo por Item
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(14);
+  doc.setTextColor(95, 17, 117);
+  doc.text('4. RESUMO CONSOLIDADO POR ITEM', 40, currentY);
+  currentY += 12;
+
+  const resBody = payload.itemSummaries.length > 0
+    ? payload.itemSummaries.map(i => {
+        const highlights = [];
+        if (i.isTopEntry) highlights.push('Maior entrada');
+        if (i.isTopExit) highlights.push('Maior saída');
+        return [
+          i.name,
+          `${formatQuantity(i.totalEntryQuantity)} ${i.unit}`,
+          `${formatQuantity(i.totalExitQuantity)} ${i.unit}`,
+          i.movementDates.map(d => formatDateLabel(d)).join(', ') || '-',
+          highlights.join(' / ') || '-'
+        ];
+      })
+    : [['-', 'Nenhum item movimentado neste periodo.', '-', '-', '-']];
+
+  autoTable(doc, {
+    startY: currentY,
+    theme: 'striped',
+    head: [['Item', 'Total Entradas', 'Total Saídas', 'Datas com movimentação', 'Destaques']],
+    body: resBody,
+    headStyles: { fillColor: [95, 17, 117], textColor: 255 },
+    styles: { fontSize: 9, cellPadding: 6 },
+    alternateRowStyles: { fillColor: [250, 245, 253] },
+    margin: { left: 40, right: 40 },
+    columnStyles: { 3: { cellWidth: 120 } },
+    didParseCell: function(data: any) {
+      if (data.section === 'body' && data.column.index === 4 && data.cell.raw !== '-') {
+         data.cell.styles.textColor = [239, 108, 0]; // Orange highlight
+         data.cell.styles.fontStyle = 'bold';
+      }
+    }
+  });
 
   doc.save(buildPdfFileName(payload.period, payload.startDate, payload.endDate));
 }
-
 export async function generateHistoryReportPdf(
   period: HistoryReportPeriod,
   options: GenerateHistoryReportPdfOptions = {},
