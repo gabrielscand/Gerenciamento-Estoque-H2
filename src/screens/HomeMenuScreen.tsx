@@ -42,7 +42,12 @@ export function HomeMenuScreen({ cards }: HomeMenuScreenProps) {
             <Text style={styles.sectionDescription}>Toque em um card para abrir o modulo.</Text>
 
             <View style={[styles.grid, isCompactVertical ? styles.gridCompact : undefined]}>
-              {cards.map((card) => {
+              {cards.map((card, index) => {
+                const shouldCenterCard =
+                  card.key === 'purchase-list' &&
+                  cards.length % 2 === 1 &&
+                  index === cards.length - 1;
+
                 return (
                   <Pressable
                     key={card.key}
@@ -50,6 +55,7 @@ export function HomeMenuScreen({ cards }: HomeMenuScreenProps) {
                     style={({ pressed }) => [
                       styles.card,
                       isCompactVertical ? styles.cardCompact : undefined,
+                      shouldCenterCard ? styles.cardCenteredLastRow : undefined,
                       styles.cardDefault,
                       pressed ? styles.cardPressed : undefined,
                     ]}
@@ -136,6 +142,10 @@ const styles = StyleSheet.create({
     minHeight: 108,
     paddingVertical: 10,
     gap: 8,
+  },
+  cardCenteredLastRow: {
+    marginLeft: 'auto',
+    marginRight: 'auto',
   },
   cardDefault: {
     backgroundColor: tokens.colors.surface,

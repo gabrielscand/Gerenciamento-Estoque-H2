@@ -1,6 +1,14 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useIsFocused } from '@react-navigation/native';
-import { FlatList, Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native';
+import {
+  FlatList,
+  Pressable,
+  RefreshControl,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
 import { getCategoryLabel } from '../constants/categories';
 import { listStockCurrentOverview } from '../database/items.repository';
 import { syncAppData } from '../database/sync.service';
@@ -11,6 +19,20 @@ import { HeroHeader, KpiTile, MotionEntrance, ScreenShell } from '../components/
 import { tokens } from '../theme/tokens';
 import type { StockCurrentOverviewRow } from '../types/inventory';
 
+const FILTER_ALL = '__all__';
+const FILTER_UNCATEGORIZED = '__uncategorized__';
+const MAX_AUTOCOMPLETE_SUGGESTIONS = 6;
+
+type CategoryFilterValue = typeof FILTER_ALL | typeof FILTER_UNCATEGORIZED | string;
+type StockStatusFilter = 'all' | 'needs_purchase' | 'ok' | 'no_stock';
+
+const STATUS_FILTER_OPTIONS: Array<{ value: StockStatusFilter; label: string }> = [
+  { value: 'all', label: 'Todos' },
+  { value: 'needs_purchase', label: 'Precisa comprar' },
+  { value: 'ok', label: 'OK' },
+  { value: 'no_stock', label: 'Sem estoque' },
+];
+
 function formatQuantity(value: number): string {
   return value.toLocaleString('pt-BR', {
     minimumFractionDigits: Number.isInteger(value) ? 0 : 2,
@@ -18,8 +40,89 @@ function formatQuantity(value: number): string {
   });
 }
 
+function normalizeSearchValue(value: string): string {
+  return value
+    .trim()
+    .toLocaleLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '');
+}
+
+function getCategoryFilterLabel(value: CategoryFilterValue): string {
+  if (value === FILTER_ALL) {
+    return 'Todas as categorias';
+  }
+
+  if (value === FILTER_UNCATEGORIZED) {
+    return 'Sem categoria';
+  }
+
+  return getCategoryLabel(String(value));
+}
+
+type CategoryFilterSelectProps = {
+  value: CategoryFilterValue;
+  options: string[];
+  onChange: (nextValue: CategoryFilterValue) => void;
+  isOpen: boolean;
+  onToggle: () => void;
+  onClose: () => void;
+};
+
+function CategoryFilterSelect({
+  value,
+  options,
+  onChange,
+  isOpen,
+  onToggle,
+  onClose,
+}: CategoryFilterSelectProps) {
+  const filterOptions: CategoryFilterValue[] = [FILTER_ALL, ...options, FILTER_UNCATEGORIZED];
+
+  return (
+    <View style={styles.filterSelectRoot}>
+      <Pressable style={styles.filterSelectTrigger} onPress={onToggle}>
+        <Text style={styles.filterSelectText}>{getCategoryFilterLabel(value)}</Text>
+        <Text style={styles.filterSelectArrow}>{isOpen ? '^' : 'v'}</Text>
+      </Pressable>
+
+      {isOpen ? (
+        <View style={styles.filterSelectMenu}>
+          {filterOptions.map((option) => {
+            const isSelected = value === option;
+
+            return (
+              <Pressable
+                key={option}
+                style={[styles.filterSelectOption, isSelected ? styles.filterSelectOptionActive : undefined]}
+                onPress={() => {
+                  onChange(option);
+                  onClose();
+                }}
+              >
+                <Text
+                  style={[
+                    styles.filterSelectOptionText,
+                    isSelected ? styles.filterSelectOptionTextActive : undefined,
+                  ]}
+                >
+                  {getCategoryFilterLabel(option)}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
 export function StockScreen() {
   const [items, setItems] = useState<StockCurrentOverviewRow[]>([]);
+  const [categoryFilter, setCategoryFilter] = useState<CategoryFilterValue>(FILTER_ALL);
+  const [isCategoryFilterOpen, setIsCategoryFilterOpen] = useState(false);
+  const [statusFilter, setStatusFilter] = useState<StockStatusFilter>('all');
+  const [searchQuery, setSearchQuery] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const isFocused = useIsFocused();
   const { showTopPopup } = useTopPopup();
@@ -52,12 +155,104 @@ export function StockScreen() {
     void loadStock();
   }, [isFocused]);
 
+  const availableCategories = useMemo(() => {
+    const uniqueCategories = new Set<string>();
+
+    for (const item of items) {
+      if (item.category) {
+        uniqueCategories.add(item.category);
+      }
+    }
+
+    return Array.from(uniqueCategories).sort((left, right) =>
+      left.localeCompare(right, 'pt-BR', { sensitivity: 'base' }),
+    );
+  }, [items]);
+
+  useEffect(() => {
+    if (categoryFilter === FILTER_ALL || categoryFilter === FILTER_UNCATEGORIZED) {
+      return;
+    }
+
+    if (!availableCategories.includes(categoryFilter)) {
+      setCategoryFilter(FILTER_ALL);
+    }
+  }, [availableCategories, categoryFilter]);
+
+  const categoryFilteredItems = useMemo(() => {
+    return items.filter((item) => {
+      if (categoryFilter === FILTER_ALL) {
+        return true;
+      }
+
+      if (categoryFilter === FILTER_UNCATEGORIZED) {
+        return item.category === null;
+      }
+
+      return item.category === categoryFilter;
+    });
+  }, [items, categoryFilter]);
+
+  const statusFilteredItems = useMemo(() => {
+    return categoryFilteredItems.filter((item) => {
+      if (statusFilter === 'all') {
+        return true;
+      }
+
+      if (statusFilter === 'no_stock') {
+        return item.currentStockQuantity === null;
+      }
+
+      if (statusFilter === 'needs_purchase') {
+        return item.needsPurchase;
+      }
+
+      return item.currentStockQuantity !== null && !item.needsPurchase;
+    });
+  }, [categoryFilteredItems, statusFilter]);
+
+  const normalizedSearchQuery = useMemo(() => normalizeSearchValue(searchQuery), [searchQuery]);
+
+  const filteredItems = useMemo(() => {
+    if (!normalizedSearchQuery) {
+      return statusFilteredItems;
+    }
+
+    return statusFilteredItems.filter((item) =>
+      normalizeSearchValue(item.name).includes(normalizedSearchQuery),
+    );
+  }, [statusFilteredItems, normalizedSearchQuery]);
+
+  const searchSuggestions = useMemo(() => {
+    if (!normalizedSearchQuery) {
+      return [];
+    }
+
+    const startsWithMatches: StockCurrentOverviewRow[] = [];
+    const containsMatches: StockCurrentOverviewRow[] = [];
+
+    for (const item of statusFilteredItems) {
+      const normalizedName = normalizeSearchValue(item.name);
+
+      if (normalizedName.startsWith(normalizedSearchQuery)) {
+        startsWithMatches.push(item);
+        continue;
+      }
+
+      if (normalizedName.includes(normalizedSearchQuery)) {
+        containsMatches.push(item);
+      }
+    }
+
+    return [...startsWithMatches, ...containsMatches].slice(0, MAX_AUTOCOMPLETE_SUGGESTIONS);
+  }, [statusFilteredItems, normalizedSearchQuery]);
+
   const summary = useMemo(() => {
     let initializedItems = 0;
     let needPurchaseItems = 0;
     let totalMissingQuantity = 0;
 
-    for (const item of items) {
+    for (const item of filteredItems) {
       if (item.currentStockQuantity !== null) {
         initializedItems += 1;
       }
@@ -69,17 +264,21 @@ export function StockScreen() {
     }
 
     return {
-      totalItems: items.length,
+      totalItems: filteredItems.length,
       initializedItems,
       needPurchaseItems,
       totalMissingQuantity,
     };
-  }, [items]);
+  }, [filteredItems]);
+
+  function setSearchValue(value: string) {
+    setSearchQuery(value);
+  }
 
   return (
     <ScreenShell>
       <FlatList
-        data={items}
+        data={filteredItems}
         keyExtractor={(item) => String(item.id)}
         refreshControl={
           <RefreshControl
@@ -107,13 +306,101 @@ export function StockScreen() {
                 </View>
               </HeroHeader>
             </MotionEntrance>
+
+            <View style={styles.filterCard}>
+              <Text style={styles.filterLabel}>Filtrar por categoria</Text>
+              <CategoryFilterSelect
+                value={categoryFilter}
+                options={availableCategories}
+                onChange={(nextValue) => {
+                  setCategoryFilter(nextValue);
+                }}
+                isOpen={isCategoryFilterOpen}
+                onToggle={() => setIsCategoryFilterOpen((prev) => !prev)}
+                onClose={() => setIsCategoryFilterOpen(false)}
+              />
+            </View>
+
+            <View style={styles.filterCard}>
+              <Text style={styles.filterLabel}>Filtrar por status</Text>
+              <View style={styles.statusFilterRow}>
+                {STATUS_FILTER_OPTIONS.map((option) => {
+                  const isSelected = statusFilter === option.value;
+
+                  return (
+                    <Pressable
+                      key={option.value}
+                      style={[styles.statusFilterButton, isSelected ? styles.statusFilterButtonActive : undefined]}
+                      onPress={() => {
+                        setStatusFilter(option.value);
+                        setIsCategoryFilterOpen(false);
+                      }}
+                    >
+                      <Text
+                        style={[
+                          styles.statusFilterButtonText,
+                          isSelected ? styles.statusFilterButtonTextActive : undefined,
+                        ]}
+                      >
+                        {option.label}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            </View>
+
+            <View style={styles.searchCard}>
+              <View style={styles.searchHeader}>
+                <Text style={styles.searchLabel}>Buscar item</Text>
+                {searchQuery.trim().length > 0 ? (
+                  <Pressable
+                    style={styles.clearSearchButton}
+                    onPress={() => {
+                      setSearchValue('');
+                    }}
+                  >
+                    <Text style={styles.clearSearchButtonText}>Limpar</Text>
+                  </Pressable>
+                ) : null}
+              </View>
+              <TextInput
+                value={searchQuery}
+                onChangeText={setSearchValue}
+                placeholder="Digite o nome do item"
+                style={styles.searchInput}
+              />
+              {searchSuggestions.length > 0 ? (
+                <View style={styles.searchSuggestionsContainer}>
+                  {searchSuggestions.map((suggestion, index) => (
+                    <Pressable
+                      key={`suggestion-${suggestion.id}`}
+                      style={[
+                        styles.searchSuggestionButton,
+                        index === searchSuggestions.length - 1 ? styles.searchSuggestionButtonLast : undefined,
+                      ]}
+                      onPress={() => {
+                        setSearchValue(suggestion.name);
+                        setIsCategoryFilterOpen(false);
+                      }}
+                    >
+                      <Text style={styles.searchSuggestionText}>{suggestion.name}</Text>
+                    </Pressable>
+                  ))}
+                </View>
+              ) : null}
+            </View>
+
+            <Text style={styles.listTitle}>Itens no estoque ({filteredItems.length})</Text>
           </View>
         }
         ListEmptyComponent={
           isLoading ? (
             <Text style={styles.emptyText}>Carregando estoque...</Text>
-          ) : (
+          ) : items.length === 0 ? (
             <Text style={styles.emptyText}>Nenhum item cadastrado.</Text>
+          ) : (
+            <Text style={styles.emptyText}>Nenhum item encontrado para os filtros selecionados.</Text>
           )
         }
         renderItem={({ item }) => {
@@ -171,10 +458,6 @@ export function StockScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: 'transparent',
-  },
   listContent: {
     padding: 16,
     paddingBottom: 24,
@@ -184,29 +467,164 @@ const styles = StyleSheet.create({
     gap: 12,
     marginBottom: 6,
   },
-  heroCard: {
-    display: 'none',
+  filterCard: {
+    backgroundColor: tokens.colors.surface,
+    borderWidth: 1,
+    borderColor: tokens.colors.borderSoft,
+    borderRadius: 18,
+    padding: 12,
+    gap: 8,
+    ...tokens.shadow.card,
   },
-  title: {
-    color: '#F5EEFB',
-    fontSize: 24,
-    fontWeight: '800',
-  },
-  description: {
-    color: '#EDE0F9',
-    fontSize: 14,
-    lineHeight: 20,
-  },
-  summaryText: {
-    marginTop: 4,
-    color: '#FFFFFF',
+  filterLabel: {
     fontSize: 13,
+    color: '#77158E',
     fontWeight: '700',
   },
-  errorText: {
-    color: '#B02323',
+  filterSelectRoot: {
+    position: 'relative',
+  },
+  filterSelectTrigger: {
+    minHeight: 42,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#B690D2',
+    backgroundColor: '#F8F1FD',
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
+  },
+  filterSelectText: {
+    flex: 1,
+    color: '#2A0834',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  filterSelectArrow: {
+    color: '#77158E',
     fontSize: 12,
-    lineHeight: 17,
+    fontWeight: '800',
+  },
+  filterSelectMenu: {
+    marginTop: 6,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#B690D2',
+    backgroundColor: '#FFFFFF',
+    overflow: 'hidden',
+  },
+  filterSelectOption: {
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  filterSelectOptionActive: {
+    backgroundColor: '#EDE0F9',
+  },
+  filterSelectOptionText: {
+    color: '#3A0D49',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  filterSelectOptionTextActive: {
+    color: '#5F1175',
+    fontWeight: '700',
+  },
+  statusFilterRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  statusFilterButton: {
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: '#B690D2',
+    backgroundColor: '#F8F1FD',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  statusFilterButtonActive: {
+    backgroundColor: '#EDE0F9',
+    borderColor: '#9D63C4',
+  },
+  statusFilterButtonText: {
+    color: '#5F1175',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  statusFilterButtonTextActive: {
+    color: '#441055',
+  },
+  searchCard: {
+    backgroundColor: tokens.colors.surface,
+    borderWidth: 1,
+    borderColor: tokens.colors.borderSoft,
+    borderRadius: 18,
+    padding: 12,
+    gap: 8,
+    ...tokens.shadow.card,
+  },
+  searchHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  searchLabel: {
+    fontSize: 13,
+    color: '#77158E',
+    fontWeight: '700',
+  },
+  clearSearchButton: {
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: '#B690D2',
+    backgroundColor: '#F5EEFB',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+  },
+  clearSearchButtonText: {
+    color: '#5F1175',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  searchInput: {
+    borderWidth: 1,
+    borderColor: '#B690D2',
+    backgroundColor: '#F8F1FD',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    color: '#2A0834',
+    fontSize: 14,
+  },
+  searchSuggestionsContainer: {
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#D8C3EA',
+    overflow: 'hidden',
+    backgroundColor: '#FFFFFF',
+  },
+  searchSuggestionButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#EAD9F6',
+  },
+  searchSuggestionButtonLast: {
+    borderBottomWidth: 0,
+  },
+  searchSuggestionText: {
+    color: '#3A0D49',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  listTitle: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: tokens.colors.accentDeep,
   },
   emptyText: {
     textAlign: 'center',

@@ -4,7 +4,7 @@ import Svg, { Defs, LinearGradient, Stop, Rect, Text as SvgText } from 'react-na
 import { tokens } from '../../theme/tokens';
 
 export interface BarChartDataPoint {
-  id: number;
+  id: number | string;
   label: string;
   value: number;
   unit: string;

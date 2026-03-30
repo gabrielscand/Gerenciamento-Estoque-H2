@@ -12,6 +12,7 @@ import { HomeMenuScreen, type HomeMenuCard } from '../screens/HomeMenuScreen';
 import { HistoryScreen } from '../screens/HistoryScreen';
 import { ItemsScreen } from '../screens/ItemsScreen';
 import { EntryScreen, ExitScreen } from '../screens/MovementScreen';
+import { PurchaseListScreen } from '../screens/PurchaseListScreen';
 import { StockScreen } from '../screens/StockScreen';
 import { MotionEntrance, ScreenShell, SectionSurface } from '../components/ui-kit';
 import { tokens } from '../theme/tokens';
@@ -20,6 +21,7 @@ type RootTabParamList = {
   Home: undefined;
   Admin: undefined;
   Dashboard: undefined;
+  PurchaseList: undefined;
   Stock: undefined;
   Items: undefined;
   Entry: undefined;
@@ -215,6 +217,15 @@ export function Tabs({ currentUser, onLogout, onUsersChanged }: TabsProps) {
                 });
               }
 
+              if (canStock) {
+                cards.push({
+                  key: 'purchase-list',
+                  title: 'Lista de compras',
+                  icon: 'cart-outline',
+                  onPress: () => navigation.navigate('PurchaseList'),
+                });
+              }
+
               return <HomeMenuScreen cards={cards} />;
             }}
           </Tab.Screen>
@@ -248,6 +259,12 @@ export function Tabs({ currentUser, onLogout, onUsersChanged }: TabsProps) {
         {canDashboard ? (
           <Tab.Screen name="Dashboard" options={{ title: 'Dashboard' }}>
             {() => <DashboardScreen />}
+          </Tab.Screen>
+        ) : null}
+
+        {canStock ? (
+          <Tab.Screen name="PurchaseList" options={{ title: 'Lista de compras' }}>
+            {() => <PurchaseListScreen />}
           </Tab.Screen>
         ) : null}
 

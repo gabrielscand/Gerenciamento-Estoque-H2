@@ -176,6 +176,7 @@ export function DashboardScreen() {
   const [monthInputValue, setMonthInputValue] = useState(formatMonthLabel(initialMonth));
   const [monthInputError, setMonthInputError] = useState('');
   const [selectedMetric, setSelectedMetric] = useState<DashboardAbcMetric>('movement');
+  const [viewMode, setViewMode] = useState<'item' | 'category'>('item');
   const [activeChartInfo, setActiveChartInfo] = useState<DashboardChartInfoKey | null>(null);
   const [dashboardData, setDashboardData] = useState<DashboardAnalyticsData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -258,14 +259,47 @@ export function DashboardScreen() {
     setErrorMessage('');
   }
 
+  const groupedByCategory = useMemo(() => {
+    if (!dashboardData?.items) {
+      return [];
+    }
+    
+    const map = new Map<string, DashboardItemAnalyticsRow>();
+    let idCounter = -1;
+    
+    for (const item of dashboardData.items) {
+      const cat = item.category?.trim() || 'Sem categoria';
+      const existing = map.get(cat);
+      if (existing) {
+        existing.entryQuantity += item.entryQuantity;
+        existing.exitQuantity += item.exitQuantity;
+        existing.movementTotal += item.movementTotal;
+      } else {
+        map.set(cat, {
+          itemId: idCounter--,
+          name: cat,
+          category: cat,
+          unit: '', // Ocultamos a unidade pois uma categoria pode englobar várias unidades
+          entryQuantity: item.entryQuantity,
+          exitQuantity: item.exitQuantity,
+          movementTotal: item.movementTotal,
+        });
+      }
+    }
+    
+    return Array.from(map.values());
+  }, [dashboardData]);
+
+  const activeDataList = viewMode === 'item' ? (dashboardData?.items ?? []) : groupedByCategory;
+
   const abcPoints = useMemo(
-    () => buildAbcPoints(dashboardData?.items ?? [], selectedMetric),
-    [dashboardData, selectedMetric],
+    () => buildAbcPoints(activeDataList, selectedMetric),
+    [activeDataList, selectedMetric],
   );
 
   const topEntryItems = useMemo(
     () =>
-      (dashboardData?.items ?? [])
+      activeDataList
         .filter((item) => item.entryQuantity > 0)
         .sort(
           (left, right) =>
@@ -273,11 +307,11 @@ export function DashboardScreen() {
             left.name.localeCompare(right.name, 'pt-BR', { sensitivity: 'base' }),
         )
         .slice(0, 6),
-    [dashboardData],
+    [activeDataList],
   );
   const topExitItems = useMemo(
     () =>
-      (dashboardData?.items ?? [])
+      activeDataList
         .filter((item) => item.exitQuantity > 0)
         .sort(
           (left, right) =>
@@ -285,7 +319,7 @@ export function DashboardScreen() {
             left.name.localeCompare(right.name, 'pt-BR', { sensitivity: 'base' }),
         )
         .slice(0, 6),
-    [dashboardData],
+    [activeDataList],
   );
   const hasMovement = (dashboardData?.totals.movementEntries ?? 0) > 0;
 
@@ -360,6 +394,44 @@ export function DashboardScreen() {
             <Text style={styles.currentMonthButtonText}>Mes atual</Text>
           </Pressable>
           {monthInputError ? <Text style={styles.errorText}>{monthInputError}</Text> : null}
+        </View>
+
+        <View style={styles.metricCard}>
+          <Text style={styles.cardTitle}>Visao (Agrupamento)</Text>
+          <View style={styles.metricButtons}>
+            <Pressable
+              style={[
+                styles.metricButton,
+                viewMode === 'item' ? styles.metricButtonActive : undefined,
+              ]}
+              onPress={() => setViewMode('item')}
+            >
+              <Text
+                style={[
+                  styles.metricButtonText,
+                  viewMode === 'item' ? styles.metricButtonTextActive : undefined,
+                ]}
+              >
+                Por Item
+              </Text>
+            </Pressable>
+            <Pressable
+              style={[
+                styles.metricButton,
+                viewMode === 'category' ? styles.metricButtonActive : undefined,
+              ]}
+              onPress={() => setViewMode('category')}
+            >
+              <Text
+                style={[
+                  styles.metricButtonText,
+                  viewMode === 'category' ? styles.metricButtonTextActive : undefined,
+                ]}
+              >
+                Por Categoria
+              </Text>
+            </Pressable>
+          </View>
         </View>
 
         <View style={styles.metricCard}>
@@ -485,7 +557,7 @@ export function DashboardScreen() {
                         <View style={styles.abcInfo}>
                           <Text style={styles.abcItemName}>{point.rank}. {point.name}</Text>
                           <Text style={styles.abcItemMeta}>
-                            {getMetricLabel(selectedMetric)}: {formatQuantity(point.metricValue)} {point.unit} | Acumulado:{' '}
+                            {getMetricLabel(selectedMetric)}: {formatQuantity(point.metricValue)} {point.unit}{point.unit ? ' | ' : ''}Acumulado:{' '}
                             {point.cumulativePercent.toFixed(1)}%
                           </Text>
                         </View>
@@ -526,7 +598,7 @@ export function DashboardScreen() {
             <MotionEntrance delay={400}>
               <View style={styles.chartCard}>
                 <ChartCardHeader
-                  title="Itens mais comprados no mes"
+                  title={viewMode === 'item' ? "Itens mais comprados no mes" : "Categorias mais compradas"}
                   onPressInfo={() => setActiveChartInfo('topEntries')}
                 />
                 <InteractiveBarChart
@@ -542,7 +614,7 @@ export function DashboardScreen() {
             <MotionEntrance delay={500}>
               <View style={styles.chartCard}>
                 <ChartCardHeader
-                  title="Itens que mais sairam no mes"
+                  title={viewMode === 'item' ? "Itens que mais sairam no mes" : "Categorias que mais sairam"}
                   onPressInfo={() => setActiveChartInfo('topExits')}
                 />
                 <InteractiveBarChart
