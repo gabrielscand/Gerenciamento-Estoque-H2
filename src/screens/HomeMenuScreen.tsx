@@ -18,32 +18,63 @@ type HomeMenuScreenProps = {
 export function HomeMenuScreen({ cards }: HomeMenuScreenProps) {
   const { height, width } = useWindowDimensions();
   const isCompactVertical = height <= 860;
-  const useThreeColumns = width >= 1120 && cards.length >= 6;
-  const cardsPerRow = useThreeColumns ? 3 : 2;
+  const isWindowTight = height <= 820;
+  const canUseTightTopRow = isWindowTight && width >= 980;
+  const cardsPerRow = 2;
 
   return (
     <ScreenShell>
       <ScrollView
         style={styles.container}
-        contentContainerStyle={[styles.content, isCompactVertical ? styles.contentCompact : undefined]}
+        contentContainerStyle={[
+          styles.content,
+          isCompactVertical ? styles.contentCompact : undefined,
+          isWindowTight ? styles.contentTight : undefined,
+        ]}
         showsVerticalScrollIndicator={false}
       >
-        <SyncStatusCard />
+        {canUseTightTopRow ? (
+          <View style={styles.topRow}>
+            <View style={[styles.topRowItem, styles.topRowMenu]}>
+              <MotionEntrance delay={80}>
+                <HeroHeader
+                  title="Menu Principal"
+                  subtitle="Escolha sua area"
+                  description="Acesse rapidamente os modulos operacionais do sistema."
+                />
+              </MotionEntrance>
+            </View>
 
-        <MotionEntrance delay={80}>
-          <HeroHeader
-            title="Menu Principal"
-            subtitle="Escolha sua area"
-            description="Acesse rapidamente os modulos operacionais do sistema."
-          />
-        </MotionEntrance>
+            <View style={[styles.topRowItem, styles.topRowSync]}>
+              <SyncStatusCard />
+            </View>
+          </View>
+        ) : (
+          <>
+            <SyncStatusCard />
+
+            <MotionEntrance delay={80}>
+              <HeroHeader
+                title="Menu Principal"
+                subtitle="Escolha sua area"
+                description="Acesse rapidamente os modulos operacionais do sistema."
+              />
+            </MotionEntrance>
+          </>
+        )}
 
         <MotionEntrance delay={130}>
           <SectionSurface>
             <Text style={styles.sectionTitle}>Atalhos</Text>
             <Text style={styles.sectionDescription}>Toque em um card para abrir o modulo.</Text>
 
-            <View style={[styles.grid, isCompactVertical ? styles.gridCompact : undefined]}>
+            <View
+              style={[
+                styles.grid,
+                isCompactVertical ? styles.gridCompact : undefined,
+                isWindowTight ? styles.gridTight : undefined,
+              ]}
+            >
               {cards.map((card, index) => {
                 const shouldCenterCard =
                   card.key === 'purchase-list' &&
@@ -56,8 +87,9 @@ export function HomeMenuScreen({ cards }: HomeMenuScreenProps) {
                     onPress={card.onPress}
                     style={({ pressed }) => [
                       styles.card,
-                      useThreeColumns ? styles.cardThreeColumns : styles.cardTwoColumns,
+                      styles.cardTwoColumns,
                       isCompactVertical ? styles.cardCompact : undefined,
+                      isWindowTight ? styles.cardTight : undefined,
                       shouldCenterCard ? styles.cardCenteredLastRow : undefined,
                       styles.cardDefault,
                       pressed ? styles.cardPressed : undefined,
@@ -67,6 +99,7 @@ export function HomeMenuScreen({ cards }: HomeMenuScreenProps) {
                       style={[
                         styles.iconWrap,
                         isCompactVertical ? styles.iconWrapCompact : undefined,
+                        isWindowTight ? styles.iconWrapTight : undefined,
                         styles.iconWrapDefault,
                       ]}
                     >
@@ -76,6 +109,7 @@ export function HomeMenuScreen({ cards }: HomeMenuScreenProps) {
                       style={[
                         styles.cardTitle,
                         isCompactVertical ? styles.cardTitleCompact : undefined,
+                        isWindowTight ? styles.cardTitleTight : undefined,
                         styles.cardTitleDefault,
                       ]}
                     >
@@ -108,6 +142,26 @@ const styles = StyleSheet.create({
     paddingBottom: 16,
     gap: 10,
   },
+  contentTight: {
+    paddingTop: 8,
+    paddingBottom: 12,
+    gap: 8,
+  },
+  topRow: {
+    flexDirection: 'row',
+    gap: 10,
+    alignItems: 'stretch',
+  },
+  topRowItem: {
+    flex: 1,
+    minWidth: 0,
+  },
+  topRowSync: {
+    flex: 0.9,
+  },
+  topRowMenu: {
+    flex: 1.3,
+  },
   sectionTitle: {
     color: tokens.colors.accentDeep,
     fontSize: 19,
@@ -129,6 +183,9 @@ const styles = StyleSheet.create({
   gridCompact: {
     rowGap: 8,
   },
+  gridTight: {
+    rowGap: 6,
+  },
   card: {
     minHeight: 132,
     borderRadius: tokens.radius.lg,
@@ -143,13 +200,15 @@ const styles = StyleSheet.create({
   cardTwoColumns: {
     width: '48.4%',
   },
-  cardThreeColumns: {
-    width: '31.8%',
-  },
   cardCompact: {
     minHeight: 108,
     paddingVertical: 10,
     gap: 8,
+  },
+  cardTight: {
+    minHeight: 102,
+    paddingVertical: 9,
+    gap: 7,
   },
   cardCenteredLastRow: {
     marginLeft: 'auto',
@@ -174,6 +233,10 @@ const styles = StyleSheet.create({
     height: 42,
     width: 42,
   },
+  iconWrapTight: {
+    height: 40,
+    width: 40,
+  },
   iconWrapDefault: {
     backgroundColor: tokens.colors.accentSoft,
     borderColor: tokens.colors.borderSoft,
@@ -185,6 +248,9 @@ const styles = StyleSheet.create({
   },
   cardTitleCompact: {
     fontSize: 14,
+  },
+  cardTitleTight: {
+    fontSize: 13,
   },
   cardTitleDefault: {
     color: tokens.colors.accentDeep,
