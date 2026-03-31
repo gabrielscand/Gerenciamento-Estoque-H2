@@ -16,8 +16,10 @@ type HomeMenuScreenProps = {
 };
 
 export function HomeMenuScreen({ cards }: HomeMenuScreenProps) {
-  const { height } = useWindowDimensions();
+  const { height, width } = useWindowDimensions();
   const isCompactVertical = height <= 860;
+  const useThreeColumns = width >= 1120 && cards.length >= 6;
+  const cardsPerRow = useThreeColumns ? 3 : 2;
 
   return (
     <ScreenShell>
@@ -45,7 +47,7 @@ export function HomeMenuScreen({ cards }: HomeMenuScreenProps) {
               {cards.map((card, index) => {
                 const shouldCenterCard =
                   card.key === 'purchase-list' &&
-                  cards.length % 2 === 1 &&
+                  cards.length % cardsPerRow === 1 &&
                   index === cards.length - 1;
 
                 return (
@@ -54,6 +56,7 @@ export function HomeMenuScreen({ cards }: HomeMenuScreenProps) {
                     onPress={card.onPress}
                     style={({ pressed }) => [
                       styles.card,
+                      useThreeColumns ? styles.cardThreeColumns : styles.cardTwoColumns,
                       isCompactVertical ? styles.cardCompact : undefined,
                       shouldCenterCard ? styles.cardCenteredLastRow : undefined,
                       styles.cardDefault,
@@ -127,7 +130,6 @@ const styles = StyleSheet.create({
     rowGap: 8,
   },
   card: {
-    width: '48.4%',
     minHeight: 132,
     borderRadius: tokens.radius.lg,
     paddingHorizontal: 12,
@@ -137,6 +139,12 @@ const styles = StyleSheet.create({
     gap: 12,
     borderWidth: 1,
     ...tokens.shadow.card,
+  },
+  cardTwoColumns: {
+    width: '48.4%',
+  },
+  cardThreeColumns: {
+    width: '31.8%',
   },
   cardCompact: {
     minHeight: 108,
