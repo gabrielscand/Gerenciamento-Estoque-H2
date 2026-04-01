@@ -85,6 +85,28 @@ function formatPermissions(permissions: AppUserPermissions): string {
     .join(', ');
 }
 
+function parsePositiveDecimal(value: string): number | null {
+  const normalized = value.trim().replace(',', '.');
+
+  if (!/^\d+(\.\d+)?$/.test(normalized)) {
+    return null;
+  }
+
+  const parsed = Number(normalized);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return null;
+  }
+
+  return parsed;
+}
+
+function formatConversionFactor(value: number): string {
+  return value.toLocaleString('pt-BR', {
+    minimumFractionDigits: Number.isInteger(value) ? 0 : 2,
+    maximumFractionDigits: 3,
+  });
+}
+
 function buildCreateValidation(form: UserFormState): FormErrors {
   const errors: FormErrors = {};
 
@@ -201,6 +223,7 @@ export function AdminPanelScreen({ currentUser, onUsersChanged }: AdminPanelScre
   const [editingCategoryName, setEditingCategoryName] = useState('');
   const [editingUnitId, setEditingUnitId] = useState<number | null>(null);
   const [editingUnitName, setEditingUnitName] = useState('');
+  const [editingUnitFactor, setEditingUnitFactor] = useState('');
   const [isCategoriesEditorOpen, setIsCategoriesEditorOpen] = useState(false);
   const [isUnitsEditorOpen, setIsUnitsEditorOpen] = useState(false);
   const [editingUserId, setEditingUserId] = useState<number | null>(null);
@@ -208,6 +231,7 @@ export function AdminPanelScreen({ currentUser, onUsersChanged }: AdminPanelScre
   const [editForm, setEditForm] = useState<UserFormState>(INITIAL_CREATE_FORM);
   const [newCategory, setNewCategory] = useState('');
   const [newUnit, setNewUnit] = useState('');
+  const [newUnitFactor, setNewUnitFactor] = useState('');
   const [createErrors, setCreateErrors] = useState<FormErrors>({});
   const [editErrors, setEditErrors] = useState<FormErrors>({});
   const [catalogError, setCatalogError] = useState('');
@@ -490,13 +514,20 @@ export function AdminPanelScreen({ currentUser, onUsersChanged }: AdminPanelScre
       return;
     }
 
+    const conversionFactor = parsePositiveDecimal(newUnitFactor);
+    if (conversionFactor === null) {
+      setCatalogError('Informe uma equivalencia valida em und (numero maior que zero).');
+      return;
+    }
+
     setIsCatalogSubmitting(true);
     setCatalogError('');
     setCatalogSuccess('');
 
     try {
-      await createMeasurementUnit(newUnit);
+      await createMeasurementUnit(newUnit, conversionFactor);
       setNewUnit('');
+      setNewUnitFactor('');
       setCatalogSuccess('Unidade criada com sucesso.');
       await loadCatalog();
     } catch (error) {
@@ -523,6 +554,7 @@ export function AdminPanelScreen({ currentUser, onUsersChanged }: AdminPanelScre
   function startEditingUnit(option: CatalogOption) {
     setEditingUnitId(option.id);
     setEditingUnitName(option.name);
+    setEditingUnitFactor(String(option.conversionFactor));
     setCatalogError('');
     setCatalogSuccess('');
   }
@@ -530,6 +562,7 @@ export function AdminPanelScreen({ currentUser, onUsersChanged }: AdminPanelScre
   function cancelEditingUnit() {
     setEditingUnitId(null);
     setEditingUnitName('');
+    setEditingUnitFactor('');
   }
 
   function toggleCategoriesEditor() {
@@ -584,12 +617,18 @@ export function AdminPanelScreen({ currentUser, onUsersChanged }: AdminPanelScre
       return;
     }
 
+    const conversionFactor = parsePositiveDecimal(editingUnitFactor);
+    if (conversionFactor === null) {
+      setCatalogError('Informe uma equivalencia valida em und (numero maior que zero).');
+      return;
+    }
+
     setIsCatalogSubmitting(true);
     setCatalogError('');
     setCatalogSuccess('');
 
     try {
-      await updateMeasurementUnit(optionId, editingUnitName);
+      await updateMeasurementUnit(optionId, editingUnitName, conversionFactor);
       cancelEditingUnit();
       setCatalogSuccess('Unidade atualizada com sucesso.');
       await loadCatalog();
@@ -825,6 +864,13 @@ export function AdminPanelScreen({ currentUser, onUsersChanged }: AdminPanelScre
                   placeholder="Ex.: caixa"
                   style={styles.input}
                 />
+                <TextInput
+                  value={newUnitFactor}
+                  onChangeText={setNewUnitFactor}
+                  placeholder="Equivalencia em und (ex.: 12)"
+                  keyboardType="decimal-pad"
+                  style={styles.input}
+                />
                 <Pressable
                   style={[styles.secondaryButton, isCatalogSubmitting ? styles.submitButtonDisabled : undefined]}
                   disabled={isCatalogSubmitting}
@@ -944,6 +990,13 @@ export function AdminPanelScreen({ currentUser, onUsersChanged }: AdminPanelScre
                               style={styles.catalogCompactInput}
                               placeholder="Nome da unidade"
                             />
+                            <TextInput
+                              value={editingUnitFactor}
+                              onChangeText={setEditingUnitFactor}
+                              style={styles.catalogCompactInput}
+                              placeholder="Equivalencia em und"
+                              keyboardType="decimal-pad"
+                            />
                             <View style={styles.catalogOptionActions}>
                               <Pressable
                                 style={[styles.catalogActionButton, isCatalogSubmitting ? styles.submitButtonDisabled : undefined]}
@@ -965,7 +1018,12 @@ export function AdminPanelScreen({ currentUser, onUsersChanged }: AdminPanelScre
                           </View>
                         ) : (
                           <View key={`unit-${option.id}`} style={styles.catalogOptionRow}>
-                            <Text style={styles.catalogOptionName}>{option.name}</Text>
+                            <View style={styles.catalogOptionInfo}>
+                              <Text style={styles.catalogOptionName}>{option.name}</Text>
+                              <Text style={styles.catalogOptionMeta}>
+                                1 {option.name} = {formatConversionFactor(option.conversionFactor)} und
+                              </Text>
+                            </View>
                             <View style={styles.catalogOptionActions}>
                               <Pressable
                                 style={styles.catalogActionButton}
@@ -1413,9 +1471,17 @@ const styles = StyleSheet.create({
     fontSize: 13,
   },
   catalogOptionName: {
-    flex: 1,
     color: '#2A0834',
     fontSize: 13,
+    fontWeight: '600',
+  },
+  catalogOptionInfo: {
+    flex: 1,
+    gap: 2,
+  },
+  catalogOptionMeta: {
+    color: '#6D5B78',
+    fontSize: 11,
     fontWeight: '600',
   },
   catalogOptionActions: {

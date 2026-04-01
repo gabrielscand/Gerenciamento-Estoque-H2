@@ -31,6 +31,7 @@ import {
   getCurrentMonthString,
   parseDisplayMonthToIso,
 } from '../utils/date';
+import { formatOriginalAndBaseQuantity } from '../utils/unit-conversion';
 
 function formatQuantity(value: number): string {
   return value.toLocaleString('pt-BR', {
@@ -52,6 +53,21 @@ function getMetricLabel(metric: DashboardAbcMetric): string {
 }
 
 function getMetricValue(item: DashboardItemAnalyticsRow, metric: DashboardAbcMetric): number {
+  if (metric === 'entry') {
+    return item.entryQuantityInBaseUnits;
+  }
+
+  if (metric === 'exit') {
+    return item.exitQuantityInBaseUnits;
+  }
+
+  return item.movementTotalInBaseUnits;
+}
+
+function getMetricValueOriginal(
+  item: Pick<DashboardItemAnalyticsRow, 'entryQuantity' | 'exitQuantity' | 'movementTotal'>,
+  metric: DashboardAbcMetric,
+): number {
   if (metric === 'entry') {
     return item.entryQuantity;
   }
@@ -110,9 +126,13 @@ function buildAbcPoints(
       itemId: item.itemId,
       name: item.name,
       unit: item.unit,
+      conversionFactor: item.conversionFactor,
       entryQuantity: item.entryQuantity,
+      entryQuantityInBaseUnits: item.entryQuantityInBaseUnits,
       exitQuantity: item.exitQuantity,
+      exitQuantityInBaseUnits: item.exitQuantityInBaseUnits,
       movementTotal: item.movementTotal,
+      movementTotalInBaseUnits: item.movementTotalInBaseUnits,
       metricValue,
       sharePercent,
       cumulativePercent: normalizedCumulative,
@@ -272,21 +292,28 @@ export function DashboardScreen() {
       const existing = map.get(cat);
       if (existing) {
         existing.entryQuantity += item.entryQuantity;
+        existing.entryQuantityInBaseUnits += item.entryQuantityInBaseUnits;
         existing.exitQuantity += item.exitQuantity;
+        existing.exitQuantityInBaseUnits += item.exitQuantityInBaseUnits;
         existing.movementTotal += item.movementTotal;
+        existing.movementTotalInBaseUnits += item.movementTotalInBaseUnits;
       } else {
         map.set(cat, {
           itemId: idCounter--,
           name: cat,
           category: cat,
-          unit: '', // Ocultamos a unidade pois uma categoria pode englobar várias unidades
+          unit: '',
+          conversionFactor: 1,
           entryQuantity: item.entryQuantity,
+          entryQuantityInBaseUnits: item.entryQuantityInBaseUnits,
           exitQuantity: item.exitQuantity,
+          exitQuantityInBaseUnits: item.exitQuantityInBaseUnits,
           movementTotal: item.movementTotal,
+          movementTotalInBaseUnits: item.movementTotalInBaseUnits,
         });
       }
     }
-    
+
     return Array.from(map.values());
   }, [dashboardData]);
 
@@ -300,10 +327,10 @@ export function DashboardScreen() {
   const topEntryItems = useMemo(
     () =>
       activeDataList
-        .filter((item) => item.entryQuantity > 0)
+        .filter((item) => item.entryQuantityInBaseUnits > 0)
         .sort(
           (left, right) =>
-            right.entryQuantity - left.entryQuantity ||
+            right.entryQuantityInBaseUnits - left.entryQuantityInBaseUnits ||
             left.name.localeCompare(right.name, 'pt-BR', { sensitivity: 'base' }),
         )
         .slice(0, 6),
@@ -312,10 +339,10 @@ export function DashboardScreen() {
   const topExitItems = useMemo(
     () =>
       activeDataList
-        .filter((item) => item.exitQuantity > 0)
+        .filter((item) => item.exitQuantityInBaseUnits > 0)
         .sort(
           (left, right) =>
-            right.exitQuantity - left.exitQuantity ||
+            right.exitQuantityInBaseUnits - left.exitQuantityInBaseUnits ||
             left.name.localeCompare(right.name, 'pt-BR', { sensitivity: 'base' }),
         )
         .slice(0, 6),
@@ -328,8 +355,8 @@ export function DashboardScreen() {
       topEntryItems.map((item) => ({
         id: item.itemId,
         label: item.name,
-        value: item.entryQuantity,
-        unit: item.unit,
+        value: item.entryQuantityInBaseUnits,
+        unit: 'und',
       })),
     [topEntryItems],
   );
@@ -339,16 +366,16 @@ export function DashboardScreen() {
       topExitItems.map((item) => ({
         id: item.itemId,
         label: item.name,
-        value: item.exitQuantity,
-        unit: item.unit,
+        value: item.exitQuantityInBaseUnits,
+        unit: 'und',
       })),
     [topExitItems],
   );
 
   const activeInfoContent = activeChartInfo ? DASHBOARD_CHART_INFO_CONTENT[activeChartInfo] : null;
-  const totalEntry = dashboardData?.totals.entryQuantity ?? 0;
-  const totalExit = dashboardData?.totals.exitQuantity ?? 0;
-  const totalMovement = dashboardData?.totals.movementTotal ?? 0;
+  const totalEntry = dashboardData?.totals.entryQuantityInBaseUnits ?? 0;
+  const totalExit = dashboardData?.totals.exitQuantityInBaseUnits ?? 0;
+  const totalMovement = dashboardData?.totals.movementTotalInBaseUnits ?? 0;
   const totalItems = dashboardData?.totals.activeItems ?? 0;
 
   return (
@@ -373,9 +400,9 @@ export function DashboardScreen() {
             description="Curva ABC e ranking de compras/saidas para apoiar reposicao e giro."
           >
             <View style={styles.heroKpis}>
-              <KpiTile label="Entrada" value={formatQuantity(totalEntry)} />
-              <KpiTile label="Saida" value={formatQuantity(totalExit)} />
-              <KpiTile label="Movimentacao" value={formatQuantity(totalMovement)} />
+              <KpiTile label="Entrada (und)" value={formatQuantity(totalEntry)} />
+              <KpiTile label="Saida (und)" value={formatQuantity(totalExit)} />
+              <KpiTile label="Movimentacao (und)" value={formatQuantity(totalMovement)} />
               <KpiTile label="Itens ativos" value={String(totalItems)} />
             </View>
           </HeroHeader>
@@ -500,27 +527,27 @@ export function DashboardScreen() {
                     <View style={[styles.kpiIconDot, { backgroundColor: '#DCFCE7' }]}>
                       <Text style={[styles.kpiIconText, { color: '#15803D' }]}>▲</Text>
                     </View>
-                    <Text style={styles.kpiLabel}>Total entrada</Text>
+                    <Text style={styles.kpiLabel}>Total entrada (und)</Text>
                   </View>
-                  <Text style={styles.kpiValue}>{formatQuantity(dashboardData.totals.entryQuantity)}</Text>
+                  <Text style={styles.kpiValue}>{formatQuantity(dashboardData.totals.entryQuantityInBaseUnits)}</Text>
                 </View>
                 <View style={styles.kpiCard}>
                   <View style={styles.kpiIconRow}>
                     <View style={[styles.kpiIconDot, { backgroundColor: '#FEE2E2' }]}>
                       <Text style={[styles.kpiIconText, { color: '#DC2626' }]}>▼</Text>
                     </View>
-                    <Text style={styles.kpiLabel}>Total saida</Text>
+                    <Text style={styles.kpiLabel}>Total saida (und)</Text>
                   </View>
-                  <Text style={styles.kpiValue}>{formatQuantity(dashboardData.totals.exitQuantity)}</Text>
+                  <Text style={styles.kpiValue}>{formatQuantity(dashboardData.totals.exitQuantityInBaseUnits)}</Text>
                 </View>
                 <View style={styles.kpiCard}>
                   <View style={styles.kpiIconRow}>
                     <View style={[styles.kpiIconDot, { backgroundColor: '#EDE0F9' }]}>
                       <Text style={[styles.kpiIconText, { color: '#5F1175' }]}>⇄</Text>
                     </View>
-                    <Text style={styles.kpiLabel}>Movimentacao</Text>
+                    <Text style={styles.kpiLabel}>Movimentacao (und)</Text>
                   </View>
-                  <Text style={styles.kpiValue}>{formatQuantity(dashboardData.totals.movementTotal)}</Text>
+                  <Text style={styles.kpiValue}>{formatQuantity(dashboardData.totals.movementTotalInBaseUnits)}</Text>
                 </View>
                 <View style={styles.kpiCard}>
                   <View style={styles.kpiIconRow}>
@@ -557,7 +584,16 @@ export function DashboardScreen() {
                         <View style={styles.abcInfo}>
                           <Text style={styles.abcItemName}>{point.rank}. {point.name}</Text>
                           <Text style={styles.abcItemMeta}>
-                            {getMetricLabel(selectedMetric)}: {formatQuantity(point.metricValue)} {point.unit}{point.unit ? ' | ' : ''}Acumulado:{' '}
+                            {getMetricLabel(selectedMetric)}: {formatQuantity(point.metricValue)} und |{' '}
+                            {viewMode === 'item'
+                              ? `Original: ${formatOriginalAndBaseQuantity(
+                                  getMetricValueOriginal(point, selectedMetric),
+                                  point.unit,
+                                  point.conversionFactor,
+                                  formatQuantity,
+                                )} | `
+                              : ''}
+                            Acumulado:{' '}
                             {point.cumulativePercent.toFixed(1)}%
                           </Text>
                         </View>
@@ -588,9 +624,16 @@ export function DashboardScreen() {
                   onPressInfo={() => setActiveChartInfo('dailySeries')}
                 />
                 <Text style={styles.cardSubtitle}>
-                  Entradas e saidas empilhadas por dia no mes selecionado.
+                  Entradas e saidas empilhadas por dia no mes selecionado (base und).
                 </Text>
-                <DailySeriesChart series={dashboardData.dailySeries} />
+                <DailySeriesChart
+                  series={dashboardData.dailySeries.map((point) => ({
+                    ...point,
+                    entryQuantity: point.entryQuantityInBaseUnits,
+                    exitQuantity: point.exitQuantityInBaseUnits,
+                    movementTotal: point.movementTotalInBaseUnits,
+                  }))}
+                />
               </View>
             </MotionEntrance>
 
@@ -967,3 +1010,4 @@ const styles = StyleSheet.create({
     gap: 8,
   },
 });
+

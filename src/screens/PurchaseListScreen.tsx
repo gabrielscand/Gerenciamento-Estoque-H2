@@ -11,6 +11,7 @@ import { AppButton, HeroHeader, KpiTile, MotionEntrance, ScreenShell } from '../
 import { tokens } from '../theme/tokens';
 import type { StockCurrentOverviewRow } from '../types/inventory';
 import { generatePurchaseReportPdf } from '../utils/purchase-report';
+import { formatOriginalAndBaseQuantity } from '../utils/unit-conversion';
 
 function formatQuantity(value: number): string {
   return value.toLocaleString('pt-BR', {
@@ -39,7 +40,7 @@ export function PurchaseListScreen() {
         .filter((item) => item.needsPurchase)
         .sort(
           (left, right) =>
-            right.missingQuantity - left.missingQuantity ||
+            right.missingQuantityInBaseUnits - left.missingQuantityInBaseUnits ||
             left.name.localeCompare(right.name, 'pt-BR', { sensitivity: 'base' }),
         );
 
@@ -63,12 +64,12 @@ export function PurchaseListScreen() {
   }, [isFocused]);
 
   const summary = useMemo(() => {
-    let totalMissingQuantity = 0;
+    let totalMissingQuantityInBaseUnits = 0;
     let belowMinimumItems = 0;
     let atMinimumItems = 0;
 
     for (const item of items) {
-      totalMissingQuantity += item.missingQuantity;
+      totalMissingQuantityInBaseUnits += item.missingQuantityInBaseUnits;
 
       if (item.missingQuantity > 0) {
         belowMinimumItems += 1;
@@ -81,7 +82,7 @@ export function PurchaseListScreen() {
       totalItemsToBuy: items.length,
       belowMinimumItems,
       atMinimumItems,
-      totalMissingQuantity,
+      totalMissingQuantityInBaseUnits,
     };
   }, [items]);
 
@@ -145,7 +146,10 @@ export function PurchaseListScreen() {
                   <KpiTile label="Comprar" value={String(summary.totalItemsToBuy)} />
                   <KpiTile label="Abaixo" value={String(summary.belowMinimumItems)} />
                   <KpiTile label="No minimo" value={String(summary.atMinimumItems)} />
-                  <KpiTile label="Faltante" value={formatQuantity(summary.totalMissingQuantity)} />
+                  <KpiTile
+                    label="Faltante (und)"
+                    value={formatQuantity(summary.totalMissingQuantityInBaseUnits)}
+                  />
                 </View>
               </HeroHeader>
             </MotionEntrance>
@@ -190,7 +194,12 @@ export function PurchaseListScreen() {
 
               <StockEmphasis
                 label="Faltante para compra"
-                value={`${formatQuantity(item.missingQuantity)} ${item.unit}`}
+                value={formatOriginalAndBaseQuantity(
+                  item.missingQuantity,
+                  item.unit,
+                  item.conversionFactor,
+                  formatQuantity,
+                )}
                 tone={isBelowMinimum ? 'warning' : 'normal'}
                 helperText={isBelowMinimum ? 'Priorize reposicao deste item' : 'Reposicao preventiva sugerida'}
               />
@@ -199,8 +208,26 @@ export function PurchaseListScreen() {
                 Categoria: {item.category ? getCategoryLabel(item.category) : 'Sem categoria'}
               </Text>
               <Text style={styles.itemMeta}>Unidade: {item.unit}</Text>
-              <Text style={styles.itemMeta}>Estoque atual: {hasStock ? formatQuantity(item.currentStockQuantity as number) : '-'}</Text>
-              <Text style={styles.itemMeta}>Minimo: {formatQuantity(item.minQuantity)}</Text>
+              <Text style={styles.itemMeta}>
+                Estoque atual:{' '}
+                {hasStock
+                  ? formatOriginalAndBaseQuantity(
+                      item.currentStockQuantity as number,
+                      item.unit,
+                      item.conversionFactor,
+                      formatQuantity,
+                    )
+                  : '-'}
+              </Text>
+              <Text style={styles.itemMeta}>
+                Minimo:{' '}
+                {formatOriginalAndBaseQuantity(
+                  item.minQuantity,
+                  item.unit,
+                  item.conversionFactor,
+                  formatQuantity,
+                )}
+              </Text>
             </View>
           );
         }}

@@ -11,21 +11,26 @@ type PurchaseReportItem = {
   id: number;
   name: string;
   unit: string;
+  conversionFactor: number;
   category: string | null;
   minQuantity: number;
+  minQuantityInBaseUnits: number;
   currentStockQuantity: number | null;
+  currentStockQuantityInBaseUnits: number | null;
   missingQuantity: number;
+  missingQuantityInBaseUnits: number;
 };
 
 type PurchaseReportPayload = {
   generatedAt: Date;
   items: PurchaseReportItem[];
   totalMissingQuantity: number;
+  totalMissingQuantityInBaseUnits: number;
 };
 
 export type GeneratePurchaseReportPdfResult = {
   totalItems: number;
-  totalMissingQuantity: number;
+  totalMissingQuantityInBaseUnits: number;
   uri: string | null;
   shared: boolean;
 };
@@ -47,6 +52,14 @@ function formatQuantity(value: number): string {
   });
 }
 
+function formatOriginalAndBase(quantity: number, unit: string, _conversionFactor: number): string {
+  if (!unit || unit.trim().length === 0) {
+    return formatQuantity(quantity);
+  }
+
+  return `${formatQuantity(quantity)} ${unit}`;
+}
+
 function escapeHtml(value: string): string {
   return value
     .replaceAll('&', '&amp;')
@@ -58,7 +71,7 @@ function escapeHtml(value: string): string {
 
 function getStatusLabel(item: PurchaseReportItem): string {
   if (item.missingQuantity > 0) {
-    return `Faltam ${formatQuantity(item.missingQuantity)} ${item.unit}`;
+    return `Faltam ${formatOriginalAndBase(item.missingQuantity, item.unit, item.conversionFactor)}`;
   }
 
   return 'No minimo (comprar)';
@@ -69,17 +82,21 @@ function collectPurchaseItems(items: StockCurrentOverviewRow[]): PurchaseReportI
     .filter((item) => item.needsPurchase)
     .sort(
       (left, right) =>
-        right.missingQuantity - left.missingQuantity ||
+        right.missingQuantityInBaseUnits - left.missingQuantityInBaseUnits ||
         left.name.localeCompare(right.name, 'pt-BR', { sensitivity: 'base' }),
     )
     .map((item) => ({
       id: item.id,
       name: item.name,
       unit: item.unit,
+      conversionFactor: item.conversionFactor,
       category: item.category,
       minQuantity: item.minQuantity,
+      minQuantityInBaseUnits: item.minQuantityInBaseUnits,
       currentStockQuantity: item.currentStockQuantity,
+      currentStockQuantityInBaseUnits: item.currentStockQuantityInBaseUnits,
       missingQuantity: item.missingQuantity,
+      missingQuantityInBaseUnits: item.missingQuantityInBaseUnits,
     }));
 }
 
@@ -93,9 +110,21 @@ function buildPdfHtml(payload: PurchaseReportPayload): string {
                 <td>${index + 1}</td>
                 <td><strong>${escapeHtml(item.name)}</strong></td>
                 <td>${escapeHtml(item.category ? getCategoryLabel(item.category) : 'Sem categoria')}</td>
-                <td>${escapeHtml(formatQuantity(item.currentStockQuantity ?? 0))} ${escapeHtml(item.unit)}</td>
-                <td>${escapeHtml(formatQuantity(item.minQuantity))} ${escapeHtml(item.unit)}</td>
-                <td>${escapeHtml(formatQuantity(item.missingQuantity))} ${escapeHtml(item.unit)}</td>
+                <td>${escapeHtml(
+                  item.currentStockQuantity === null
+                    ? '-'
+                    : formatOriginalAndBase(
+                        item.currentStockQuantity,
+                        item.unit,
+                        item.conversionFactor,
+                      ),
+                )}</td>
+                <td>${escapeHtml(
+                  formatOriginalAndBase(item.minQuantity, item.unit, item.conversionFactor),
+                )}</td>
+                <td>${escapeHtml(
+                  formatOriginalAndBase(item.missingQuantity, item.unit, item.conversionFactor),
+                )}</td>
                 <td>${escapeHtml(getStatusLabel(item))}</td>
               </tr>
             `,
@@ -214,7 +243,9 @@ function buildPdfHtml(payload: PurchaseReportPayload): string {
           </div>
           <div class="meta-item">
             <div class="meta-label">Faltante total</div>
-            <div class="meta-value">${escapeHtml(formatQuantity(payload.totalMissingQuantity))}</div>
+            <div class="meta-value">${escapeHtml(
+              formatQuantity(payload.totalMissingQuantity),
+            )}</div>
           </div>
         </section>
 
@@ -281,9 +312,11 @@ async function generateWebPdf(payload: PurchaseReportPayload): Promise<void> {
           String(index + 1),
           item.name,
           item.category ? getCategoryLabel(item.category) : 'Sem categoria',
-          `${formatQuantity(item.currentStockQuantity ?? 0)} ${item.unit}`,
-          `${formatQuantity(item.minQuantity)} ${item.unit}`,
-          `${formatQuantity(item.missingQuantity)} ${item.unit}`,
+          item.currentStockQuantity === null
+            ? '-'
+            : formatOriginalAndBase(item.currentStockQuantity, item.unit, item.conversionFactor),
+          formatOriginalAndBase(item.minQuantity, item.unit, item.conversionFactor),
+          formatOriginalAndBase(item.missingQuantity, item.unit, item.conversionFactor),
           getStatusLabel(item),
         ])
       : [['-', 'Nenhum item para compra no momento.', '-', '-', '-', '-', '-']];
@@ -325,6 +358,10 @@ export async function generatePurchaseReportPdf(): Promise<GeneratePurchaseRepor
     generatedAt: new Date(),
     items,
     totalMissingQuantity: items.reduce((sum, item) => sum + item.missingQuantity, 0),
+    totalMissingQuantityInBaseUnits: items.reduce(
+      (sum, item) => sum + item.missingQuantityInBaseUnits,
+      0,
+    ),
   };
 
   const html = buildPdfHtml(payload);
@@ -334,7 +371,7 @@ export async function generatePurchaseReportPdf(): Promise<GeneratePurchaseRepor
 
     return {
       totalItems: payload.items.length,
-      totalMissingQuantity: payload.totalMissingQuantity,
+      totalMissingQuantityInBaseUnits: payload.totalMissingQuantityInBaseUnits,
       uri: null,
       shared: false,
     };
@@ -359,7 +396,7 @@ export async function generatePurchaseReportPdf(): Promise<GeneratePurchaseRepor
 
   return {
     totalItems: payload.items.length,
-    totalMissingQuantity: payload.totalMissingQuantity,
+    totalMissingQuantityInBaseUnits: payload.totalMissingQuantityInBaseUnits,
     uri: pdfFile.uri,
     shared,
   };

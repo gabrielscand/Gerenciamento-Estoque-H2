@@ -25,6 +25,7 @@ create table if not exists public.measurement_units (
   id text primary key,
   name text not null check (char_length(trim(name)) > 0),
   name_normalized text not null check (char_length(trim(name_normalized)) > 0),
+  conversion_factor double precision not null default 1 check (conversion_factor > 0),
   is_deleted boolean not null default false,
   deleted_at timestamptz,
   created_at timestamptz not null default timezone('utc', now()),
@@ -137,6 +138,9 @@ alter table public.measurement_units
 
 alter table public.measurement_units
   add column if not exists deleted_at timestamptz;
+
+alter table public.measurement_units
+  add column if not exists conversion_factor double precision not null default 1;
 
 alter table public.app_users
   add column if not exists username_normalized text;
@@ -297,15 +301,18 @@ values
   ('seed-cat-material-descartavel', 'material descartavel', 'material descartavel', false)
 on conflict (id) do nothing;
 
-insert into public.measurement_units (id, name, name_normalized, is_deleted)
+insert into public.measurement_units (id, name, name_normalized, conversion_factor, is_deleted)
 values
-  ('seed-unit-un', 'un', 'un', false),
-  ('seed-unit-kg', 'kg', 'kg', false),
-  ('seed-unit-caixa', 'caixa', 'caixa', false),
-  ('seed-unit-pacote', 'pacote', 'pacote', false),
-  ('seed-unit-gf', 'gf', 'gf', false),
-  ('seed-unit-duzia', 'duzia', 'duzia', false),
-  ('seed-unit-mz', 'mz', 'mz', false)
+  ('seed-unit-und', 'und', 'und', 1, false),
+  ('seed-unit-un', 'un', 'un', 1, false),
+  ('seed-unit-unidade', 'unidade', 'unidade', 1, false),
+  ('seed-unit-dz', 'dz', 'dz', 12, false),
+  ('seed-unit-duzia', 'duzia', 'duzia', 12, false),
+  ('seed-unit-mz', 'mz', 'mz', 6, false),
+  ('seed-unit-kg', 'kg', 'kg', 1, false),
+  ('seed-unit-caixa', 'caixa', 'caixa', 1, false),
+  ('seed-unit-pacote', 'pacote', 'pacote', 1, false),
+  ('seed-unit-gf', 'gf', 'gf', 1, false)
 on conflict (id) do nothing;
 
 insert into public.item_categories (id, name, name_normalized, is_deleted)
@@ -328,11 +335,17 @@ where not exists (
 )
 on conflict (id) do nothing;
 
-insert into public.measurement_units (id, name, name_normalized, is_deleted)
+insert into public.measurement_units (id, name, name_normalized, conversion_factor, is_deleted)
 select
   'backfill-unit-' || md5(lower(trim(source.unit))) as id,
   lower(trim(source.unit)) as name,
   lower(trim(source.unit)) as name_normalized,
+  case
+    when lower(trim(source.unit)) in ('dz', 'duzia') then 12
+    when lower(trim(source.unit)) = 'mz' then 6
+    when lower(trim(source.unit)) in ('und', 'un', 'unidade') then 1
+    else 1
+  end as conversion_factor,
   false
 from (
   select distinct unit
@@ -347,6 +360,15 @@ where not exists (
     and mu.name_normalized = lower(trim(source.unit))
 )
 on conflict (id) do nothing;
+
+update public.measurement_units
+set conversion_factor = case
+  when name_normalized in ('dz', 'duzia') then 12
+  when name_normalized = 'mz' then 6
+  when name_normalized in ('und', 'un', 'unidade') then 1
+  when conversion_factor is null or conversion_factor <= 0 then 1
+  else conversion_factor
+end;
 
 alter table public.stock_items disable row level security;
 alter table public.app_users disable row level security;

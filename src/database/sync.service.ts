@@ -66,6 +66,7 @@ type LocalPendingMeasurementUnitRow = {
   remote_id: string;
   name: string;
   name_normalized: string;
+  conversion_factor: number;
   is_deleted: number;
   deleted_at: string | null;
   created_at: string;
@@ -140,6 +141,7 @@ type RemoteMeasurementUnit = {
   id: string;
   name: string;
   name_normalized: string;
+  conversion_factor: number;
   is_deleted: boolean;
   deleted_at: string | null;
   created_at: string;
@@ -651,6 +653,7 @@ async function pushPendingMeasurementUnits(db: SQLiteDatabase): Promise<void> {
         remote_id,
         name,
         name_normalized,
+        conversion_factor,
         is_deleted,
         deleted_at,
         created_at,
@@ -768,6 +771,7 @@ async function pushPendingMeasurementUnits(db: SQLiteDatabase): Promise<void> {
       id: row.remote_id,
       name: row.name,
       name_normalized: row.name_normalized,
+      conversion_factor: row.conversion_factor,
       is_deleted: row.is_deleted === 1,
       deleted_at: row.deleted_at ? normalizeTimestamp(row.deleted_at) : null,
       created_at: normalizeTimestamp(row.created_at),
@@ -1189,16 +1193,18 @@ async function mergeRemoteMeasurementUnits(
               sync_status,
               name,
               name_normalized,
+              conversion_factor,
               is_deleted,
               deleted_at,
               created_at,
               updated_at
             )
-            VALUES (?, 'synced', ?, ?, ?, ?, ?, ?);
+            VALUES (?, 'synced', ?, ?, ?, ?, ?, ?, ?);
           `,
           remoteUnit.id,
           remoteUnit.name,
           remoteUnit.name_normalized,
+          remoteUnit.conversion_factor,
           remoteUnit.is_deleted ? 1 : 0,
           remoteUnit.deleted_at,
           remoteUnit.created_at,
@@ -1222,6 +1228,7 @@ async function mergeRemoteMeasurementUnits(
           SET
             name = ?,
             name_normalized = ?,
+            conversion_factor = ?,
             is_deleted = ?,
             deleted_at = ?,
             created_at = ?,
@@ -1231,6 +1238,7 @@ async function mergeRemoteMeasurementUnits(
         `,
         remoteUnit.name,
         remoteUnit.name_normalized,
+        remoteUnit.conversion_factor,
         remoteUnit.is_deleted ? 1 : 0,
         remoteUnit.deleted_at,
         remoteUnit.created_at,
@@ -1279,7 +1287,7 @@ async function performSync(): Promise<boolean> {
     await mergeRemoteItemCategories(db, remoteCategories);
 
     const remoteUnits = await fetchRemote<RemoteMeasurementUnit[]>(
-      '/measurement_units?select=id,name,name_normalized,is_deleted,deleted_at,created_at,updated_at&order=updated_at.asc',
+      '/measurement_units?select=id,name,name_normalized,conversion_factor,is_deleted,deleted_at,created_at,updated_at&order=updated_at.asc',
     );
     await mergeRemoteMeasurementUnits(db, remoteUnits);
 

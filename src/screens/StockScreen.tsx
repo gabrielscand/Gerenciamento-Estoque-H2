@@ -18,6 +18,7 @@ import { useTopPopup } from '../components/TopPopupProvider';
 import { HeroHeader, KpiTile, MotionEntrance, ScreenShell } from '../components/ui-kit';
 import { tokens } from '../theme/tokens';
 import type { StockCurrentOverviewRow } from '../types/inventory';
+import { formatOriginalAndBaseQuantity } from '../utils/unit-conversion';
 
 const FILTER_ALL = '__all__';
 const FILTER_UNCATEGORIZED = '__uncategorized__';
@@ -250,7 +251,7 @@ export function StockScreen() {
   const summary = useMemo(() => {
     let initializedItems = 0;
     let needPurchaseItems = 0;
-    let totalMissingQuantity = 0;
+    let totalMissingQuantityInBaseUnits = 0;
 
     for (const item of filteredItems) {
       if (item.currentStockQuantity !== null) {
@@ -259,7 +260,7 @@ export function StockScreen() {
 
       if (item.needsPurchase) {
         needPurchaseItems += 1;
-        totalMissingQuantity += item.missingQuantity;
+        totalMissingQuantityInBaseUnits += item.missingQuantityInBaseUnits;
       }
     }
 
@@ -267,7 +268,7 @@ export function StockScreen() {
       totalItems: filteredItems.length,
       initializedItems,
       needPurchaseItems,
-      totalMissingQuantity,
+      totalMissingQuantityInBaseUnits,
     };
   }, [filteredItems]);
 
@@ -302,7 +303,10 @@ export function StockScreen() {
                   <KpiTile label="Itens" value={String(summary.totalItems)} />
                   <KpiTile label="Com saldo" value={String(summary.initializedItems)} />
                   <KpiTile label="Comprar" value={String(summary.needPurchaseItems)} />
-                  <KpiTile label="Faltante" value={formatQuantity(summary.totalMissingQuantity)} />
+                  <KpiTile
+                    label="Faltante (und)"
+                    value={formatQuantity(summary.totalMissingQuantityInBaseUnits)}
+                  />
                 </View>
               </HeroHeader>
             </MotionEntrance>
@@ -428,7 +432,16 @@ export function StockScreen() {
 
               <StockEmphasis
                 label="Estoque atual"
-                value={hasStock ? `${formatQuantity(item.currentStockQuantity as number)} ${item.unit}` : '-'}
+                value={
+                  hasStock
+                    ? formatOriginalAndBaseQuantity(
+                        item.currentStockQuantity as number,
+                        item.unit,
+                        item.conversionFactor,
+                        formatQuantity,
+                      )
+                    : '-'
+                }
                 tone={!hasStock ? 'empty' : item.needsPurchase ? 'warning' : 'normal'}
                 helperText={
                   !hasStock
@@ -440,11 +453,25 @@ export function StockScreen() {
               />
               <Text style={styles.itemMeta}>Categoria: {item.category ? getCategoryLabel(item.category) : 'Sem categoria'}</Text>
               <Text style={styles.itemMeta}>Unidade: {item.unit}</Text>
-              <Text style={styles.itemMeta}>Minimo: {formatQuantity(item.minQuantity)}</Text>
+              <Text style={styles.itemMeta}>
+                Minimo:{' '}
+                {formatOriginalAndBaseQuantity(
+                  item.minQuantity,
+                  item.unit,
+                  item.conversionFactor,
+                  formatQuantity,
+                )}
+              </Text>
               {item.needsPurchase && item.missingQuantity > 0 ? (
                 <Pressable style={styles.purchaseHint}>
                   <Text style={styles.purchaseHintText}>
-                    Comprar {formatQuantity(item.missingQuantity)} {item.unit}
+                    Comprar{' '}
+                    {formatOriginalAndBaseQuantity(
+                      item.missingQuantity,
+                      item.unit,
+                      item.conversionFactor,
+                      formatQuantity,
+                    )}
                   </Text>
                 </Pressable>
               ) : null}

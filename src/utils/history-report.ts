@@ -31,6 +31,8 @@ type ReportTopItem = {
   name: string;
   unit: string;
   quantity: number;
+  conversionFactor: number;
+  quantityInBaseUnits: number;
 };
 
 type ReportSummaryPayload = {
@@ -74,6 +76,14 @@ function formatQuantity(value: number): string {
     minimumFractionDigits: Number.isInteger(value) ? 0 : 2,
     maximumFractionDigits: 2,
   });
+}
+
+function formatOriginalAndBase(quantity: number, unit: string, _quantityInBaseUnits: number): string {
+  if (!unit || unit.trim().length === 0) {
+    return formatQuantity(quantity);
+  }
+
+  return `${formatQuantity(quantity)} ${unit}`;
 }
 
 function escapeHtml(value: string): string {
@@ -188,14 +198,15 @@ function getTopItems(
   movementType: HistoryReportEntry['movementType'],
   limit: number = 5,
 ): ReportTopItem[] {
-  const quantityField =
-    movementType === 'entry' ? 'totalEntryQuantity' : 'totalExitQuantity';
+  const quantityField = movementType === 'entry' ? 'totalEntryQuantity' : 'totalExitQuantity';
+  const quantityInBaseUnitsField =
+    movementType === 'entry' ? 'totalEntryQuantityInBaseUnits' : 'totalExitQuantityInBaseUnits';
 
   return summaries
-    .filter((summary) => summary[quantityField] > 0)
+    .filter((summary) => summary[quantityInBaseUnitsField] > 0)
     .sort(
       (left, right) =>
-        right[quantityField] - left[quantityField] ||
+        right[quantityInBaseUnitsField] - left[quantityInBaseUnitsField] ||
         left.name.localeCompare(right.name, 'pt-BR', { sensitivity: 'base' }),
     )
     .slice(0, limit)
@@ -203,6 +214,8 @@ function getTopItems(
       name: summary.name,
       unit: summary.unit,
       quantity: summary[quantityField],
+      conversionFactor: summary.conversionFactor,
+      quantityInBaseUnits: summary[quantityInBaseUnitsField],
     }));
 }
 
@@ -213,8 +226,11 @@ function buildItemSummaries(entries: HistoryReportEntry[]): HistoryReportItemSum
       itemId: number;
       name: string;
       unit: string;
+      conversionFactor: number;
       totalEntryQuantity: number;
+      totalEntryQuantityInBaseUnits: number;
       totalExitQuantity: number;
+      totalExitQuantityInBaseUnits: number;
       movementDates: Set<string>;
     }
   >();
@@ -224,15 +240,20 @@ function buildItemSummaries(entries: HistoryReportEntry[]): HistoryReportItemSum
       itemId: entry.itemId,
       name: entry.name,
       unit: entry.unit,
+      conversionFactor: entry.conversionFactor,
       totalEntryQuantity: 0,
+      totalEntryQuantityInBaseUnits: 0,
       totalExitQuantity: 0,
+      totalExitQuantityInBaseUnits: 0,
       movementDates: new Set<string>(),
     };
 
     if (entry.movementType === 'entry') {
       current.totalEntryQuantity += entry.quantity;
+      current.totalEntryQuantityInBaseUnits += entry.quantityInBaseUnits;
     } else {
       current.totalExitQuantity += entry.quantity;
+      current.totalExitQuantityInBaseUnits += entry.quantityInBaseUnits;
     }
 
     current.movementDates.add(entry.date);
@@ -240,25 +261,34 @@ function buildItemSummaries(entries: HistoryReportEntry[]): HistoryReportItemSum
   }
 
   const list = Array.from(map.values());
-  const maxEntry = list.reduce((max, item) => Math.max(max, item.totalEntryQuantity), 0);
-  const maxExit = list.reduce((max, item) => Math.max(max, item.totalExitQuantity), 0);
+  const maxEntry = list.reduce(
+    (max, item) => Math.max(max, item.totalEntryQuantityInBaseUnits),
+    0,
+  );
+  const maxExit = list.reduce(
+    (max, item) => Math.max(max, item.totalExitQuantityInBaseUnits),
+    0,
+  );
 
   return list
     .map((item) => ({
       itemId: item.itemId,
       name: item.name,
       unit: item.unit,
+      conversionFactor: item.conversionFactor,
       totalEntryQuantity: item.totalEntryQuantity,
+      totalEntryQuantityInBaseUnits: item.totalEntryQuantityInBaseUnits,
       totalExitQuantity: item.totalExitQuantity,
+      totalExitQuantityInBaseUnits: item.totalExitQuantityInBaseUnits,
       movementDates: Array.from(item.movementDates).sort((left, right) => right.localeCompare(left)),
-      isTopEntry: maxEntry > 0 && item.totalEntryQuantity === maxEntry,
-      isTopExit: maxExit > 0 && item.totalExitQuantity === maxExit,
+      isTopEntry: maxEntry > 0 && item.totalEntryQuantityInBaseUnits === maxEntry,
+      isTopExit: maxExit > 0 && item.totalExitQuantityInBaseUnits === maxExit,
     }))
     .sort(
       (left, right) =>
-        right.totalEntryQuantity +
-          right.totalExitQuantity -
-          (left.totalEntryQuantity + left.totalExitQuantity) ||
+        right.totalEntryQuantityInBaseUnits +
+          right.totalExitQuantityInBaseUnits -
+          (left.totalEntryQuantityInBaseUnits + left.totalExitQuantityInBaseUnits) ||
         left.name.localeCompare(right.name, 'pt-BR', { sensitivity: 'base' }),
     );
 }
@@ -273,11 +303,11 @@ function buildPdfHtml(payload: ReportSummaryPayload): string {
           .map(
             (item, index) =>
               `<li><strong>${index + 1}. ${escapeHtml(item.name)}</strong> - ${escapeHtml(
-                formatQuantity(item.quantity),
-              )} ${escapeHtml(item.unit)}</li>`,
+                formatOriginalAndBase(item.quantity, item.unit, item.quantityInBaseUnits),
+              )}</li>`,
           )
           .join('')
-      : '<li>Sem entradas no período.</li>';
+      : '<li>Sem entradas no periodo.</li>';
 
   const topExitListHtml =
     payload.topExitItems.length > 0
@@ -285,11 +315,11 @@ function buildPdfHtml(payload: ReportSummaryPayload): string {
           .map(
             (item, index) =>
               `<li><strong>${index + 1}. ${escapeHtml(item.name)}</strong> - ${escapeHtml(
-                formatQuantity(item.quantity),
-              )} ${escapeHtml(item.unit)}</li>`,
+                formatOriginalAndBase(item.quantity, item.unit, item.quantityInBaseUnits),
+              )}</li>`,
           )
           .join('')
-      : '<li>Sem saídas no período.</li>';
+      : '<li>Sem saidas no periodo.</li>';
 
   const movementRowsHtml =
     payload.entries.length > 0
@@ -300,14 +330,16 @@ function buildPdfHtml(payload: ReportSummaryPayload): string {
                 <td>${escapeHtml(formatDateLabel(entry.date))}</td>
                 <td><strong>${escapeHtml(entry.name)}</strong></td>
                 <td><span class="badge ${entry.movementType === 'entry' ? 'badge-entry' : 'badge-exit'}">${escapeHtml(getMovementLabel(entry.movementType))}</span></td>
-                <td><strong>${escapeHtml(formatQuantity(entry.quantity))}</strong> <span class="unit">${escapeHtml(entry.unit)}</span></td>
+                <td><strong>${escapeHtml(
+                  formatOriginalAndBase(entry.quantity, entry.unit, entry.quantityInBaseUnits),
+                )}</strong></td>
               </tr>
             `,
           )
           .join('')
       : `
         <tr>
-          <td colspan="4" class="empty-cell">Sem movimentações no período selecionado.</td>
+          <td colspan="4" class="empty-cell">Sem movimentacoes no periodo selecionado.</td>
         </tr>
       `;
 
@@ -318,13 +350,25 @@ function buildPdfHtml(payload: ReportSummaryPayload): string {
             const highlightLabels: string[] = [];
 
             if (item.isTopEntry) highlightLabels.push('Maior entrada');
-            if (item.isTopExit) highlightLabels.push('Maior saída');
+            if (item.isTopExit) highlightLabels.push('Maior saida');
 
             return `
               <tr>
                 <td><strong>${escapeHtml(item.name)}</strong></td>
-                <td class="col-entry">${escapeHtml(formatQuantity(item.totalEntryQuantity))} <span class="unit">${escapeHtml(item.unit)}</span></td>
-                <td class="col-exit">${escapeHtml(formatQuantity(item.totalExitQuantity))} <span class="unit">${escapeHtml(item.unit)}</span></td>
+                <td class="col-entry">${escapeHtml(
+                  formatOriginalAndBase(
+                    item.totalEntryQuantity,
+                    item.unit,
+                    item.totalEntryQuantityInBaseUnits,
+                  ),
+                )}</td>
+                <td class="col-exit">${escapeHtml(
+                  formatOriginalAndBase(
+                    item.totalExitQuantity,
+                    item.unit,
+                    item.totalExitQuantityInBaseUnits,
+                  ),
+                )}</td>
                 <td class="col-dates">${escapeHtml(item.movementDates.map((date) => formatDateLabel(date)).join(', '))}</td>
                 <td>${highlightLabels.length > 0 ? `<span class="badge badge-highlight">${escapeHtml(highlightLabels.join(' / '))}</span>` : '-'}</td>
               </tr>
@@ -333,7 +377,7 @@ function buildPdfHtml(payload: ReportSummaryPayload): string {
           .join('')
       : `
         <tr>
-          <td colspan="5" class="empty-cell">Nenhum item movimentado neste período.</td>
+          <td colspan="5" class="empty-cell">Nenhum item movimentado neste periodo.</td>
         </tr>
       `;
 
@@ -484,7 +528,6 @@ function buildPdfHtml(payload: ReportSummaryPayload): string {
           .badge-entry { background: #e8f5e9; color: #2e7d32; }
           .badge-exit { background: #ffebee; color: #c62828; }
           .badge-highlight { background: #fff3e0; color: #ef6c00; }
-          .unit { color: #888; font-size: 11px; }
           .col-dates { line-height: 1.4; color: #666; font-size: 12px; }
         </style>
       </head>
@@ -492,14 +535,14 @@ function buildPdfHtml(payload: ReportSummaryPayload): string {
         <div class="header">
           <div class="logo">H2 Campinas</div>
           <div class="title">${escapeHtml(periodMeta.reportTitle)}</div>
-          <div class="subtitle">Relatório de Transações de Estoque</div>
+          <div class="subtitle">Relatorio de transacoes de estoque</div>
         </div>
 
         <section class="section">
-          <h2>1. Informações Gerais</h2>
+          <h2>1. Informacoes Gerais</h2>
           <div class="meta-grid">
             <div class="meta-item">
-              <div class="meta-label">Período Selecionado</div>
+              <div class="meta-label">Periodo Selecionado</div>
               <div class="meta-value">${escapeHtml(periodMeta.periodLabel)}</div>
             </div>
             <div class="meta-item">
@@ -511,7 +554,7 @@ function buildPdfHtml(payload: ReportSummaryPayload): string {
               <div class="meta-value">${escapeHtml(formatDateTime(payload.generatedAt))}</div>
             </div>
             <div class="meta-item">
-              <div class="meta-label">Operações Registradas</div>
+              <div class="meta-label">Operacoes Registradas</div>
               <div class="meta-value">${escapeHtml(String(payload.entries.length))}</div>
             </div>
           </div>
@@ -525,14 +568,14 @@ function buildPdfHtml(payload: ReportSummaryPayload): string {
               <ul>${topEntryListHtml}</ul>
             </div>
             <div class="highlight-card">
-              <strong>Top Itens: Maior Saída</strong>
+              <strong>Top Itens: Maior Saida</strong>
               <ul>${topExitListHtml}</ul>
             </div>
           </div>
         </section>
 
         <section class="section">
-          <h2>3. Movimentações Detalhadas</h2>
+          <h2>3. Movimentacoes Detalhadas</h2>
           <table>
             <thead>
               <tr>
@@ -555,8 +598,8 @@ function buildPdfHtml(payload: ReportSummaryPayload): string {
               <tr>
                 <th>Item</th>
                 <th>Total Entradas</th>
-                <th>Total Saídas</th>
-                <th>Datas com movimentação</th>
+                <th>Total Saidas</th>
+                <th>Datas com movimentacao</th>
                 <th>Destaques</th>
               </tr>
             </thead>
@@ -569,7 +612,6 @@ function buildPdfHtml(payload: ReportSummaryPayload): string {
     </html>
   `;
 }
-
 function buildPdfFileName(period: HistoryReportPeriod, startDate: string, endDate: string): string {
   return `relatorio-${period}-${startDate}-${endDate}.pdf`;
 }
@@ -634,12 +676,20 @@ async function generateWebPdf(payload: ReportSummaryPayload): Promise<void> {
   const maxDestaques = Math.max(payload.topEntryItems.length, payload.topExitItems.length, 1);
   const destaquesBody = [];
   for (let i = 0; i < maxDestaques; i++) {
-    const entry = payload.topEntryItems[i] 
-      ? `${i + 1}. ${payload.topEntryItems[i].name} (${formatQuantity(payload.topEntryItems[i].quantity)} ${payload.topEntryItems[i].unit})` 
-      : (i === 0 && payload.topEntryItems.length === 0 ? 'Sem entradas no período.' : '');
+    const entry = payload.topEntryItems[i]
+      ? `${i + 1}. ${payload.topEntryItems[i].name} (${formatOriginalAndBase(
+          payload.topEntryItems[i].quantity,
+          payload.topEntryItems[i].unit,
+          payload.topEntryItems[i].quantityInBaseUnits,
+        )})`
+      : (i === 0 && payload.topEntryItems.length === 0 ? 'Sem entradas no periodo.' : '');
     const exit = payload.topExitItems[i]
-      ? `${i + 1}. ${payload.topExitItems[i].name} (${formatQuantity(payload.topExitItems[i].quantity)} ${payload.topExitItems[i].unit})`
-      : (i === 0 && payload.topExitItems.length === 0 ? 'Sem saídas no período.' : '');
+      ? `${i + 1}. ${payload.topExitItems[i].name} (${formatOriginalAndBase(
+          payload.topExitItems[i].quantity,
+          payload.topExitItems[i].unit,
+          payload.topExitItems[i].quantityInBaseUnits,
+        )})`
+      : (i === 0 && payload.topExitItems.length === 0 ? 'Sem saidas no periodo.' : '');
     destaquesBody.push([entry, exit]);
   }
 
@@ -667,7 +717,7 @@ async function generateWebPdf(payload: ReportSummaryPayload): Promise<void> {
         formatDateLabel(e.date),
         e.name,
         getMovementLabel(e.movementType),
-        `${formatQuantity(e.quantity)} ${e.unit}`
+        formatOriginalAndBase(e.quantity, e.unit, e.quantityInBaseUnits)
       ])
     : [['-', 'Sem movimentacoes no periodo selecionado.', '-', '-']];
 
@@ -709,8 +759,8 @@ async function generateWebPdf(payload: ReportSummaryPayload): Promise<void> {
         if (i.isTopExit) highlights.push('Maior saída');
         return [
           i.name,
-          `${formatQuantity(i.totalEntryQuantity)} ${i.unit}`,
-          `${formatQuantity(i.totalExitQuantity)} ${i.unit}`,
+          formatOriginalAndBase(i.totalEntryQuantity, i.unit, i.totalEntryQuantityInBaseUnits),
+          formatOriginalAndBase(i.totalExitQuantity, i.unit, i.totalExitQuantityInBaseUnits),
           i.movementDates.map(d => formatDateLabel(d)).join(', ') || '-',
           highlights.join(' / ') || '-'
         ];
@@ -807,3 +857,4 @@ export async function generateHistoryReportPdf(
     shared,
   };
 }
+

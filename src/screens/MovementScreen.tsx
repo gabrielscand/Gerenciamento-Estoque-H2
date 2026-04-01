@@ -4,14 +4,17 @@ import {
   ActivityIndicator,
   Alert,
   FlatList,
+  Modal,
   Platform,
   Pressable,
   RefreshControl,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
   View,
 } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { getCategoryLabel } from '../constants/categories';
 import {
   listStockMovementItems,
@@ -32,10 +35,20 @@ import {
 import { DateField } from '../components/DateField';
 import { HeroHeader, KpiTile, MotionEntrance, ScreenShell } from '../components/ui-kit';
 import { tokens } from '../theme/tokens';
+import { formatOriginalAndBaseQuantity } from '../utils/unit-conversion';
 
 type MovementMode = 'entry' | 'exit';
 type QuantityFormMap = Record<string, string>;
 type QuantityErrorMap = Record<string, string>;
+type CartResolutionAction = 'replace' | 'sum' | 'cancel';
+type DateChangeAction = 'clear' | 'keep' | 'cancel';
+type MovementCartItem = {
+  itemId: number;
+  name: string;
+  unit: string;
+  conversionFactor: number;
+  quantity: number;
+};
 
 const FILTER_ALL = '__all__';
 const FILTER_UNCATEGORIZED = '__uncategorized__';
@@ -182,6 +195,13 @@ function StockMovementScreen({ mode }: { mode: MovementMode }) {
   const [quantities, setQuantities] = useState<QuantityFormMap>({});
   const [focusedInputItemId, setFocusedInputItemId] = useState<number | null>(null);
   const [fieldErrors, setFieldErrors] = useState<QuantityErrorMap>({});
+  const [cartItems, setCartItems] = useState<MovementCartItem[]>([]);
+  const [isCartModalOpen, setIsCartModalOpen] = useState(false);
+  const [pendingDuplicateAdd, setPendingDuplicateAdd] = useState<{
+    item: StockMovementItem;
+    quantity: number;
+  } | null>(null);
+  const [pendingDateChange, setPendingDateChange] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const skipNextDateModeLoadRef = useRef(false);
@@ -334,7 +354,7 @@ function StockMovementScreen({ mode }: { mode: MovementMode }) {
   const summary = useMemo(() => {
     let needPurchase = 0;
     let okCount = 0;
-    let totalMissingQuantity = 0;
+    let totalMissingQuantityInBaseUnits = 0;
     let evaluatedItems = 0;
 
     for (const item of filteredItems) {
@@ -367,18 +387,66 @@ function StockMovementScreen({ mode }: { mode: MovementMode }) {
       if (projectedStock <= item.minQuantity) {
         needPurchase += 1;
         if (projectedStock < item.minQuantity) {
-          totalMissingQuantity += item.minQuantity - projectedStock;
+          totalMissingQuantityInBaseUnits +=
+            (item.minQuantity - projectedStock) * item.conversionFactor;
         }
       } else {
         okCount += 1;
       }
     }
 
-    return { needPurchase, okCount, countedItems: evaluatedItems, totalMissingQuantity };
+    return {
+      needPurchase,
+      okCount,
+      countedItems: evaluatedItems,
+      totalMissingQuantityInBaseUnits,
+    };
   }, [filteredItems, quantities, mode]);
 
+  const cartTotalQuantityInBaseUnits = useMemo(
+    () =>
+      cartItems.reduce(
+        (sum, cartItem) => sum + cartItem.quantity * cartItem.conversionFactor,
+        0,
+      ),
+    [cartItems],
+  );
+
+  function getQuantityValidationError(item: StockMovementItem, quantity: number): string | null {
+    if (!Number.isFinite(quantity)) {
+      return 'Informe uma quantidade valida.';
+    }
+
+    if (quantity < 0) {
+      return 'A quantidade nao pode ser negativa.';
+    }
+
+    if (mode === 'exit') {
+      if (item.currentStockQuantity === null) {
+        return 'Item sem estoque inicial. Registre entrada primeiro.';
+      }
+
+      if (quantity > item.currentStockQuantity) {
+        return 'Saida maior que o saldo atual.';
+      }
+    }
+
+    return null;
+  }
+
   function setMovementDate(value: string) {
-    setSelectedDate(value.trim());
+    const nextDate = value.trim();
+
+    if (nextDate === selectedDate) {
+      return;
+    }
+
+    if (cartItems.length > 0) {
+      setPendingDateChange(nextDate);
+      return;
+    }
+
+    setSelectedDate(nextDate);
     setIsCategoryFilterOpen(false);
     setSelectedDateError('');
   }
@@ -390,6 +458,136 @@ function StockMovementScreen({ mode }: { mode: MovementMode }) {
   function setQuantity(itemId: number, value: string) {
     setQuantities((prev) => ({ ...prev, [String(itemId)]: value }));
     setFieldErrors((prev) => ({ ...prev, [String(itemId)]: '' }));
+  }
+
+  function clearItemInput(itemId: number) {
+    setQuantities((prev) => ({ ...prev, [String(itemId)]: '' }));
+    setFieldErrors((prev) => ({ ...prev, [String(itemId)]: '' }));
+  }
+
+  function handleDateChangeDecision(action: DateChangeAction) {
+    if (!pendingDateChange) {
+      return;
+    }
+
+    if (action === 'cancel') {
+      setPendingDateChange(null);
+      return;
+    }
+
+    if (action === 'clear') {
+      setCartItems([]);
+      setIsCartModalOpen(false);
+    }
+
+    setSelectedDate(pendingDateChange);
+    setPendingDateChange(null);
+    setIsCategoryFilterOpen(false);
+    setSelectedDateError('');
+  }
+
+  function handleDuplicateCartDecision(action: CartResolutionAction) {
+    const pending = pendingDuplicateAdd;
+
+    if (!pending) {
+      return;
+    }
+
+    if (action === 'cancel') {
+      setPendingDuplicateAdd(null);
+      return;
+    }
+
+    const existing = cartItems.find((entry) => entry.itemId === pending.item.id);
+    const nextQuantity =
+      action === 'sum'
+        ? (existing?.quantity ?? 0) + pending.quantity
+        : pending.quantity;
+    const quantityError = getQuantityValidationError(pending.item, nextQuantity);
+
+    if (quantityError) {
+      setFieldErrors((prev) => ({ ...prev, [String(pending.item.id)]: quantityError }));
+      showTopPopup({
+        type: 'error',
+        message: quantityError,
+        durationMs: 3600,
+      });
+      setPendingDuplicateAdd(null);
+      return;
+    }
+
+    setCartItems((prev) =>
+      prev.map((entry) =>
+        entry.itemId === pending.item.id ? { ...entry, quantity: nextQuantity } : entry,
+      ),
+    );
+    clearItemInput(pending.item.id);
+    setPendingDuplicateAdd(null);
+    showTopPopup({
+      type: 'success',
+      message: 'Carrinho atualizado com sucesso.',
+      durationMs: 2400,
+    });
+  }
+
+  function handleAddItemToCart(item: StockMovementItem) {
+    const rawValue = quantities[String(item.id)] ?? '';
+
+    if (rawValue.trim().length === 0) {
+      setFieldErrors((prev) => ({ ...prev, [String(item.id)]: 'Informe uma quantidade para adicionar.' }));
+      return;
+    }
+
+    const parsed = parseDecimalInput(rawValue);
+
+    if (parsed === null) {
+      setFieldErrors((prev) => ({ ...prev, [String(item.id)]: 'Informe uma quantidade valida.' }));
+      return;
+    }
+
+    const quantityError = getQuantityValidationError(item, parsed);
+
+    if (quantityError) {
+      setFieldErrors((prev) => ({ ...prev, [String(item.id)]: quantityError }));
+      return;
+    }
+
+    const existing = cartItems.find((entry) => entry.itemId === item.id);
+
+    if (existing) {
+      setPendingDuplicateAdd({ item, quantity: parsed });
+      return;
+    }
+
+    setCartItems((prev) => [
+      ...prev,
+      {
+        itemId: item.id,
+        name: item.name,
+        unit: item.unit,
+        conversionFactor: item.conversionFactor,
+        quantity: parsed,
+      },
+    ]);
+    clearItemInput(item.id);
+    showTopPopup({
+      type: 'success',
+      message: `${item.name} adicionado ao carrinho.`,
+      durationMs: 2100,
+    });
+  }
+
+  function removeFromCart(itemId: number) {
+    setCartItems((prev) => prev.filter((entry) => entry.itemId !== itemId));
+  }
+
+  function clearCart() {
+    setCartItems([]);
+    showTopPopup({
+      type: 'success',
+      message: 'Carrinho limpo.',
+      durationMs: 1800,
+    });
   }
 
   async function confirmFutureDateSave(): Promise<boolean> {
@@ -425,58 +623,62 @@ function StockMovementScreen({ mode }: { mode: MovementMode }) {
     });
   }
 
-  async function handleSaveMovements() {
+  async function handleFinalizeCart() {
     if (!isValidDateString(selectedDate)) {
       setSelectedDateError('Informe uma data valida no formato DD/MM/AAAA.');
       return;
     }
 
+    if (cartItems.length === 0) {
+      showTopPopup({
+        type: 'warning',
+        message: 'Adicione ao menos um item ao carrinho para finalizar.',
+        durationMs: 3200,
+      });
+      return;
+    }
+
     const nextErrors: QuantityErrorMap = {};
     const updates: DailyCountUpdateInput[] = [];
+    const itemsById = new Map<number, StockMovementItem>(items.map((item) => [item.id, item]));
+    let firstErrorMessage = '';
 
-    for (const item of filteredItems) {
-      const value = quantities[String(item.id)] ?? '';
+    for (const cartItem of cartItems) {
+      const item = itemsById.get(cartItem.itemId);
 
-      if (value.trim().length === 0) {
-        continue;
-      }
-
-      const parsed = parseDecimalInput(value);
-
-      if (parsed === null) {
-        nextErrors[String(item.id)] = 'Informe uma quantidade valida.';
-        continue;
-      }
-
-      if (parsed < 0) {
-        nextErrors[String(item.id)] = 'A quantidade nao pode ser negativa.';
-        continue;
-      }
-
-      if (mode === 'exit') {
-        if (item.currentStockQuantity === null) {
-          nextErrors[String(item.id)] = 'Item sem estoque inicial. Registre entrada primeiro.';
-          continue;
+      if (!item) {
+        if (!firstErrorMessage) {
+          firstErrorMessage = `Item ${cartItem.name} nao esta disponivel para esta data.`;
         }
-
-        if (parsed > item.currentStockQuantity) {
-          nextErrors[String(item.id)] = 'Saida maior que o saldo atual.';
-          continue;
-        }
+        continue;
       }
 
-      updates.push({ itemId: item.id, quantity: parsed });
+      const quantityError = getQuantityValidationError(item, cartItem.quantity);
+      if (quantityError) {
+        nextErrors[String(item.id)] = quantityError;
+        if (!firstErrorMessage) {
+          firstErrorMessage = `${item.name}: ${quantityError}`;
+        }
+        continue;
+      }
+
+      updates.push({ itemId: item.id, quantity: cartItem.quantity });
     }
 
     if (Object.keys(nextErrors).length > 0) {
-      setFieldErrors(nextErrors);
+      setFieldErrors((prev) => ({ ...prev, ...nextErrors }));
+      showTopPopup({
+        type: 'error',
+        message: firstErrorMessage || 'Existem itens invalidos no carrinho.',
+        durationMs: 4200,
+      });
       return;
     }
 
     if (updates.length === 0) {
       showTopPopup({
         type: 'warning',
-        message: 'Preencha ao menos um item visivel no filtro para salvar.',
+        message: 'Nenhum item valido no carrinho para finalizar.',
         durationMs: 3800,
       });
       return;
@@ -499,9 +701,11 @@ function StockMovementScreen({ mode }: { mode: MovementMode }) {
         await saveStockExits(updates, selectedDate);
       }
 
+      setCartItems([]);
+      setIsCartModalOpen(false);
       showTopPopup({
         type: 'success',
-        message: `${heroText.title} de ${formatDateLabel(selectedDate)} salva com sucesso.`,
+        message: `${heroText.title} de ${formatDateLabel(selectedDate)} finalizada com sucesso.`,
         durationMs: 3000,
       });
       await loadMovementItems(selectedDate);
@@ -543,7 +747,10 @@ function StockMovementScreen({ mode }: { mode: MovementMode }) {
                   <KpiTile label="Avaliados" value={String(summary.countedItems)} />
                   <KpiTile label="OK" value={String(summary.okCount)} />
                   <KpiTile label="Comprar" value={String(summary.needPurchase)} />
-                  <KpiTile label="Faltante" value={formatQuantity(summary.totalMissingQuantity)} />
+                  <KpiTile
+                    label="Faltante (und)"
+                    value={formatQuantity(summary.totalMissingQuantityInBaseUnits)}
+                  />
                 </View>
               </HeroHeader>
             </MotionEntrance>
@@ -617,21 +824,27 @@ function StockMovementScreen({ mode }: { mode: MovementMode }) {
               ) : null}
             </View>
 
-            {filteredItems.length > 0 ? (
+            <View style={styles.cartHeaderActions}>
               <Pressable
                 style={[styles.submitButton, isSaving ? styles.submitButtonDisabled : undefined]}
                 disabled={isSaving}
                 onPress={() => {
-                  void handleSaveMovements();
+                  setIsCartModalOpen(true);
                 }}
               >
-                {isSaving ? (
-                  <ActivityIndicator color="#FFFFFF" />
-                ) : (
-                  <Text style={styles.submitButtonText}>{heroText.button}</Text>
-                )}
+                <View style={styles.submitButtonContent}>
+                  <Ionicons name="cart-outline" size={18} color="#FFFFFF" />
+                  <Text style={styles.submitButtonText}>Carrinho ({cartItems.length})</Text>
+                </View>
               </Pressable>
-            ) : null}
+              {cartItems.length > 0 ? (
+                <Text style={styles.cartSummaryText}>
+                  {cartItems.length} item(ns) | Total: {formatQuantity(cartTotalQuantityInBaseUnits)} und
+                </Text>
+              ) : (
+                <Text style={styles.cartSummaryText}>Adicione itens para finalizar em lote.</Text>
+              )}
+            </View>
 
             <Text style={styles.listTitle}>Itens para movimentar ({filteredItems.length})</Text>
           </View>
@@ -652,6 +865,7 @@ function StockMovementScreen({ mode }: { mode: MovementMode }) {
           )
         }
         renderItem={({ item }) => {
+          const cartItem = cartItems.find((entry) => entry.itemId === item.id);
           const parsed = parseDecimalInput(quantities[String(item.id)] ?? '');
           const currentStock = item.currentStockQuantity;
           const needsPurchaseByCurrentStock =
@@ -692,7 +906,12 @@ function StockMovementScreen({ mode }: { mode: MovementMode }) {
                         : 'Sem estoque inicial'
                       : needsPurchase
                         ? missingQuantity > 0
-                          ? `Comprar ${formatQuantity(missingQuantity)} ${item.unit}`
+                          ? `Comprar ${formatOriginalAndBaseQuantity(
+                              missingQuantity,
+                              item.unit,
+                              item.conversionFactor,
+                              formatQuantity,
+                            )}`
                           : 'No minimo (comprar)'
                         : 'OK'}
                   </Text>
@@ -700,10 +919,27 @@ function StockMovementScreen({ mode }: { mode: MovementMode }) {
               </View>
 
               <Text style={styles.itemMeta}>Unidade: {item.unit}</Text>
-              <Text style={styles.itemMeta}>Minimo necessario: {formatQuantity(item.minQuantity)}</Text>
+              <Text style={styles.itemMeta}>
+                Minimo necessario:{' '}
+                {formatOriginalAndBaseQuantity(
+                  item.minQuantity,
+                  item.unit,
+                  item.conversionFactor,
+                  formatQuantity,
+                )}
+              </Text>
               <StockEmphasis
                 label="Estoque atual"
-                value={currentStock === null ? '-' : `${formatQuantity(currentStock)} ${item.unit}`}
+                value={
+                  currentStock === null
+                    ? '-'
+                    : formatOriginalAndBaseQuantity(
+                        currentStock,
+                        item.unit,
+                        item.conversionFactor,
+                        formatQuantity,
+                      )
+                }
                 tone={currentStock === null ? 'empty' : needsPurchaseByCurrentStock ? 'warning' : 'normal'}
                 helperText={
                   currentStock === null
@@ -718,11 +954,24 @@ function StockMovementScreen({ mode }: { mode: MovementMode }) {
               </Text>
               <Text style={styles.itemMeta}>
                 Total de {mode === 'entry' ? 'entradas' : 'saidas'} no dia:{' '}
-                {item.currentQuantity === null ? '-' : formatQuantity(item.currentQuantity)}
+                {item.currentQuantity === null
+                  ? '-'
+                  : formatOriginalAndBaseQuantity(
+                      item.currentQuantity,
+                      item.unit,
+                      item.conversionFactor,
+                      formatQuantity,
+                    )}
               </Text>
               {hasProjectedStock && parsed !== null ? (
                 <Text style={styles.itemMeta}>
-                  Saldo apos {mode === 'entry' ? 'entrada' : 'saida'}: {formatQuantity(projectedStock as number)}
+                  Saldo apos {mode === 'entry' ? 'entrada' : 'saida'}:{' '}
+                  {formatOriginalAndBaseQuantity(
+                    projectedStock as number,
+                    item.unit,
+                    item.conversionFactor,
+                    formatQuantity,
+                  )}
                 </Text>
               ) : null}
 
@@ -748,6 +997,30 @@ function StockMovementScreen({ mode }: { mode: MovementMode }) {
                 ]}
               />
 
+              <Pressable
+                style={[styles.addToCartButton, isSaving ? styles.submitButtonDisabled : undefined]}
+                disabled={isSaving}
+                onPress={() => {
+                  handleAddItemToCart(item);
+                }}
+              >
+                <Text style={styles.addToCartButtonText}>
+                  {cartItem ? 'Atualizar no carrinho' : 'Adicionar ao carrinho'}
+                </Text>
+              </Pressable>
+
+              {cartItem ? (
+                <Text style={styles.cartItemMeta}>
+                  No carrinho:{' '}
+                  {formatOriginalAndBaseQuantity(
+                    cartItem.quantity,
+                    cartItem.unit,
+                    cartItem.conversionFactor,
+                    formatQuantity,
+                  )}
+                </Text>
+              ) : null}
+
               {fieldErrors[String(item.id)] ? (
                 <Text style={styles.errorText}>{fieldErrors[String(item.id)]}</Text>
               ) : null}
@@ -756,6 +1029,151 @@ function StockMovementScreen({ mode }: { mode: MovementMode }) {
         }}
         contentContainerStyle={styles.listContent}
       />
+
+      <Modal
+        transparent
+        animationType="fade"
+        visible={isCartModalOpen}
+        onRequestClose={() => setIsCartModalOpen(false)}
+      >
+        <View style={styles.modalBackdrop}>
+          <Pressable style={StyleSheet.absoluteFill} onPress={() => setIsCartModalOpen(false)} />
+          <View style={styles.modalCard}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Carrinho de {mode === 'entry' ? 'Entrada' : 'Saida'}</Text>
+              <Text style={styles.modalSubtitle}>Data: {formatDateLabel(selectedDate)}</Text>
+            </View>
+
+            {cartItems.length === 0 ? (
+              <Text style={styles.modalEmptyText}>Nenhum item no carrinho.</Text>
+            ) : (
+              <>
+                <ScrollView style={styles.cartList} contentContainerStyle={styles.cartListContent}>
+                  {cartItems.map((cartItem) => (
+                    <View key={`cart-${cartItem.itemId}`} style={styles.cartRow}>
+                      <View style={styles.cartRowInfo}>
+                        <Text style={styles.cartRowTitle}>{cartItem.name}</Text>
+                        <Text style={styles.cartRowMeta}>
+                          {formatOriginalAndBaseQuantity(
+                            cartItem.quantity,
+                            cartItem.unit,
+                            cartItem.conversionFactor,
+                            formatQuantity,
+                          )}
+                        </Text>
+                      </View>
+                      <Pressable
+                        style={styles.cartRemoveButton}
+                        onPress={() => {
+                          removeFromCart(cartItem.itemId);
+                        }}
+                      >
+                        <Text style={styles.cartRemoveButtonText}>Remover</Text>
+                      </Pressable>
+                    </View>
+                  ))}
+                </ScrollView>
+                <Text style={styles.cartTotalText}>
+                  Itens: {cartItems.length} | Total: {formatQuantity(cartTotalQuantityInBaseUnits)} und
+                </Text>
+              </>
+            )}
+
+            <View style={styles.modalActions}>
+              <Pressable style={styles.modalSecondaryButton} onPress={() => setIsCartModalOpen(false)}>
+                <Text style={styles.modalSecondaryButtonText}>Fechar</Text>
+              </Pressable>
+              <Pressable
+                style={[styles.modalSecondaryButton, cartItems.length === 0 ? styles.submitButtonDisabled : undefined]}
+                disabled={cartItems.length === 0}
+                onPress={clearCart}
+              >
+                <Text style={styles.modalSecondaryButtonText}>Limpar</Text>
+              </Pressable>
+              <Pressable
+                style={[
+                  styles.modalPrimaryButton,
+                  isSaving || cartItems.length === 0 ? styles.submitButtonDisabled : undefined,
+                ]}
+                disabled={isSaving || cartItems.length === 0}
+                onPress={() => {
+                  void handleFinalizeCart();
+                }}
+              >
+                {isSaving ? (
+                  <ActivityIndicator color="#FFFFFF" />
+                ) : (
+                  <Text style={styles.modalPrimaryButtonText}>
+                    Finalizar {mode === 'entry' ? 'entrada' : 'saida'}
+                  </Text>
+                )}
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        transparent
+        animationType="fade"
+        visible={pendingDuplicateAdd !== null}
+        onRequestClose={() => setPendingDuplicateAdd(null)}
+      >
+        <View style={styles.modalBackdrop}>
+          <Pressable style={StyleSheet.absoluteFill} onPress={() => setPendingDuplicateAdd(null)} />
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>Item ja esta no carrinho</Text>
+            <Text style={styles.modalMessage}>
+              Escolha como deseja atualizar "{pendingDuplicateAdd?.item.name ?? ''}".
+            </Text>
+            <View style={styles.modalOptionStack}>
+              <Pressable
+                style={styles.modalPrimaryButton}
+                onPress={() => handleDuplicateCartDecision('replace')}
+              >
+                <Text style={styles.modalPrimaryButtonText}>Substituir quantidade</Text>
+              </Pressable>
+              <Pressable style={styles.modalPrimaryButton} onPress={() => handleDuplicateCartDecision('sum')}>
+                <Text style={styles.modalPrimaryButtonText}>Somar quantidades</Text>
+              </Pressable>
+              <Pressable
+                style={styles.modalSecondaryButtonFull}
+                onPress={() => handleDuplicateCartDecision('cancel')}
+              >
+                <Text style={styles.modalSecondaryButtonText}>Cancelar</Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        transparent
+        animationType="fade"
+        visible={pendingDateChange !== null}
+        onRequestClose={() => setPendingDateChange(null)}
+      >
+        <View style={styles.modalBackdrop}>
+          <Pressable style={StyleSheet.absoluteFill} onPress={() => setPendingDateChange(null)} />
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>Trocar data com carrinho preenchido</Text>
+            <Text style={styles.modalMessage}>
+              O carrinho possui itens. Como deseja continuar na data {pendingDateChange ? formatDateLabel(pendingDateChange) : ''}?
+            </Text>
+            <View style={styles.modalOptionStack}>
+              <Pressable style={styles.modalPrimaryButton} onPress={() => handleDateChangeDecision('clear')}>
+                <Text style={styles.modalPrimaryButtonText}>Trocar data e limpar carrinho</Text>
+              </Pressable>
+              <Pressable style={styles.modalPrimaryButton} onPress={() => handleDateChangeDecision('keep')}>
+                <Text style={styles.modalPrimaryButtonText}>Trocar data mantendo carrinho</Text>
+              </Pressable>
+              <Pressable style={styles.modalSecondaryButtonFull} onPress={() => handleDateChangeDecision('cancel')}>
+                <Text style={styles.modalSecondaryButtonText}>Cancelar troca</Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </ScreenShell>
   );
 }
@@ -968,6 +1386,9 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '600',
   },
+  cartHeaderActions: {
+    gap: 8,
+  },
   submitButton: {
     borderRadius: 14,
     minHeight: 46,
@@ -976,6 +1397,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingHorizontal: 12,
   },
+  submitButtonContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
   submitButtonDisabled: {
     opacity: 0.7,
   },
@@ -983,6 +1410,11 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 15,
     fontWeight: '700',
+  },
+  cartSummaryText: {
+    color: '#5F1175',
+    fontSize: 12,
+    fontWeight: '600',
   },
   listTitle: {
     fontSize: 16,
@@ -1046,6 +1478,27 @@ const styles = StyleSheet.create({
   inputError: {
     borderColor: '#D74A4A',
   },
+  addToCartButton: {
+    marginTop: 8,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#B690D2',
+    backgroundColor: '#F5EEFB',
+    minHeight: 42,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 12,
+  },
+  addToCartButtonText: {
+    color: '#5F1175',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  cartItemMeta: {
+    color: '#6F2B86',
+    fontSize: 12,
+    fontWeight: '600',
+  },
   errorText: {
     color: '#B02323',
     fontSize: 12,
@@ -1068,6 +1521,145 @@ const styles = StyleSheet.create({
   statusText: {
     color: tokens.colors.accentDeep,
     fontSize: 12,
+    fontWeight: '700',
+  },
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(24, 7, 30, 0.46)',
+    justifyContent: 'center',
+    paddingHorizontal: 16,
+  },
+  modalCard: {
+    backgroundColor: tokens.colors.surface,
+    borderWidth: 1,
+    borderColor: tokens.colors.borderSoft,
+    borderRadius: 18,
+    padding: 14,
+    gap: 10,
+    ...tokens.shadow.card,
+  },
+  modalHeader: {
+    gap: 2,
+  },
+  modalTitle: {
+    fontSize: 17,
+    fontWeight: '800',
+    color: '#3A0D49',
+  },
+  modalSubtitle: {
+    fontSize: 12,
+    color: '#77158E',
+    fontWeight: '600',
+  },
+  modalMessage: {
+    fontSize: 13,
+    color: '#5F1175',
+    lineHeight: 18,
+  },
+  modalEmptyText: {
+    fontSize: 13,
+    color: '#77158E',
+    textAlign: 'center',
+    paddingVertical: 8,
+    fontWeight: '600',
+  },
+  cartList: {
+    maxHeight: 280,
+  },
+  cartListContent: {
+    gap: 8,
+    paddingBottom: 2,
+  },
+  cartRow: {
+    borderWidth: 1,
+    borderColor: '#D8C3EA',
+    backgroundColor: '#F8F1FD',
+    borderRadius: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 9,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
+  },
+  cartRowInfo: {
+    flex: 1,
+    gap: 2,
+  },
+  cartRowTitle: {
+    color: '#2A0834',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  cartRowMeta: {
+    color: '#77158E',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  cartRemoveButton: {
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#EFA0A0',
+    backgroundColor: '#FDECEC',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  cartRemoveButtonText: {
+    color: '#A12020',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  cartTotalText: {
+    color: '#5F1175',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  modalActions: {
+    flexDirection: 'row',
+    gap: 8,
+    flexWrap: 'wrap',
+  },
+  modalOptionStack: {
+    gap: 8,
+  },
+  modalSecondaryButton: {
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#B690D2',
+    backgroundColor: '#F5EEFB',
+    minHeight: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 10,
+    flexGrow: 1,
+  },
+  modalSecondaryButtonFull: {
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#B690D2',
+    backgroundColor: '#F5EEFB',
+    minHeight: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 10,
+  },
+  modalSecondaryButtonText: {
+    color: '#5F1175',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  modalPrimaryButton: {
+    borderRadius: 10,
+    backgroundColor: '#77158E',
+    minHeight: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 10,
+    flexGrow: 1,
+  },
+  modalPrimaryButtonText: {
+    color: '#FFFFFF',
+    fontSize: 13,
     fontWeight: '700',
   },
   heroKpis: {

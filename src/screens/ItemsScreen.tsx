@@ -33,6 +33,7 @@ import { useTopPopup } from '../components/TopPopupProvider';
 import { HeroHeader, KpiTile, MotionEntrance, ScreenShell } from '../components/ui-kit';
 import { tokens } from '../theme/tokens';
 import type { CreateStockItemInput, StockItemListRow } from '../types/inventory';
+import { formatOriginalAndBaseQuantity } from '../utils/unit-conversion';
 
 type FormState = {
   name: string;
@@ -771,7 +772,16 @@ export function ItemsScreen() {
                 <>
                   <StockEmphasis
                     label="Estoque atual"
-                    value={hasStock ? `${formatQuantity(item.currentStockQuantity as number)} ${item.unit}` : '-'}
+                    value={
+                      hasStock
+                        ? formatOriginalAndBaseQuantity(
+                            item.currentStockQuantity as number,
+                            item.unit,
+                            item.conversionFactor,
+                            formatQuantity,
+                          )
+                        : '-'
+                    }
                     tone={!hasStock ? 'empty' : needsPurchaseByCurrentStock ? 'warning' : 'normal'}
                     helperText={
                       !hasStock
@@ -782,7 +792,15 @@ export function ItemsScreen() {
                     }
                   />
                   <Text style={styles.itemMeta}>Unidade: {item.unit}</Text>
-                  <Text style={styles.itemMeta}>Minimo: {formatQuantity(item.minQuantity)}</Text>
+                  <Text style={styles.itemMeta}>
+                    Minimo:{' '}
+                    {formatOriginalAndBaseQuantity(
+                      item.minQuantity,
+                      item.unit,
+                      item.conversionFactor,
+                      formatQuantity,
+                    )}
+                  </Text>
                   <Text style={styles.itemMeta}>
                     Categoria: {item.category ? getCategoryLabel(item.category) : 'Categoria pendente'}
                   </Text>

@@ -14,6 +14,7 @@ Observacoes:
 - Se voce ja tinha rodado um schema antigo, rode novamente `supabase/schema.sql` para aplicar as colunas novas em `stock_items` (`is_deleted`, `deleted_at`, `category`, `current_stock_quantity`) e em `daily_stock_entries` (`is_deleted`, `deleted_at`, `movement_type`, `stock_after_quantity`, `created_by_user_remote_id`, `created_by_username`).
 - O schema mais recente tambem cria `app_users` para usuarios/funcoes/permissoes por aba. O seed inicial (`admh2`) e criado localmente quando nao existe usuario ativo.
 - O schema mais recente remove a restricao unica de `(item_id, date)` em `daily_stock_entries` para permitir varias movimentacoes no mesmo dia (entrada e saida separadas).
+- O schema mais recente adiciona `measurement_units.conversion_factor` para equivalencia em `und` (ex.: `dz=12`, `mz=6`, `und/un/unidade=1`). Se seu projeto ja existia, rode o bloco SQL abaixo no Supabase SQL Editor.
 - Exclusao de item e logica: o registro permanece em `stock_items` com `is_deleted = true` e `deleted_at` preenchido.
 - Exclusao de movimentacao no historico diario tambem e logica: o registro permanece em `daily_stock_entries` com `is_deleted = true` e `deleted_at` preenchido.
 - Exclusao de usuario no Painel ADM e logica: o registro permanece em `app_users` com `is_deleted = true` e `deleted_at` preenchido.
@@ -32,4 +33,21 @@ select id, name, current_stock_quantity, min_quantity from public.stock_items or
 select id, item_id, date, quantity, movement_type, stock_after_quantity, is_deleted, deleted_at from public.daily_stock_entries order by updated_at desc;
 select id, username, function_name, is_admin, is_deleted from public.app_users order by updated_at desc;
 select * from public.app_users_active order by updated_at desc;
+select id, name, name_normalized, conversion_factor, is_deleted from public.measurement_units order by name_normalized asc;
+```
+
+SQL rapido para atualizar apenas equivalencia de unidade em projetos existentes:
+
+```sql
+alter table public.measurement_units
+  add column if not exists conversion_factor double precision not null default 1;
+
+update public.measurement_units
+set conversion_factor = case
+  when name_normalized in ('dz', 'duzia') then 12
+  when name_normalized = 'mz' then 6
+  when name_normalized in ('und', 'un', 'unidade') then 1
+  when conversion_factor is null or conversion_factor <= 0 then 1
+  else conversion_factor
+end;
 ```

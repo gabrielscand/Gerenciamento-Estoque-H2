@@ -46,9 +46,12 @@ export interface StockItem {
   id: number;
   name: string;
   unit: string;
+  conversionFactor: number;
   minQuantity: number;
+  minQuantityInBaseUnits: number;
   category: string | null;
   currentStockQuantity: number | null;
+  currentStockQuantityInBaseUnits: number | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -71,29 +74,40 @@ export interface StockItemListRow {
   id: number;
   name: string;
   unit: string;
+  conversionFactor: number;
   minQuantity: number;
+  minQuantityInBaseUnits: number;
   category: string | null;
   currentStockQuantity: number | null;
+  currentStockQuantityInBaseUnits: number | null;
 }
 
 export interface DailyInspectionItem {
   id: number;
   name: string;
   unit: string;
+  conversionFactor: number;
   minQuantity: number;
+  minQuantityInBaseUnits: number;
   category: string | null;
   currentStockQuantity: number | null;
+  currentStockQuantityInBaseUnits: number | null;
   currentQuantity: number | null;
+  currentQuantityInBaseUnits: number | null;
 }
 
 export interface StockMovementItem {
   id: number;
   name: string;
   unit: string;
+  conversionFactor: number;
   minQuantity: number;
+  minQuantityInBaseUnits: number;
   category: string | null;
   currentStockQuantity: number | null;
+  currentStockQuantityInBaseUnits: number | null;
   currentQuantity: number | null;
+  currentQuantityInBaseUnits: number | null;
 }
 
 export interface DailyCountUpdateInput {
@@ -107,13 +121,18 @@ export interface DailyHistoryEntry {
   itemId: number;
   name: string;
   unit: string;
+  conversionFactor: number;
   quantity: number;
+  quantityInBaseUnits: number;
   createdByUsername: string | null;
   minQuantity: number;
+  minQuantityInBaseUnits: number;
   movementType: 'entry' | 'exit' | 'initial' | 'consumption' | 'legacy_snapshot';
   stockAfterQuantity: number | null;
+  stockAfterQuantityInBaseUnits: number | null;
   needsPurchase: boolean;
   missingQuantity: number;
+  missingQuantityInBaseUnits: number;
   itemDeleted: boolean;
 }
 
@@ -124,6 +143,7 @@ export interface DailyHistoryGroup {
   okItems: number;
   needPurchaseItems: number;
   totalMissingQuantity: number;
+  totalMissingQuantityInBaseUnits: number;
   entries: DailyHistoryEntry[];
 }
 
@@ -135,13 +155,18 @@ export interface PeriodHistoryDayEntry {
   itemId: number;
   name: string;
   unit: string;
+  conversionFactor: number;
   quantity: number;
+  quantityInBaseUnits: number;
   createdByUsername: string | null;
   minQuantity: number;
+  minQuantityInBaseUnits: number;
   movementType: 'entry' | 'exit' | 'initial' | 'consumption' | 'legacy_snapshot';
   stockAfterQuantity: number | null;
+  stockAfterQuantityInBaseUnits: number | null;
   needsPurchase: boolean;
   missingQuantity: number;
+  missingQuantityInBaseUnits: number;
   itemDeleted: boolean;
 }
 
@@ -163,7 +188,9 @@ export interface PeriodHistoryGroup {
   countedEntries: number;
   itemsToBuyCount: number;
   totalMissingQuantity: number;
+  totalMissingQuantityInBaseUnits: number;
   totalConsumedQuantity: number;
+  totalConsumedQuantityInBaseUnits: number;
   days: PeriodHistoryDay[];
 }
 
@@ -174,24 +201,34 @@ export interface DashboardItemAnalyticsRow {
   itemId: number;
   name: string;
   unit: string;
+  conversionFactor: number;
   category: string | null;
   entryQuantity: number;
+  entryQuantityInBaseUnits: number;
   exitQuantity: number;
+  exitQuantityInBaseUnits: number;
   movementTotal: number;
+  movementTotalInBaseUnits: number;
 }
 
 export interface DashboardDailySeriesPoint {
   date: string;
   dayLabel: string;
   entryQuantity: number;
+  entryQuantityInBaseUnits: number;
   exitQuantity: number;
+  exitQuantityInBaseUnits: number;
   movementTotal: number;
+  movementTotalInBaseUnits: number;
 }
 
 export interface DashboardAnalyticsTotals {
   entryQuantity: number;
+  entryQuantityInBaseUnits: number;
   exitQuantity: number;
+  exitQuantityInBaseUnits: number;
   movementTotal: number;
+  movementTotalInBaseUnits: number;
   activeItems: number;
   movementEntries: number;
 }
@@ -210,9 +247,13 @@ export interface DashboardAbcPoint {
   itemId: number;
   name: string;
   unit: string;
+  conversionFactor: number;
   entryQuantity: number;
+  entryQuantityInBaseUnits: number;
   exitQuantity: number;
+  exitQuantityInBaseUnits: number;
   movementTotal: number;
+  movementTotalInBaseUnits: number;
   metricValue: number;
   sharePercent: number;
   cumulativePercent: number;
@@ -223,11 +264,15 @@ export interface StockCurrentOverviewRow {
   id: number;
   name: string;
   unit: string;
+  conversionFactor: number;
   minQuantity: number;
+  minQuantityInBaseUnits: number;
   category: string | null;
   currentStockQuantity: number | null;
+  currentStockQuantityInBaseUnits: number | null;
   needsPurchase: boolean;
   missingQuantity: number;
+  missingQuantityInBaseUnits: number;
 }
 
 export interface DailyStockEntry {
@@ -248,7 +293,9 @@ export interface HistoryReportEntry {
   itemId: number;
   name: string;
   unit: string;
+  conversionFactor: number;
   quantity: number;
+  quantityInBaseUnits: number;
   movementType: HistoryReportMovementType;
 }
 
@@ -256,8 +303,11 @@ export interface HistoryReportItemSummary {
   itemId: number;
   name: string;
   unit: string;
+  conversionFactor: number;
   totalEntryQuantity: number;
+  totalEntryQuantityInBaseUnits: number;
   totalExitQuantity: number;
+  totalExitQuantityInBaseUnits: number;
   movementDates: string[];
   isTopEntry: boolean;
   isTopExit: boolean;

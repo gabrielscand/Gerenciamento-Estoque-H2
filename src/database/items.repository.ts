@@ -13,6 +13,11 @@ import {
   isValidDateString,
   isValidMonthString,
 } from '../utils/date';
+import {
+  convertToBaseUnits,
+  getDefaultConversionFactorForUnit,
+  normalizeConversionFactor,
+} from '../utils/unit-conversion';
 import type {
   CreateStockItemInput,
   DashboardAnalyticsData,
@@ -36,6 +41,7 @@ type StockItemRow = {
   id: number;
   name: string;
   unit: string;
+  conversion_factor?: number | null;
   min_quantity: number;
   current_stock_quantity?: number | null;
   category?: string | null;
@@ -50,6 +56,7 @@ type StockItemListRowQuery = {
   id: number;
   name: string;
   unit: string;
+  conversionFactor: number | null;
   minQuantity: number;
   currentStockQuantity: number | null;
   category: string | null;
@@ -59,6 +66,7 @@ type StockCurrentOverviewQuery = {
   id: number;
   name: string;
   unit: string;
+  conversionFactor: number | null;
   minQuantity: number;
   currentStockQuantity: number | null;
   category: string | null;
@@ -68,6 +76,7 @@ type StockMovementItemQuery = {
   id: number;
   name: string;
   unit: string;
+  conversionFactor: number | null;
   minQuantity: number;
   currentStockQuantity: number | null;
   category: string | null;
@@ -80,6 +89,7 @@ type DailyHistorySummaryRow = {
   okItems: number;
   needPurchaseItems: number;
   totalMissingQuantity: number;
+  totalMissingQuantityInBaseUnits: number;
 };
 
 type DailyHistoryDetailRow = {
@@ -88,12 +98,17 @@ type DailyHistoryDetailRow = {
   itemId: number;
   name: string;
   unit: string;
+  conversionFactor: number | null;
   quantity: number;
+  quantityInBaseUnits: number | null;
   createdByUsername: string | null;
   minQuantity: number;
+  minQuantityInBaseUnits: number | null;
   movementType: 'entry' | 'exit' | 'initial' | 'consumption' | 'legacy_snapshot';
   stockAfterQuantity: number | null;
+  stockAfterQuantityInBaseUnits: number | null;
   missingQuantity: number;
+  missingQuantityInBaseUnits: number | null;
   itemDeleted: number;
 };
 
@@ -101,7 +116,9 @@ type PeriodHistorySummaryRow = {
   countedEntries: number;
   inspectedDays: number;
   totalMissingQuantity: number;
+  totalMissingQuantityInBaseUnits: number;
   totalConsumedQuantity: number;
+  totalConsumedQuantityInBaseUnits: number;
 };
 
 type PeriodHistoryDayDetailRow = {
@@ -110,12 +127,17 @@ type PeriodHistoryDayDetailRow = {
   itemId: number;
   name: string;
   unit: string;
+  conversionFactor: number | null;
   quantity: number;
+  quantityInBaseUnits: number | null;
   createdByUsername: string | null;
   minQuantity: number;
+  minQuantityInBaseUnits: number | null;
   movementType: string | null;
   stockAfterQuantity: number | null;
+  stockAfterQuantityInBaseUnits: number | null;
   missingQuantity: number;
+  missingQuantityInBaseUnits: number | null;
   itemDeleted: number;
 };
 
@@ -125,13 +147,17 @@ type HistoryReportEntryRow = {
   itemId: number;
   name: string;
   unit: string;
+  conversionFactor: number | null;
   quantity: number;
+  quantityInBaseUnits: number | null;
   movementType: string | null;
 };
 
 type DashboardSummaryRow = {
   totalEntryQuantity: number | null;
+  totalEntryQuantityInBaseUnits: number | null;
   totalExitQuantity: number | null;
+  totalExitQuantityInBaseUnits: number | null;
   movementEntries: number | null;
 };
 
@@ -139,15 +165,20 @@ type DashboardItemTotalsRow = {
   itemId: number;
   name: string;
   unit: string;
+  conversionFactor: number | null;
   category: string | null;
   entryQuantity: number | null;
+  entryQuantityInBaseUnits: number | null;
   exitQuantity: number | null;
+  exitQuantityInBaseUnits: number | null;
 };
 
 type DashboardDailySeriesRow = {
   date: string;
   entryQuantity: number | null;
+  entryQuantityInBaseUnits: number | null;
   exitQuantity: number | null;
+  exitQuantityInBaseUnits: number | null;
 };
 
 type StockItemRemoteRow = {
@@ -161,6 +192,7 @@ type CatalogOptionListRow = {
   id: number;
   name: string;
   nameNormalized: string;
+  conversionFactor?: number | null;
 };
 
 type CatalogExistingRow = {
@@ -170,6 +202,7 @@ type CatalogExistingRow = {
 type CatalogCurrentRow = {
   id: number;
   nameNormalized: string;
+  conversionFactor?: number | null;
 };
 
 type CatalogBackfillValueRow = {
@@ -229,6 +262,21 @@ function normalizeCategory(category: string | null | undefined): StockItem['cate
   return normalized.length === 0 ? null : normalized;
 }
 
+function resolveConversionFactor(
+  unit: string | null | undefined,
+  conversionFactor: number | null | undefined,
+): number {
+  return normalizeConversionFactor(conversionFactor, unit);
+}
+
+function convertQuantityForUnit(
+  quantity: number | null | undefined,
+  unit: string | null | undefined,
+  conversionFactor: number | null | undefined,
+): number | null {
+  return convertToBaseUnits(quantity, conversionFactor, unit);
+}
+
 function createRemoteItemId(): string {
   return `item-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
 }
@@ -266,24 +314,46 @@ async function backfillCatalogFromStockItems(
       continue;
     }
 
-    const result = await database.runAsync(
-      `
-        INSERT OR IGNORE INTO ${tableName} (
-          remote_id,
-          sync_status,
-          name,
-          name_normalized,
-          created_at,
-          updated_at
-        )
-        VALUES (?, 'pending', ?, ?, ?, ?);
-      `,
-      createCatalogRemoteId(tableName === 'item_categories' ? 'cat' : 'unit'),
-      normalizedName,
-      normalizedName,
-      timestamp,
-      timestamp,
-    );
+    const result =
+      tableName === 'measurement_units'
+        ? await database.runAsync(
+            `
+              INSERT OR IGNORE INTO measurement_units (
+                remote_id,
+                sync_status,
+                name,
+                name_normalized,
+                conversion_factor,
+                created_at,
+                updated_at
+              )
+              VALUES (?, 'pending', ?, ?, ?, ?, ?);
+            `,
+            createCatalogRemoteId('unit'),
+            normalizedName,
+            normalizedName,
+            getDefaultConversionFactorForUnit(normalizedName),
+            timestamp,
+            timestamp,
+          )
+        : await database.runAsync(
+            `
+              INSERT OR IGNORE INTO item_categories (
+                remote_id,
+                sync_status,
+                name,
+                name_normalized,
+                created_at,
+                updated_at
+              )
+              VALUES (?, 'pending', ?, ?, ?, ?);
+            `,
+            createCatalogRemoteId('cat'),
+            normalizedName,
+            normalizedName,
+            timestamp,
+            timestamp,
+          );
 
     if ((result.changes ?? 0) > 0) {
       hasInserted = true;
@@ -370,6 +440,7 @@ async function createCatalogOption(
   tableName: 'item_categories' | 'measurement_units',
   rawName: string,
   duplicateError: string,
+  conversionFactor?: number,
 ): Promise<void> {
   const database = await getDatabase();
   const normalizedName = normalizeCatalogName(rawName);
@@ -394,24 +465,48 @@ async function createCatalogOption(
   }
 
   const timestamp = nowIsoString();
-  await database.runAsync(
-    `
-      INSERT INTO ${tableName} (
-        remote_id,
-        sync_status,
-        name,
-        name_normalized,
-        created_at,
-        updated_at
-      )
-      VALUES (?, 'pending', ?, ?, ?, ?);
-    `,
-    createCatalogRemoteId(tableName === 'item_categories' ? 'cat' : 'unit'),
-    normalizedName,
-    normalizedName,
-    timestamp,
-    timestamp,
-  );
+  if (tableName === 'measurement_units') {
+    const safeFactor = normalizeConversionFactor(conversionFactor, normalizedName);
+    await database.runAsync(
+      `
+        INSERT INTO measurement_units (
+          remote_id,
+          sync_status,
+          name,
+          name_normalized,
+          conversion_factor,
+          created_at,
+          updated_at
+        )
+        VALUES (?, 'pending', ?, ?, ?, ?, ?);
+      `,
+      createCatalogRemoteId('unit'),
+      normalizedName,
+      normalizedName,
+      safeFactor,
+      timestamp,
+      timestamp,
+    );
+  } else {
+    await database.runAsync(
+      `
+        INSERT INTO item_categories (
+          remote_id,
+          sync_status,
+          name,
+          name_normalized,
+          created_at,
+          updated_at
+        )
+        VALUES (?, 'pending', ?, ?, ?, ?);
+      `,
+      createCatalogRemoteId('cat'),
+      normalizedName,
+      normalizedName,
+      timestamp,
+      timestamp,
+    );
+  }
 
   emitCatalogOptionsChanged();
   syncAppDataInBackground();
@@ -423,6 +518,7 @@ async function updateCatalogOption(
   rawName: string,
   duplicateError: string,
   notFoundError: string,
+  conversionFactor?: number,
 ): Promise<void> {
   const database = await getDatabase();
   const normalizedName = normalizeCatalogName(rawName);
@@ -432,18 +528,33 @@ async function updateCatalogOption(
     throw new Error('Informe um nome valido.');
   }
 
-  const current = await database.getFirstAsync<CatalogCurrentRow>(
-    `
-      SELECT
-        id,
-        name_normalized AS nameNormalized
-      FROM ${tableName}
-      WHERE id = ?
-        AND is_deleted = 0
-      LIMIT 1;
-    `,
-    optionId,
-  );
+  const current =
+    tableName === 'measurement_units'
+      ? await database.getFirstAsync<CatalogCurrentRow>(
+          `
+            SELECT
+              id,
+              name_normalized AS nameNormalized,
+              conversion_factor AS conversionFactor
+            FROM measurement_units
+            WHERE id = ?
+              AND is_deleted = 0
+            LIMIT 1;
+          `,
+          optionId,
+        )
+      : await database.getFirstAsync<CatalogCurrentRow>(
+          `
+            SELECT
+              id,
+              name_normalized AS nameNormalized
+            FROM item_categories
+            WHERE id = ?
+              AND is_deleted = 0
+            LIMIT 1;
+          `,
+          optionId,
+        );
 
   if (!current) {
     throw new Error(notFoundError);
@@ -466,43 +577,83 @@ async function updateCatalogOption(
     throw new Error(duplicateError);
   }
 
-  if (current.nameNormalized === normalizedName) {
+  const nextConversionFactor =
+    tableName === 'measurement_units'
+      ? normalizeConversionFactor(conversionFactor, normalizedName)
+      : undefined;
+  const currentConversionFactor =
+    tableName === 'measurement_units'
+      ? normalizeConversionFactor(current.conversionFactor, current.nameNormalized)
+      : undefined;
+  const hasNameChanged = current.nameNormalized !== normalizedName;
+  const hasConversionFactorChanged =
+    tableName === 'measurement_units' &&
+    Math.abs((nextConversionFactor as number) - (currentConversionFactor as number)) > 0.000001;
+
+  if (!hasNameChanged && !hasConversionFactorChanged) {
     return;
   }
 
   const timestamp = nowIsoString();
+  const measurementConversionFactor =
+    tableName === 'measurement_units'
+      ? nextConversionFactor ?? currentConversionFactor ?? 1
+      : null;
   await database.withTransactionAsync(async () => {
-    await database.runAsync(
-      `
-        UPDATE ${tableName}
-        SET
-          name = ?,
-          name_normalized = ?,
-          updated_at = ?,
-          sync_status = 'pending'
-        WHERE id = ?
-          AND is_deleted = 0;
-      `,
-      normalizedName,
-      normalizedName,
-      timestamp,
-      optionId,
-    );
+    if (tableName === 'measurement_units') {
+      await database.runAsync(
+        `
+          UPDATE measurement_units
+          SET
+            name = ?,
+            name_normalized = ?,
+            conversion_factor = ?,
+            updated_at = ?,
+            sync_status = 'pending'
+          WHERE id = ?
+            AND is_deleted = 0;
+        `,
+        normalizedName,
+        normalizedName,
+        measurementConversionFactor,
+        timestamp,
+        optionId,
+      );
+    } else {
+      await database.runAsync(
+        `
+          UPDATE item_categories
+          SET
+            name = ?,
+            name_normalized = ?,
+            updated_at = ?,
+            sync_status = 'pending'
+          WHERE id = ?
+            AND is_deleted = 0;
+        `,
+        normalizedName,
+        normalizedName,
+        timestamp,
+        optionId,
+      );
+    }
 
-    await database.runAsync(
-      `
-        UPDATE stock_items
-        SET
-          ${usageColumn} = ?,
-          updated_at = ?,
-          sync_status = 'pending'
-        WHERE is_deleted = 0
-          AND ${usageColumn} = ?;
-      `,
-      normalizedName,
-      timestamp,
-      current.nameNormalized,
-    );
+    if (hasNameChanged) {
+      await database.runAsync(
+        `
+          UPDATE stock_items
+          SET
+            ${usageColumn} = ?,
+            updated_at = ?,
+            sync_status = 'pending'
+          WHERE is_deleted = 0
+            AND ${usageColumn} = ?;
+        `,
+        normalizedName,
+        timestamp,
+        current.nameNormalized,
+      );
+    }
   });
 
   emitCatalogOptionsChanged();
@@ -578,6 +729,7 @@ export type CatalogOption = {
   id: number;
   name: string;
   nameNormalized: string;
+  conversionFactor: number;
 };
 
 export function subscribeToCatalogOptionsChanged(listener: () => void): () => void {
@@ -589,22 +741,38 @@ async function listCatalogOptions(
 ): Promise<CatalogOption[]> {
   const database = await getDatabase();
   await ensureCatalogBackfillFromStockItems(database);
-  const rows = await database.getAllAsync<CatalogOptionListRow>(
-    `
-      SELECT
-        id,
-        name,
-        name_normalized AS nameNormalized
-      FROM ${tableName}
-      WHERE is_deleted = 0
-      ORDER BY name COLLATE NOCASE ASC;
-    `,
-  );
+  const rows =
+    tableName === 'measurement_units'
+      ? await database.getAllAsync<CatalogOptionListRow>(
+          `
+            SELECT
+              id,
+              name,
+              name_normalized AS nameNormalized,
+              conversion_factor AS conversionFactor
+            FROM measurement_units
+            WHERE is_deleted = 0
+            ORDER BY name COLLATE NOCASE ASC;
+          `,
+        )
+      : await database.getAllAsync<CatalogOptionListRow>(
+          `
+            SELECT
+              id,
+              name,
+              name_normalized AS nameNormalized,
+              1 AS conversionFactor
+            FROM item_categories
+            WHERE is_deleted = 0
+            ORDER BY name COLLATE NOCASE ASC;
+          `,
+        );
 
   return rows.map((row) => ({
     id: row.id,
     name: normalizeCatalogName(row.name),
     nameNormalized: normalizeCatalogName(row.nameNormalized),
+    conversionFactor: normalizeConversionFactor(row.conversionFactor, row.name),
   }));
 }
 
@@ -630,8 +798,16 @@ export async function createItemCategory(name: string): Promise<void> {
   await createCatalogOption('item_categories', name, 'Categoria ja existe.');
 }
 
-export async function createMeasurementUnit(name: string): Promise<void> {
-  await createCatalogOption('measurement_units', name, 'Unidade de medida ja existe.');
+export async function createMeasurementUnit(
+  name: string,
+  conversionFactor: number,
+): Promise<void> {
+  await createCatalogOption(
+    'measurement_units',
+    name,
+    'Unidade de medida ja existe.',
+    conversionFactor,
+  );
 }
 
 export async function updateItemCategory(optionId: number, name: string): Promise<void> {
@@ -644,13 +820,18 @@ export async function updateItemCategory(optionId: number, name: string): Promis
   );
 }
 
-export async function updateMeasurementUnit(optionId: number, name: string): Promise<void> {
+export async function updateMeasurementUnit(
+  optionId: number,
+  name: string,
+  conversionFactor: number,
+): Promise<void> {
   await updateCatalogOption(
     'measurement_units',
     optionId,
     name,
     'Unidade de medida ja existe.',
     'Unidade de medida nao encontrada.',
+    conversionFactor,
   );
 }
 
@@ -868,24 +1049,40 @@ export async function listStockItems(): Promise<StockItemListRow[]> {
   const rows = await database.getAllAsync<StockItemListRowQuery>(
     `
       SELECT
-        id,
-        name,
-        unit,
-        min_quantity AS minQuantity,
-        current_stock_quantity AS currentStockQuantity,
-        category
+        stock_items.id AS id,
+        stock_items.name AS name,
+        stock_items.unit AS unit,
+        stock_items.min_quantity AS minQuantity,
+        stock_items.current_stock_quantity AS currentStockQuantity,
+        stock_items.category AS category,
+        measurement_units.conversion_factor AS conversionFactor
       FROM stock_items
-      WHERE is_deleted = 0
-      ORDER BY name COLLATE NOCASE ASC;
+      LEFT JOIN measurement_units
+        ON measurement_units.name_normalized = stock_items.unit
+       AND measurement_units.is_deleted = 0
+      WHERE stock_items.is_deleted = 0
+      ORDER BY stock_items.name COLLATE NOCASE ASC;
     `,
   );
 
   return rows.map((row) => ({
+    conversionFactor: resolveConversionFactor(row.unit, row.conversionFactor),
     id: row.id,
     name: row.name,
     unit: row.unit,
     minQuantity: row.minQuantity,
+    minQuantityInBaseUnits:
+      convertQuantityForUnit(
+        row.minQuantity,
+        row.unit,
+        resolveConversionFactor(row.unit, row.conversionFactor),
+      ) ?? 0,
     currentStockQuantity: row.currentStockQuantity,
+    currentStockQuantityInBaseUnits: convertQuantityForUnit(
+      row.currentStockQuantity,
+      row.unit,
+      resolveConversionFactor(row.unit, row.conversionFactor),
+    ),
     category: normalizeCategory(row.category),
   }));
 }
@@ -896,19 +1093,24 @@ export async function listStockCurrentOverview(): Promise<StockCurrentOverviewRo
   const rows = await database.getAllAsync<StockCurrentOverviewQuery>(
     `
       SELECT
-        id,
-        name,
-        unit,
-        min_quantity AS minQuantity,
-        current_stock_quantity AS currentStockQuantity,
-        category
+        stock_items.id AS id,
+        stock_items.name AS name,
+        stock_items.unit AS unit,
+        stock_items.min_quantity AS minQuantity,
+        stock_items.current_stock_quantity AS currentStockQuantity,
+        stock_items.category AS category,
+        measurement_units.conversion_factor AS conversionFactor
       FROM stock_items
-      WHERE is_deleted = 0
-      ORDER BY name COLLATE NOCASE ASC;
+      LEFT JOIN measurement_units
+        ON measurement_units.name_normalized = stock_items.unit
+       AND measurement_units.is_deleted = 0
+      WHERE stock_items.is_deleted = 0
+      ORDER BY stock_items.name COLLATE NOCASE ASC;
     `,
   );
 
   return rows.map((row) => {
+    const conversionFactor = resolveConversionFactor(row.unit, row.conversionFactor);
     const currentStock = row.currentStockQuantity;
     const needsPurchase = currentStock !== null ? currentStock <= row.minQuantity : false;
     const missingQuantity =
@@ -920,11 +1122,17 @@ export async function listStockCurrentOverview(): Promise<StockCurrentOverviewRo
       id: row.id,
       name: row.name,
       unit: row.unit,
+      conversionFactor,
       minQuantity: row.minQuantity,
+      minQuantityInBaseUnits:
+        convertQuantityForUnit(row.minQuantity, row.unit, conversionFactor) ?? 0,
       category: normalizeCategory(row.category),
       currentStockQuantity: currentStock,
+      currentStockQuantityInBaseUnits: convertQuantityForUnit(currentStock, row.unit, conversionFactor),
       needsPurchase,
       missingQuantity,
+      missingQuantityInBaseUnits:
+        convertQuantityForUnit(missingQuantity, row.unit, conversionFactor) ?? 0,
     };
   });
 }
@@ -948,17 +1156,21 @@ export async function listStockMovementItems(
         stock_items.min_quantity AS minQuantity,
         stock_items.current_stock_quantity AS currentStockQuantity,
         stock_items.category AS category,
+        measurement_units.conversion_factor AS conversionFactor,
         movement_totals.totalQuantity AS currentQuantity
       FROM stock_items
+      LEFT JOIN measurement_units
+        ON measurement_units.name_normalized = stock_items.unit
+       AND measurement_units.is_deleted = 0
       LEFT JOIN (
         SELECT
-          item_id,
-          SUM(quantity) AS totalQuantity
+          daily_stock_entries.item_id AS item_id,
+          SUM(daily_stock_entries.quantity) AS totalQuantity
         FROM daily_stock_entries
-        WHERE date = ?
-          AND movement_type = ?
-          AND is_deleted = 0
-        GROUP BY item_id
+        WHERE daily_stock_entries.date = ?
+          AND daily_stock_entries.movement_type = ?
+          AND daily_stock_entries.is_deleted = 0
+        GROUP BY daily_stock_entries.item_id
       ) AS movement_totals ON movement_totals.item_id = stock_items.id
       WHERE stock_items.is_deleted = 0
       ORDER BY stock_items.name COLLATE NOCASE ASC;
@@ -971,10 +1183,27 @@ export async function listStockMovementItems(
     id: row.id,
     name: row.name,
     unit: row.unit,
+    conversionFactor: resolveConversionFactor(row.unit, row.conversionFactor),
     minQuantity: row.minQuantity,
+    minQuantityInBaseUnits:
+      convertQuantityForUnit(
+        row.minQuantity,
+        row.unit,
+        resolveConversionFactor(row.unit, row.conversionFactor),
+      ) ?? 0,
     currentStockQuantity: row.currentStockQuantity,
+    currentStockQuantityInBaseUnits: convertQuantityForUnit(
+      row.currentStockQuantity,
+      row.unit,
+      resolveConversionFactor(row.unit, row.conversionFactor),
+    ),
     category: normalizeCategory(row.category),
     currentQuantity: row.currentQuantity,
+    currentQuantityInBaseUnits: convertQuantityForUnit(
+      row.currentQuantity,
+      row.unit,
+      resolveConversionFactor(row.unit, row.conversionFactor),
+    ),
   }));
 }
 
@@ -990,18 +1219,22 @@ export async function findItemByNormalizedName(
     row = await database.getFirstAsync<StockItemRow>(
       `
         SELECT
-          id,
-          name,
-          unit,
-          min_quantity,
-          current_stock_quantity,
-          category,
-          created_at,
-          updated_at
+          stock_items.id AS id,
+          stock_items.name AS name,
+          stock_items.unit AS unit,
+          stock_items.min_quantity AS min_quantity,
+          stock_items.current_stock_quantity AS current_stock_quantity,
+          stock_items.category AS category,
+          measurement_units.conversion_factor AS conversion_factor,
+          stock_items.created_at AS created_at,
+          stock_items.updated_at AS updated_at
         FROM stock_items
-        WHERE LOWER(TRIM(name)) = ?
-          AND is_deleted = 0
-          AND id <> ?
+        LEFT JOIN measurement_units
+          ON measurement_units.name_normalized = stock_items.unit
+         AND measurement_units.is_deleted = 0
+        WHERE LOWER(TRIM(stock_items.name)) = ?
+          AND stock_items.is_deleted = 0
+          AND stock_items.id <> ?
         LIMIT 1;
       `,
       normalizedName,
@@ -1011,17 +1244,21 @@ export async function findItemByNormalizedName(
     row = await database.getFirstAsync<StockItemRow>(
       `
         SELECT
-          id,
-          name,
-          unit,
-          min_quantity,
-          current_stock_quantity,
-          category,
-          created_at,
-          updated_at
+          stock_items.id AS id,
+          stock_items.name AS name,
+          stock_items.unit AS unit,
+          stock_items.min_quantity AS min_quantity,
+          stock_items.current_stock_quantity AS current_stock_quantity,
+          stock_items.category AS category,
+          measurement_units.conversion_factor AS conversion_factor,
+          stock_items.created_at AS created_at,
+          stock_items.updated_at AS updated_at
         FROM stock_items
-        WHERE LOWER(TRIM(name)) = ?
-          AND is_deleted = 0
+        LEFT JOIN measurement_units
+          ON measurement_units.name_normalized = stock_items.unit
+         AND measurement_units.is_deleted = 0
+        WHERE LOWER(TRIM(stock_items.name)) = ?
+          AND stock_items.is_deleted = 0
         LIMIT 1;
       `,
       normalizedName,
@@ -1036,8 +1273,20 @@ export async function findItemByNormalizedName(
     id: row.id,
     name: row.name,
     unit: row.unit,
+    conversionFactor: resolveConversionFactor(row.unit, row.conversion_factor),
     minQuantity: row.min_quantity,
+    minQuantityInBaseUnits:
+      convertQuantityForUnit(
+        row.min_quantity,
+        row.unit,
+        resolveConversionFactor(row.unit, row.conversion_factor),
+      ) ?? 0,
     currentStockQuantity: row.current_stock_quantity ?? null,
+    currentStockQuantityInBaseUnits: convertQuantityForUnit(
+      row.current_stock_quantity ?? null,
+      row.unit,
+      resolveConversionFactor(row.unit, row.conversion_factor),
+    ),
     category: normalizeCategory(row.category),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -1523,9 +1772,20 @@ export async function listDailyHistoryGrouped(): Promise<DailyHistoryGroup[]> {
               THEN stock_items.min_quantity - daily_stock_entries.stock_after_quantity
             ELSE 0
           END
-        ) AS totalMissingQuantity
+        ) AS totalMissingQuantity,
+        SUM(
+          CASE
+            WHEN daily_stock_entries.stock_after_quantity < stock_items.min_quantity
+              THEN (stock_items.min_quantity - daily_stock_entries.stock_after_quantity)
+                * COALESCE(measurement_units.conversion_factor, 1)
+            ELSE 0
+          END
+        ) AS totalMissingQuantityInBaseUnits
       FROM daily_stock_entries
       INNER JOIN stock_items ON stock_items.id = daily_stock_entries.item_id
+      LEFT JOIN measurement_units
+        ON measurement_units.name_normalized = stock_items.unit
+       AND measurement_units.is_deleted = 0
       WHERE daily_stock_entries.is_deleted = 0
       GROUP BY daily_stock_entries.date
       ORDER BY daily_stock_entries.date DESC;
@@ -1544,19 +1804,32 @@ export async function listDailyHistoryGrouped(): Promise<DailyHistoryGroup[]> {
         stock_items.id AS itemId,
         stock_items.name AS name,
         stock_items.unit AS unit,
+        measurement_units.conversion_factor AS conversionFactor,
         daily_stock_entries.quantity AS quantity,
+        daily_stock_entries.quantity * COALESCE(measurement_units.conversion_factor, 1) AS quantityInBaseUnits,
         daily_stock_entries.created_by_username AS createdByUsername,
         daily_stock_entries.movement_type AS movementType,
         daily_stock_entries.stock_after_quantity AS stockAfterQuantity,
+        daily_stock_entries.stock_after_quantity * COALESCE(measurement_units.conversion_factor, 1) AS stockAfterQuantityInBaseUnits,
         stock_items.min_quantity AS minQuantity,
+        stock_items.min_quantity * COALESCE(measurement_units.conversion_factor, 1) AS minQuantityInBaseUnits,
         stock_items.is_deleted AS itemDeleted,
         CASE
           WHEN daily_stock_entries.stock_after_quantity < stock_items.min_quantity
             THEN stock_items.min_quantity - daily_stock_entries.stock_after_quantity
           ELSE 0
-        END AS missingQuantity
+        END AS missingQuantity,
+        CASE
+          WHEN daily_stock_entries.stock_after_quantity < stock_items.min_quantity
+            THEN (stock_items.min_quantity - daily_stock_entries.stock_after_quantity)
+              * COALESCE(measurement_units.conversion_factor, 1)
+          ELSE 0
+        END AS missingQuantityInBaseUnits
       FROM daily_stock_entries
       INNER JOIN stock_items ON stock_items.id = daily_stock_entries.item_id
+      LEFT JOIN measurement_units
+        ON measurement_units.name_normalized = stock_items.unit
+       AND measurement_units.is_deleted = 0
       WHERE daily_stock_entries.is_deleted = 0
       ORDER BY daily_stock_entries.date DESC, stock_items.name COLLATE NOCASE ASC;
     `,
@@ -1565,6 +1838,7 @@ export async function listDailyHistoryGrouped(): Promise<DailyHistoryGroup[]> {
   const entriesByDate = new Map<string, DailyHistoryEntry[]>();
 
   for (const detail of detailRows) {
+    const conversionFactor = resolveConversionFactor(detail.unit, detail.conversionFactor);
     const dateEntries = entriesByDate.get(detail.date) ?? [];
     dateEntries.push({
       id: detail.id,
@@ -1572,13 +1846,24 @@ export async function listDailyHistoryGrouped(): Promise<DailyHistoryGroup[]> {
       itemId: detail.itemId,
       name: detail.name,
       unit: detail.unit,
+      conversionFactor,
       quantity: detail.quantity,
+      quantityInBaseUnits: convertQuantityForUnit(detail.quantity, detail.unit, conversionFactor) ?? 0,
       createdByUsername: detail.createdByUsername,
       minQuantity: detail.minQuantity,
+      minQuantityInBaseUnits:
+        convertQuantityForUnit(detail.minQuantity, detail.unit, conversionFactor) ?? 0,
       movementType: normalizeMovementType(detail.movementType, 'exit'),
       stockAfterQuantity: detail.stockAfterQuantity,
+      stockAfterQuantityInBaseUnits: convertQuantityForUnit(
+        detail.stockAfterQuantity,
+        detail.unit,
+        conversionFactor,
+      ),
       needsPurchase: detail.stockAfterQuantity !== null ? detail.stockAfterQuantity <= detail.minQuantity : false,
       missingQuantity: detail.missingQuantity,
+      missingQuantityInBaseUnits:
+        convertQuantityForUnit(detail.missingQuantity, detail.unit, conversionFactor) ?? 0,
       itemDeleted: detail.itemDeleted === 1,
     });
     entriesByDate.set(detail.date, dateEntries);
@@ -1591,6 +1876,9 @@ export async function listDailyHistoryGrouped(): Promise<DailyHistoryGroup[]> {
     okItems: summary.okItems,
     needPurchaseItems: summary.needPurchaseItems,
     totalMissingQuantity: summary.totalMissingQuantity,
+    totalMissingQuantityInBaseUnits: roundQuantity(
+      toSafeNumber(summary.totalMissingQuantityInBaseUnits),
+    ),
     entries: entriesByDate.get(summary.date) ?? [],
   }));
 }
@@ -1612,10 +1900,15 @@ export async function listHistoryEntriesByDateRange(
         stock_items.id AS itemId,
         stock_items.name AS name,
         stock_items.unit AS unit,
+        measurement_units.conversion_factor AS conversionFactor,
         daily_stock_entries.quantity AS quantity,
+        daily_stock_entries.quantity * COALESCE(measurement_units.conversion_factor, 1) AS quantityInBaseUnits,
         daily_stock_entries.movement_type AS movementType
       FROM daily_stock_entries
       INNER JOIN stock_items ON stock_items.id = daily_stock_entries.item_id
+      LEFT JOIN measurement_units
+        ON measurement_units.name_normalized = stock_items.unit
+       AND measurement_units.is_deleted = 0
       WHERE daily_stock_entries.is_deleted = 0
         AND daily_stock_entries.date BETWEEN ? AND ?
       ORDER BY daily_stock_entries.date DESC, daily_stock_entries.created_at ASC, daily_stock_entries.id ASC;
@@ -1626,6 +1919,7 @@ export async function listHistoryEntriesByDateRange(
 
   return rows.map((row) => {
     const normalizedMovementType = normalizeMovementType(row.movementType, 'exit');
+    const conversionFactor = resolveConversionFactor(row.unit, row.conversionFactor);
 
     return {
       id: row.id,
@@ -1633,7 +1927,9 @@ export async function listHistoryEntriesByDateRange(
       itemId: row.itemId,
       name: row.name,
       unit: row.unit,
+      conversionFactor,
       quantity: row.quantity,
+      quantityInBaseUnits: convertQuantityForUnit(row.quantity, row.unit, conversionFactor) ?? 0,
       movementType: toReportMovementType(normalizedMovementType),
     };
   });
@@ -1648,7 +1944,9 @@ async function loadPeriodEntries(
   itemsToBuyCount: number;
   days: PeriodHistoryDay[];
   totalMissingQuantity: number;
+  totalMissingQuantityInBaseUnits: number;
   totalConsumedQuantity: number;
+  totalConsumedQuantityInBaseUnits: number;
 }> {
   const database = await getDatabase();
 
@@ -1666,13 +1964,31 @@ async function loadPeriodEntries(
         ) AS totalConsumedQuantity,
         SUM(
           CASE
+            WHEN daily_stock_entries.movement_type IN ('exit', 'consumption')
+              THEN daily_stock_entries.quantity * COALESCE(measurement_units.conversion_factor, 1)
+            ELSE 0
+          END
+        ) AS totalConsumedQuantityInBaseUnits,
+        SUM(
+          CASE
             WHEN daily_stock_entries.stock_after_quantity < stock_items.min_quantity
               THEN stock_items.min_quantity - daily_stock_entries.stock_after_quantity
             ELSE 0
           END
-        ) AS totalMissingQuantity
+        ) AS totalMissingQuantity,
+        SUM(
+          CASE
+            WHEN daily_stock_entries.stock_after_quantity < stock_items.min_quantity
+              THEN (stock_items.min_quantity - daily_stock_entries.stock_after_quantity)
+                * COALESCE(measurement_units.conversion_factor, 1)
+            ELSE 0
+          END
+        ) AS totalMissingQuantityInBaseUnits
       FROM daily_stock_entries
       INNER JOIN stock_items ON stock_items.id = daily_stock_entries.item_id
+      LEFT JOIN measurement_units
+        ON measurement_units.name_normalized = stock_items.unit
+       AND measurement_units.is_deleted = 0
       WHERE daily_stock_entries.date BETWEEN ? AND ?
         AND daily_stock_entries.is_deleted = 0;
     `,
@@ -1688,19 +2004,32 @@ async function loadPeriodEntries(
         stock_items.id AS itemId,
         stock_items.name AS name,
         stock_items.unit AS unit,
+        measurement_units.conversion_factor AS conversionFactor,
         daily_stock_entries.quantity AS quantity,
+        daily_stock_entries.quantity * COALESCE(measurement_units.conversion_factor, 1) AS quantityInBaseUnits,
         daily_stock_entries.created_by_username AS createdByUsername,
         stock_items.min_quantity AS minQuantity,
+        stock_items.min_quantity * COALESCE(measurement_units.conversion_factor, 1) AS minQuantityInBaseUnits,
         daily_stock_entries.movement_type AS movementType,
         daily_stock_entries.stock_after_quantity AS stockAfterQuantity,
+        daily_stock_entries.stock_after_quantity * COALESCE(measurement_units.conversion_factor, 1) AS stockAfterQuantityInBaseUnits,
         stock_items.is_deleted AS itemDeleted,
         CASE
           WHEN daily_stock_entries.stock_after_quantity < stock_items.min_quantity
             THEN stock_items.min_quantity - daily_stock_entries.stock_after_quantity
           ELSE 0
-        END AS missingQuantity
+        END AS missingQuantity,
+        CASE
+          WHEN daily_stock_entries.stock_after_quantity < stock_items.min_quantity
+            THEN (stock_items.min_quantity - daily_stock_entries.stock_after_quantity)
+              * COALESCE(measurement_units.conversion_factor, 1)
+          ELSE 0
+        END AS missingQuantityInBaseUnits
       FROM daily_stock_entries
       INNER JOIN stock_items ON stock_items.id = daily_stock_entries.item_id
+      LEFT JOIN measurement_units
+        ON measurement_units.name_normalized = stock_items.unit
+       AND measurement_units.is_deleted = 0
       WHERE daily_stock_entries.date BETWEEN ? AND ?
         AND daily_stock_entries.is_deleted = 0
       ORDER BY daily_stock_entries.date DESC, daily_stock_entries.created_at ASC, daily_stock_entries.id ASC;
@@ -1714,6 +2043,7 @@ async function loadPeriodEntries(
 
   for (const detailRow of detailRows) {
     const movementType = normalizeMovementType(detailRow.movementType, 'exit');
+    const conversionFactor = resolveConversionFactor(detailRow.unit, detailRow.conversionFactor);
     const needsPurchase =
       detailRow.stockAfterQuantity !== null ? detailRow.stockAfterQuantity <= detailRow.minQuantity : false;
 
@@ -1742,13 +2072,25 @@ async function loadPeriodEntries(
       itemId: detailRow.itemId,
       name: detailRow.name,
       unit: detailRow.unit,
+      conversionFactor,
       quantity: detailRow.quantity,
+      quantityInBaseUnits:
+        convertQuantityForUnit(detailRow.quantity, detailRow.unit, conversionFactor) ?? 0,
       createdByUsername: detailRow.createdByUsername,
       minQuantity: detailRow.minQuantity,
+      minQuantityInBaseUnits:
+        convertQuantityForUnit(detailRow.minQuantity, detailRow.unit, conversionFactor) ?? 0,
       movementType,
       stockAfterQuantity: detailRow.stockAfterQuantity,
+      stockAfterQuantityInBaseUnits: convertQuantityForUnit(
+        detailRow.stockAfterQuantity,
+        detailRow.unit,
+        conversionFactor,
+      ),
       needsPurchase,
       missingQuantity: detailRow.missingQuantity,
+      missingQuantityInBaseUnits:
+        convertQuantityForUnit(detailRow.missingQuantity, detailRow.unit, conversionFactor) ?? 0,
       itemDeleted: detailRow.itemDeleted === 1,
     };
 
@@ -1764,8 +2106,14 @@ async function loadPeriodEntries(
     countedEntries: summaryRow?.countedEntries ?? 0,
     inspectedDays: summaryRow?.inspectedDays ?? 0,
     itemsToBuyCount: itemsToBuyIds.size,
-    totalConsumedQuantity: summaryRow?.totalConsumedQuantity ?? 0,
-    totalMissingQuantity: summaryRow?.totalMissingQuantity ?? 0,
+    totalConsumedQuantity: roundQuantity(toSafeNumber(summaryRow?.totalConsumedQuantity)),
+    totalConsumedQuantityInBaseUnits: roundQuantity(
+      toSafeNumber(summaryRow?.totalConsumedQuantityInBaseUnits),
+    ),
+    totalMissingQuantity: roundQuantity(toSafeNumber(summaryRow?.totalMissingQuantity)),
+    totalMissingQuantityInBaseUnits: roundQuantity(
+      toSafeNumber(summaryRow?.totalMissingQuantityInBaseUnits),
+    ),
     days,
   };
 }
@@ -1801,7 +2149,9 @@ export async function listFortnightlyHistoryGrouped(month: string): Promise<Peri
       countedEntries: firstHalfData.countedEntries,
       itemsToBuyCount: firstHalfData.itemsToBuyCount,
       totalConsumedQuantity: firstHalfData.totalConsumedQuantity,
+      totalConsumedQuantityInBaseUnits: firstHalfData.totalConsumedQuantityInBaseUnits,
       totalMissingQuantity: firstHalfData.totalMissingQuantity,
+      totalMissingQuantityInBaseUnits: firstHalfData.totalMissingQuantityInBaseUnits,
       days: firstHalfData.days,
     },
     {
@@ -1815,7 +2165,9 @@ export async function listFortnightlyHistoryGrouped(month: string): Promise<Peri
       countedEntries: secondHalfData.countedEntries,
       itemsToBuyCount: secondHalfData.itemsToBuyCount,
       totalConsumedQuantity: secondHalfData.totalConsumedQuantity,
+      totalConsumedQuantityInBaseUnits: secondHalfData.totalConsumedQuantityInBaseUnits,
       totalMissingQuantity: secondHalfData.totalMissingQuantity,
+      totalMissingQuantityInBaseUnits: secondHalfData.totalMissingQuantityInBaseUnits,
       days: secondHalfData.days,
     },
   ];
@@ -1846,7 +2198,9 @@ export async function listMonthlyHistoryGrouped(month: string): Promise<PeriodHi
       countedEntries: monthlyData.countedEntries,
       itemsToBuyCount: monthlyData.itemsToBuyCount,
       totalConsumedQuantity: monthlyData.totalConsumedQuantity,
+      totalConsumedQuantityInBaseUnits: monthlyData.totalConsumedQuantityInBaseUnits,
       totalMissingQuantity: monthlyData.totalMissingQuantity,
+      totalMissingQuantityInBaseUnits: monthlyData.totalMissingQuantityInBaseUnits,
       days: monthlyData.days,
     },
   ];
@@ -1878,15 +2232,33 @@ export async function getDashboardAnalytics(month: string): Promise<DashboardAna
         ) AS totalEntryQuantity,
         SUM(
           CASE
+            WHEN movement_type IN ('entry', 'initial', 'legacy_snapshot')
+              THEN quantity * COALESCE(measurement_units.conversion_factor, 1)
+            ELSE 0
+          END
+        ) AS totalEntryQuantityInBaseUnits,
+        SUM(
+          CASE
             WHEN movement_type IN ('exit', 'consumption')
               THEN quantity
             ELSE 0
           END
         ) AS totalExitQuantity,
+        SUM(
+          CASE
+            WHEN movement_type IN ('exit', 'consumption')
+              THEN quantity * COALESCE(measurement_units.conversion_factor, 1)
+            ELSE 0
+          END
+        ) AS totalExitQuantityInBaseUnits,
         COUNT(*) AS movementEntries
       FROM daily_stock_entries
-      WHERE is_deleted = 0
-        AND date BETWEEN ? AND ?;
+      INNER JOIN stock_items ON stock_items.id = daily_stock_entries.item_id
+      LEFT JOIN measurement_units
+        ON measurement_units.name_normalized = stock_items.unit
+       AND measurement_units.is_deleted = 0
+      WHERE daily_stock_entries.is_deleted = 0
+        AND daily_stock_entries.date BETWEEN ? AND ?;
     `,
     startDate,
     endDate,
@@ -1898,6 +2270,7 @@ export async function getDashboardAnalytics(month: string): Promise<DashboardAna
         stock_items.id AS itemId,
         stock_items.name AS name,
         stock_items.unit AS unit,
+        measurement_units.conversion_factor AS conversionFactor,
         stock_items.category AS category,
         SUM(
           CASE
@@ -1908,29 +2281,46 @@ export async function getDashboardAnalytics(month: string): Promise<DashboardAna
         ) AS entryQuantity,
         SUM(
           CASE
+            WHEN daily_stock_entries.movement_type IN ('entry', 'initial', 'legacy_snapshot')
+              THEN daily_stock_entries.quantity * COALESCE(measurement_units.conversion_factor, 1)
+            ELSE 0
+          END
+        ) AS entryQuantityInBaseUnits,
+        SUM(
+          CASE
             WHEN daily_stock_entries.movement_type IN ('exit', 'consumption')
               THEN daily_stock_entries.quantity
             ELSE 0
           END
-        ) AS exitQuantity
+        ) AS exitQuantity,
+        SUM(
+          CASE
+            WHEN daily_stock_entries.movement_type IN ('exit', 'consumption')
+              THEN daily_stock_entries.quantity * COALESCE(measurement_units.conversion_factor, 1)
+            ELSE 0
+          END
+        ) AS exitQuantityInBaseUnits
       FROM daily_stock_entries
       INNER JOIN stock_items ON stock_items.id = daily_stock_entries.item_id
+      LEFT JOIN measurement_units
+        ON measurement_units.name_normalized = stock_items.unit
+       AND measurement_units.is_deleted = 0
       WHERE daily_stock_entries.is_deleted = 0
         AND daily_stock_entries.date BETWEEN ? AND ?
-      GROUP BY stock_items.id, stock_items.name, stock_items.unit, stock_items.category
+      GROUP BY stock_items.id, stock_items.name, stock_items.unit, stock_items.category, measurement_units.conversion_factor
       ORDER BY
         (
           SUM(
             CASE
               WHEN daily_stock_entries.movement_type IN ('entry', 'initial', 'legacy_snapshot')
-                THEN daily_stock_entries.quantity
+                THEN daily_stock_entries.quantity * COALESCE(measurement_units.conversion_factor, 1)
               ELSE 0
             END
           ) +
           SUM(
             CASE
               WHEN daily_stock_entries.movement_type IN ('exit', 'consumption')
-                THEN daily_stock_entries.quantity
+                THEN daily_stock_entries.quantity * COALESCE(measurement_units.conversion_factor, 1)
               ELSE 0
             END
           )
@@ -1944,7 +2334,7 @@ export async function getDashboardAnalytics(month: string): Promise<DashboardAna
   const dailyRows = await database.getAllAsync<DashboardDailySeriesRow>(
     `
       SELECT
-        date AS date,
+        daily_stock_entries.date AS date,
         SUM(
           CASE
             WHEN movement_type IN ('entry', 'initial', 'legacy_snapshot')
@@ -1954,16 +2344,34 @@ export async function getDashboardAnalytics(month: string): Promise<DashboardAna
         ) AS entryQuantity,
         SUM(
           CASE
+            WHEN movement_type IN ('entry', 'initial', 'legacy_snapshot')
+              THEN quantity * COALESCE(measurement_units.conversion_factor, 1)
+            ELSE 0
+          END
+        ) AS entryQuantityInBaseUnits,
+        SUM(
+          CASE
             WHEN movement_type IN ('exit', 'consumption')
               THEN quantity
             ELSE 0
           END
-        ) AS exitQuantity
+        ) AS exitQuantity,
+        SUM(
+          CASE
+            WHEN movement_type IN ('exit', 'consumption')
+              THEN quantity * COALESCE(measurement_units.conversion_factor, 1)
+            ELSE 0
+          END
+        ) AS exitQuantityInBaseUnits
       FROM daily_stock_entries
-      WHERE is_deleted = 0
-        AND date BETWEEN ? AND ?
-      GROUP BY date
-      ORDER BY date ASC;
+      INNER JOIN stock_items ON stock_items.id = daily_stock_entries.item_id
+      LEFT JOIN measurement_units
+        ON measurement_units.name_normalized = stock_items.unit
+       AND measurement_units.is_deleted = 0
+      WHERE daily_stock_entries.is_deleted = 0
+        AND daily_stock_entries.date BETWEEN ? AND ?
+      GROUP BY daily_stock_entries.date
+      ORDER BY daily_stock_entries.date ASC;
     `,
     startDate,
     endDate,
@@ -1971,53 +2379,96 @@ export async function getDashboardAnalytics(month: string): Promise<DashboardAna
 
   const items: DashboardItemAnalyticsRow[] = itemRows
     .map((row) => {
+      const conversionFactor = resolveConversionFactor(row.unit, row.conversionFactor);
       const entryQuantity = roundQuantity(toSafeNumber(row.entryQuantity));
+      const entryQuantityInBaseUnits = roundQuantity(
+        toSafeNumber(row.entryQuantityInBaseUnits),
+      );
       const exitQuantity = roundQuantity(toSafeNumber(row.exitQuantity));
+      const exitQuantityInBaseUnits = roundQuantity(
+        toSafeNumber(row.exitQuantityInBaseUnits),
+      );
       const movementTotal = roundQuantity(entryQuantity + exitQuantity);
+      const movementTotalInBaseUnits = roundQuantity(
+        entryQuantityInBaseUnits + exitQuantityInBaseUnits,
+      );
 
       return {
         itemId: row.itemId,
         name: row.name,
         unit: row.unit,
+        conversionFactor,
         category: normalizeCategory(row.category),
         entryQuantity,
+        entryQuantityInBaseUnits,
         exitQuantity,
+        exitQuantityInBaseUnits,
         movementTotal,
+        movementTotalInBaseUnits,
       };
     })
-    .filter((item) => item.movementTotal > 0)
+    .filter((item) => item.movementTotalInBaseUnits > 0)
     .sort(
       (left, right) =>
-        right.movementTotal - left.movementTotal ||
+        right.movementTotalInBaseUnits - left.movementTotalInBaseUnits ||
         left.name.localeCompare(right.name, 'pt-BR', { sensitivity: 'base' }),
     );
 
-  const dailyByDate = new Map<string, { entryQuantity: number; exitQuantity: number }>();
+  const dailyByDate = new Map<
+    string,
+    {
+      entryQuantity: number;
+      entryQuantityInBaseUnits: number;
+      exitQuantity: number;
+      exitQuantityInBaseUnits: number;
+    }
+  >();
 
   for (const row of dailyRows) {
     const entryQuantity = roundQuantity(toSafeNumber(row.entryQuantity));
+    const entryQuantityInBaseUnits = roundQuantity(toSafeNumber(row.entryQuantityInBaseUnits));
     const exitQuantity = roundQuantity(toSafeNumber(row.exitQuantity));
-    dailyByDate.set(row.date, { entryQuantity, exitQuantity });
+    const exitQuantityInBaseUnits = roundQuantity(toSafeNumber(row.exitQuantityInBaseUnits));
+    dailyByDate.set(row.date, {
+      entryQuantity,
+      entryQuantityInBaseUnits,
+      exitQuantity,
+      exitQuantityInBaseUnits,
+    });
   }
 
   const dailySeries: DashboardDailySeriesPoint[] = buildDateRangeList(startDate, endDate).map((date) => {
     const dailyPoint = dailyByDate.get(date);
     const entryQuantity = dailyPoint?.entryQuantity ?? 0;
+    const entryQuantityInBaseUnits = dailyPoint?.entryQuantityInBaseUnits ?? 0;
     const exitQuantity = dailyPoint?.exitQuantity ?? 0;
+    const exitQuantityInBaseUnits = dailyPoint?.exitQuantityInBaseUnits ?? 0;
     const movementTotal = roundQuantity(entryQuantity + exitQuantity);
+    const movementTotalInBaseUnits = roundQuantity(
+      entryQuantityInBaseUnits + exitQuantityInBaseUnits,
+    );
     const [, , day] = date.split('-');
 
     return {
       date,
       dayLabel: day,
       entryQuantity,
+      entryQuantityInBaseUnits,
       exitQuantity,
+      exitQuantityInBaseUnits,
       movementTotal,
+      movementTotalInBaseUnits,
     };
   });
 
   const totalEntryQuantity = roundQuantity(toSafeNumber(summaryRow?.totalEntryQuantity));
+  const totalEntryQuantityInBaseUnits = roundQuantity(
+    toSafeNumber(summaryRow?.totalEntryQuantityInBaseUnits),
+  );
   const totalExitQuantity = roundQuantity(toSafeNumber(summaryRow?.totalExitQuantity));
+  const totalExitQuantityInBaseUnits = roundQuantity(
+    toSafeNumber(summaryRow?.totalExitQuantityInBaseUnits),
+  );
   const movementEntries = Math.max(0, Math.trunc(toSafeNumber(summaryRow?.movementEntries)));
 
   return {
@@ -2026,8 +2477,13 @@ export async function getDashboardAnalytics(month: string): Promise<DashboardAna
     endDate,
     totals: {
       entryQuantity: totalEntryQuantity,
+      entryQuantityInBaseUnits: totalEntryQuantityInBaseUnits,
       exitQuantity: totalExitQuantity,
+      exitQuantityInBaseUnits: totalExitQuantityInBaseUnits,
       movementTotal: roundQuantity(totalEntryQuantity + totalExitQuantity),
+      movementTotalInBaseUnits: roundQuantity(
+        totalEntryQuantityInBaseUnits + totalExitQuantityInBaseUnits,
+      ),
       activeItems: items.length,
       movementEntries,
     },

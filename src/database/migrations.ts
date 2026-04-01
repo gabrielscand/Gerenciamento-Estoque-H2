@@ -1,7 +1,8 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 import { DEFAULT_MEASUREMENT_UNITS, DEFAULT_STOCK_CATEGORIES, normalizeCatalogName } from '../constants/categories';
+import { getDefaultConversionFactorForUnit } from '../utils/unit-conversion';
 
-const SCHEMA_VERSION = 10;
+const SCHEMA_VERSION = 12;
 
 async function applySchemaV1(db: SQLiteDatabase): Promise<void> {
   await db.execAsync(`
@@ -462,6 +463,7 @@ async function applySchemaV10(db: SQLiteDatabase): Promise<void> {
       sync_status TEXT NOT NULL DEFAULT 'pending',
       name TEXT NOT NULL CHECK(length(trim(name)) > 0),
       name_normalized TEXT NOT NULL CHECK(length(trim(name_normalized)) > 0),
+      conversion_factor REAL NOT NULL DEFAULT 1 CHECK(conversion_factor > 0),
       is_deleted INTEGER NOT NULL DEFAULT 0,
       deleted_at TEXT,
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
@@ -586,18 +588,64 @@ async function applySchemaV10(db: SQLiteDatabase): Promise<void> {
           sync_status,
           name,
           name_normalized,
+          conversion_factor,
           created_at,
           updated_at
         )
-        VALUES (?, 'pending', ?, ?, ?, ?);
+        VALUES (?, 'pending', ?, ?, ?, ?, ?);
       `,
       createCatalogRemoteId('unit'),
       normalized,
       normalized,
+      getDefaultConversionFactorForUnit(normalized),
       timestamp,
       timestamp,
     );
   }
+}
+
+async function applySchemaV11(db: SQLiteDatabase): Promise<void> {
+  await db.execAsync(`
+    ALTER TABLE measurement_units ADD COLUMN conversion_factor REAL NOT NULL DEFAULT 1 CHECK(conversion_factor > 0);
+  `).catch(() => {});
+
+  await db.execAsync(`
+    UPDATE measurement_units
+    SET conversion_factor = CASE
+      WHEN name_normalized IN ('dz', 'duzia') THEN 12
+      WHEN name_normalized = 'mz' THEN 6
+      WHEN name_normalized IN ('und', 'un', 'unidade') THEN 1
+      WHEN conversion_factor IS NULL OR conversion_factor <= 0 THEN 1
+      ELSE conversion_factor
+    END;
+  `);
+}
+
+async function applySchemaV12(db: SQLiteDatabase): Promise<void> {
+  const tableInfo = await db.getAllAsync<{ name: string }>(
+    `
+      PRAGMA table_info(measurement_units);
+    `,
+  );
+  const hasConversionFactor = tableInfo.some((column) => column.name === 'conversion_factor');
+
+  if (!hasConversionFactor) {
+    await db.execAsync(`
+      ALTER TABLE measurement_units
+      ADD COLUMN conversion_factor REAL NOT NULL DEFAULT 1;
+    `);
+  }
+
+  await db.execAsync(`
+    UPDATE measurement_units
+    SET conversion_factor = CASE
+      WHEN name_normalized IN ('dz', 'duzia') THEN 12
+      WHEN name_normalized = 'mz' THEN 6
+      WHEN name_normalized IN ('und', 'un', 'unidade') THEN 1
+      WHEN conversion_factor IS NULL OR conversion_factor <= 0 THEN 1
+      ELSE conversion_factor
+    END;
+  `);
 }
 
 export async function applyMigrations(db: SQLiteDatabase): Promise<void> {
@@ -647,6 +695,14 @@ export async function applyMigrations(db: SQLiteDatabase): Promise<void> {
 
     if (currentVersion < 10) {
       await applySchemaV10(db);
+    }
+
+    if (currentVersion < 11) {
+      await applySchemaV11(db);
+    }
+
+    if (currentVersion < 12) {
+      await applySchemaV12(db);
     }
 
     await db.execAsync(`PRAGMA user_version = ${SCHEMA_VERSION};`);

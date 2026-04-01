@@ -39,6 +39,7 @@ import {
   getCurrentMonthString,
 } from '../utils/date';
 import { generateHistoryReportPdf } from '../utils/history-report';
+import { formatOriginalAndBaseQuantity } from '../utils/unit-conversion';
 
 type HistoryMode = 'diario' | 'quinzenal' | 'mensal';
 type DailyMovementFilter = 'entry' | 'exit';
@@ -787,7 +788,7 @@ export function HistoryScreen({ canManageHistoryActions = false }: HistoryScreen
             const filteredOkItems = filteredEntries.filter((entry) => !entry.needsPurchase).length;
             const filteredNeedPurchaseItems = filteredEntries.filter((entry) => entry.needsPurchase).length;
             const filteredTotalMissingQuantity = filteredEntries.reduce(
-              (sum, entry) => sum + entry.missingQuantity,
+              (sum, entry) => sum + entry.missingQuantityInBaseUnits,
               0,
             );
 
@@ -851,7 +852,7 @@ export function HistoryScreen({ canManageHistoryActions = false }: HistoryScreen
                 <Text style={styles.groupSummary}>
                   Total itens: {dailyItem.totalItems} | Movimentacoes: {filteredCountedItems} | OK:{' '}
                   {filteredOkItems} | Comprar: {filteredNeedPurchaseItems} | Faltante total:{' '}
-                  {formatQuantity(filteredTotalMissingQuantity)}
+                  {formatQuantity(filteredTotalMissingQuantity)} und
                 </Text>
 
                 {filteredEntries.length === 0 ? (
@@ -871,8 +872,20 @@ export function HistoryScreen({ canManageHistoryActions = false }: HistoryScreen
                           ) : null}
                         </View>
                         <Text style={styles.entryMeta}>
-                          {getMovementTypeLabel(entry.movementType)}: {formatQuantity(entry.quantity)} {entry.unit} | Min{' '}
-                          {formatQuantity(entry.minQuantity)}
+                          {getMovementTypeLabel(entry.movementType)}:{' '}
+                          {formatOriginalAndBaseQuantity(
+                            entry.quantity,
+                            entry.unit,
+                            entry.conversionFactor,
+                            formatQuantity,
+                          )}{' '}
+                          | Min{' '}
+                          {formatOriginalAndBaseQuantity(
+                            entry.minQuantity,
+                            entry.unit,
+                            entry.conversionFactor,
+                            formatQuantity,
+                          )}
                         </Text>
                         <Text style={styles.entryMeta}>
                           Feito por: {entry.createdByUsername?.trim() ? entry.createdByUsername : 'Nao informado'}
@@ -882,7 +895,12 @@ export function HistoryScreen({ canManageHistoryActions = false }: HistoryScreen
                           value={
                             entry.stockAfterQuantity === null
                               ? '-'
-                              : `${formatQuantity(entry.stockAfterQuantity)} ${entry.unit}`
+                              : formatOriginalAndBaseQuantity(
+                                  entry.stockAfterQuantity,
+                                  entry.unit,
+                                  entry.conversionFactor,
+                                  formatQuantity,
+                                )
                           }
                           tone={
                             entry.stockAfterQuantity === null
@@ -935,7 +953,12 @@ export function HistoryScreen({ canManageHistoryActions = false }: HistoryScreen
                         <Text style={styles.statusText}>
                           {entry.needsPurchase
                             ? entry.missingQuantity > 0
-                              ? `Comprar ${formatQuantity(entry.missingQuantity)} ${entry.unit}`
+                              ? `Comprar ${formatOriginalAndBaseQuantity(
+                                  entry.missingQuantity,
+                                  entry.unit,
+                                  entry.conversionFactor,
+                                  formatQuantity,
+                                )}`
                               : 'No minimo (comprar)'
                             : 'OK'}
                         </Text>
@@ -960,8 +983,8 @@ export function HistoryScreen({ canManageHistoryActions = false }: HistoryScreen
 
               <Text style={styles.groupSummary}>
                 Registros: {periodItem.countedEntries} | Itens para comprar: {periodItem.itemsToBuyCount} | Faltante
-                total: {formatQuantity(periodItem.totalMissingQuantity)} | Consumo total:{' '}
-                {formatQuantity(periodItem.totalConsumedQuantity)}
+                total: {formatQuantity(periodItem.totalMissingQuantityInBaseUnits)} und | Consumo total:{' '}
+                {formatQuantity(periodItem.totalConsumedQuantityInBaseUnits)} und
               </Text>
 
               {periodItem.days.length === 0 ? (
@@ -1099,8 +1122,19 @@ export function HistoryScreen({ canManageHistoryActions = false }: HistoryScreen
                                   </View>
                                   <Text style={styles.entryMeta}>
                                     {getDailyMovementFilterLabel(resolveMovementFilter(entry.movementType))}:{' '}
-                                    {formatQuantity(entry.quantity)} {entry.unit} | Min{' '}
-                                    {formatQuantity(entry.minQuantity)}
+                                    {formatOriginalAndBaseQuantity(
+                                      entry.quantity,
+                                      entry.unit,
+                                      entry.conversionFactor,
+                                      formatQuantity,
+                                    )}{' '}
+                                    | Min{' '}
+                                    {formatOriginalAndBaseQuantity(
+                                      entry.minQuantity,
+                                      entry.unit,
+                                      entry.conversionFactor,
+                                      formatQuantity,
+                                    )}
                                   </Text>
                                   <Text style={styles.entryMeta}>
                                     Feito por: {entry.createdByUsername?.trim() ? entry.createdByUsername : 'Nao informado'}
@@ -1110,7 +1144,12 @@ export function HistoryScreen({ canManageHistoryActions = false }: HistoryScreen
                                     value={
                                       entry.stockAfterQuantity === null
                                         ? '-'
-                                        : `${formatQuantity(entry.stockAfterQuantity)} ${entry.unit}`
+                                        : formatOriginalAndBaseQuantity(
+                                            entry.stockAfterQuantity,
+                                            entry.unit,
+                                            entry.conversionFactor,
+                                            formatQuantity,
+                                          )
                                     }
                                     tone={
                                       entry.stockAfterQuantity === null
@@ -1131,7 +1170,12 @@ export function HistoryScreen({ canManageHistoryActions = false }: HistoryScreen
                                   <Text style={styles.statusText}>
                                     {entry.needsPurchase
                                       ? entry.missingQuantity > 0
-                                        ? `Comprar ${formatQuantity(entry.missingQuantity)} ${entry.unit}`
+                                        ? `Comprar ${formatOriginalAndBaseQuantity(
+                                            entry.missingQuantity,
+                                            entry.unit,
+                                            entry.conversionFactor,
+                                            formatQuantity,
+                                          )}`
                                         : 'No minimo (comprar)'
                                       : 'OK'}
                                   </Text>
