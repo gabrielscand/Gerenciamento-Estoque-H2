@@ -37,7 +37,6 @@ import {
   formatDateLabel,
   formatMonthLabel,
   getCurrentMonthString,
-  parseDisplayMonthToIso,
 } from '../utils/date';
 import { generateHistoryReportPdf } from '../utils/history-report';
 
@@ -129,18 +128,29 @@ function parseDecimalInput(value: string): number | null {
   return parsed;
 }
 
+function buildRecentMonthOptions(referenceDate: Date = new Date(), totalMonths: number = 12): string[] {
+  const months: string[] = [];
+
+  for (let index = 0; index < totalMonths; index += 1) {
+    const baseDate = new Date(referenceDate.getFullYear(), referenceDate.getMonth() - index, 1);
+    months.push(getCurrentMonthString(baseDate));
+  }
+
+  return months;
+}
+
 export function HistoryScreen({ canManageHistoryActions = false }: HistoryScreenProps) {
   const initialMonth = getCurrentMonthString();
   const isFocused = useIsFocused();
   const [mode, setMode] = useState<HistoryMode>('diario');
   const [dailyMovementFilter, setDailyMovementFilter] = useState<DailyMovementFilter>('entry');
   const [selectedMonth, setSelectedMonth] = useState(initialMonth);
-  const [monthInputValue, setMonthInputValue] = useState(formatMonthLabel(initialMonth));
-  const [monthInputError, setMonthInputError] = useState('');
+  const [isMonthMenuOpen, setIsMonthMenuOpen] = useState(false);
   const [dailyGroups, setDailyGroups] = useState<DailyHistoryGroup[]>([]);
   const [periodGroups, setPeriodGroups] = useState<PeriodHistoryGroup[]>([]);
   const [isReportPickerOpen, setIsReportPickerOpen] = useState(false);
   const [isGeneratingReport, setIsGeneratingReport] = useState(false);
+  const [activeDailyReportDate, setActiveDailyReportDate] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
@@ -154,6 +164,7 @@ export function HistoryScreen({ canManageHistoryActions = false }: HistoryScreen
   const { showTopPopup } = useTopPopup();
 
   const isDailyMode = mode === 'diario';
+  const monthOptions = useMemo(() => buildRecentMonthOptions(new Date(), 12), []);
 
   async function loadHistory(nextMode: HistoryMode, nextMonth: string, syncFirst: boolean = false) {
     setIsLoading(true);
@@ -217,12 +228,9 @@ export function HistoryScreen({ canManageHistoryActions = false }: HistoryScreen
   }, [mode, selectedMonth, isFocused]);
 
   useEffect(() => {
-    setMonthInputValue(formatMonthLabel(selectedMonth));
-  }, [selectedMonth]);
-
-  useEffect(() => {
     setExpandedPeriodDays({});
     setPeriodDayFilters({});
+    setIsMonthMenuOpen(false);
   }, [mode, selectedMonth]);
 
   useEffect(() => {
@@ -255,36 +263,17 @@ export function HistoryScreen({ canManageHistoryActions = false }: HistoryScreen
     setSuccessMessage('');
   }
 
-  function handleMonthInputChange(nextValue: string) {
-    setMonthInputValue(nextValue);
-    setErrorMessage('');
-    setSuccessMessage('');
-
-    const parsedMonth = parseDisplayMonthToIso(nextValue);
-
-    if (parsedMonth) {
-      setMonthInputError('');
-      setSelectedMonth(parsedMonth);
-      return;
-    }
-
-    if (nextValue.trim().length === 0) {
-      setMonthInputError('Informe o mes no formato MM/AAAA.');
-      return;
-    }
-
-    if (nextValue.trim().length >= 7) {
-      setMonthInputError('Use um mes valido no formato MM/AAAA.');
-    } else {
-      setMonthInputError('');
-    }
-  }
-
   function setCurrentMonth() {
     const currentMonth = getCurrentMonthString();
     setSelectedMonth(currentMonth);
-    setMonthInputValue(formatMonthLabel(currentMonth));
-    setMonthInputError('');
+    setIsMonthMenuOpen(false);
+    setErrorMessage('');
+    setSuccessMessage('');
+  }
+
+  function selectMonth(monthValue: string) {
+    setSelectedMonth(monthValue);
+    setIsMonthMenuOpen(false);
     setErrorMessage('');
     setSuccessMessage('');
   }
@@ -560,6 +549,41 @@ export function HistoryScreen({ canManageHistoryActions = false }: HistoryScreen
     }
   }
 
+  async function handleGenerateDailyReportForDate(date: string) {
+    if (isGeneratingReport) {
+      return;
+    }
+
+    setErrorMessage('');
+    setSuccessMessage('');
+    setIsGeneratingReport(true);
+    setActiveDailyReportDate(date);
+
+    try {
+      const [year, month, day] = date.split('-').map(Number);
+      const referenceDate = new Date(year, month - 1, day, 12, 0, 0, 0);
+      const result = await generateHistoryReportPdf('diario', { selectedMonth, referenceDate });
+
+      showTopPopup({
+        type: 'success',
+        message:
+          Platform.OS === 'web'
+            ? `Relatorio diario de ${formatDateLabel(date)} enviado para visualizacao/impressao.`
+            : result.totalMovements === 0
+              ? `Relatorio diario de ${formatDateLabel(date)} gerado sem movimentacoes.`
+              : result.shared
+                ? `Relatorio diario de ${formatDateLabel(date)} gerado e pronto para compartilhar.`
+                : `Relatorio diario de ${formatDateLabel(date)} gerado com sucesso.`,
+        durationMs: 3600,
+      });
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : 'Falha ao gerar relatorio diario.');
+    } finally {
+      setIsGeneratingReport(false);
+      setActiveDailyReportDate(null);
+    }
+  }
+
   const heroText = useMemo(() => {
     if (mode === 'diario') {
       return {
@@ -689,29 +713,56 @@ export function HistoryScreen({ canManageHistoryActions = false }: HistoryScreen
             {!isDailyMode ? (
               <View style={styles.monthCard}>
                 <Text style={styles.monthLabel}>Mes do relatorio</Text>
-                <TextInput
-                  value={monthInputValue}
-                  onChangeText={handleMonthInputChange}
-                  placeholder="MM/AAAA"
-                  keyboardType="numbers-and-punctuation"
-                  style={[styles.monthInput, monthInputError ? styles.inputError : undefined]}
-                />
+                <View style={styles.monthSelectRoot}>
+                  <Pressable
+                    style={styles.monthSelectTrigger}
+                    onPress={() => setIsMonthMenuOpen((previousState) => !previousState)}
+                  >
+                    <Text style={styles.monthSelectTriggerText}>{formatMonthLabel(selectedMonth)}</Text>
+                    <Text style={styles.monthSelectArrow}>{isMonthMenuOpen ? '^' : 'v'}</Text>
+                  </Pressable>
+                  {isMonthMenuOpen ? (
+                    <View style={styles.monthSelectMenu}>
+                      {monthOptions.map((monthValue) => {
+                        const isSelected = selectedMonth === monthValue;
+
+                        return (
+                          <Pressable
+                            key={monthValue}
+                            style={[styles.monthSelectOption, isSelected ? styles.monthSelectOptionActive : undefined]}
+                            onPress={() => selectMonth(monthValue)}
+                          >
+                            <Text
+                              style={[
+                                styles.monthSelectOptionText,
+                                isSelected ? styles.monthSelectOptionTextActive : undefined,
+                              ]}
+                            >
+                              {formatMonthLabel(monthValue)}
+                            </Text>
+                          </Pressable>
+                        );
+                      })}
+                    </View>
+                  ) : null}
+                </View>
                 <Pressable style={styles.monthButton} onPress={setCurrentMonth}>
                   <Text style={styles.monthButtonText}>Mes atual</Text>
                 </Pressable>
-                {monthInputError ? <Text style={styles.errorText}>{monthInputError}</Text> : null}
               </View>
             ) : null}
 
-            <View style={styles.reportButtonWrap}>
-              <AppButton
-                label={isGeneratingReport ? 'Gerando relatorio...' : 'Gerar Relatorio'}
-                onPress={() => {
-                  setIsReportPickerOpen(true);
-                }}
-                disabled={isGeneratingReport}
-              />
-            </View>
+            {!isDailyMode ? (
+              <View style={styles.reportButtonWrap}>
+                <AppButton
+                  label={isGeneratingReport ? 'Gerando relatorio...' : 'Gerar Relatorio'}
+                  onPress={() => {
+                    setIsReportPickerOpen(true);
+                  }}
+                  disabled={isGeneratingReport}
+                />
+              </View>
+            ) : null}
 
           </View>
         }
@@ -745,6 +796,20 @@ export function HistoryScreen({ canManageHistoryActions = false }: HistoryScreen
                 <View style={styles.groupHeader}>
                   <Text style={styles.groupDate}>{formatDateLabel(dailyItem.date)}</Text>
                   <View style={styles.groupHeaderActions}>
+                    <Pressable
+                      style={[
+                        styles.generateDayReportButton,
+                        activeDailyReportDate === dailyItem.date ? styles.actionDisabled : undefined,
+                      ]}
+                      onPress={() => {
+                        void handleGenerateDailyReportForDate(dailyItem.date);
+                      }}
+                      disabled={isGeneratingReport}
+                    >
+                      <Text style={styles.generateDayReportButtonText}>
+                        {activeDailyReportDate === dailyItem.date ? 'Gerando relatorio...' : 'Gerar relatorio'}
+                      </Text>
+                    </Pressable>
                     {canManageHistoryActions ? (
                       <Pressable
                         style={[
@@ -1280,14 +1345,56 @@ const styles = StyleSheet.create({
     color: '#77158E',
     fontWeight: '700',
   },
-  monthInput: {
+  monthSelectRoot: {
+    gap: 6,
+  },
+  monthSelectTrigger: {
     borderWidth: 1,
     borderColor: '#B690D2',
     backgroundColor: '#F8F1FD',
     borderRadius: 12,
     paddingHorizontal: 12,
     paddingVertical: 10,
+    minHeight: 42,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
+  },
+  monthSelectTriggerText: {
     color: '#2A0834',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  monthSelectArrow: {
+    color: '#77158E',
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  monthSelectMenu: {
+    borderWidth: 1,
+    borderColor: '#C6A8DD',
+    borderRadius: 12,
+    backgroundColor: '#FCF9FF',
+    overflow: 'hidden',
+  },
+  monthSelectOption: {
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+    borderTopWidth: 1,
+    borderTopColor: '#EFE3FA',
+  },
+  monthSelectOptionActive: {
+    backgroundColor: '#EDE0F9',
+  },
+  monthSelectOptionText: {
+    color: '#5F1175',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  monthSelectOptionTextActive: {
+    color: '#3A0D49',
+    fontWeight: '800',
   },
   monthButton: {
     borderRadius: 10,
@@ -1313,14 +1420,6 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     fontSize: 12,
     fontWeight: '700',
-  },
-  inputError: {
-    borderColor: '#CF2D2D',
-  },
-  errorText: {
-    color: '#B02323',
-    fontSize: 12,
-    lineHeight: 17,
   },
   emptyText: {
     textAlign: 'center',
@@ -1378,6 +1477,19 @@ const styles = StyleSheet.create({
   },
   deleteMovementButtonText: {
     color: '#9A3412',
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  generateDayReportButton: {
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    backgroundColor: '#EEF4FF',
+    borderWidth: 1,
+    borderColor: '#93C5FD',
+  },
+  generateDayReportButtonText: {
+    color: '#1D4ED8',
     fontSize: 11,
     fontWeight: '700',
   },
