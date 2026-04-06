@@ -7,7 +7,6 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   View,
 } from 'react-native';
 import { SyncStatusCard } from '../components/SyncStatusCard';
@@ -29,7 +28,6 @@ import type {
 import {
   formatMonthLabel,
   getCurrentMonthString,
-  parseDisplayMonthToIso,
 } from '../utils/date';
 import { formatOriginalAndBaseQuantity } from '../utils/unit-conversion';
 
@@ -38,6 +36,17 @@ function formatQuantity(value: number): string {
     minimumFractionDigits: Number.isInteger(value) ? 0 : 2,
     maximumFractionDigits: 2,
   });
+}
+
+function buildRecentMonthOptions(referenceDate: Date = new Date(), totalMonths: number = 12): string[] {
+  const months: string[] = [];
+
+  for (let index = 0; index < totalMonths; index += 1) {
+    const baseDate = new Date(referenceDate.getFullYear(), referenceDate.getMonth() - index, 1);
+    months.push(getCurrentMonthString(baseDate));
+  }
+
+  return months;
 }
 
 function getMetricLabel(metric: DashboardAbcMetric): string {
@@ -193,8 +202,7 @@ function ChartCardHeader({
 export function DashboardScreen() {
   const initialMonth = getCurrentMonthString();
   const [selectedMonth, setSelectedMonth] = useState(initialMonth);
-  const [monthInputValue, setMonthInputValue] = useState(formatMonthLabel(initialMonth));
-  const [monthInputError, setMonthInputError] = useState('');
+  const [isMonthMenuOpen, setIsMonthMenuOpen] = useState(false);
   const [selectedMetric, setSelectedMetric] = useState<DashboardAbcMetric>('movement');
   const [viewMode, setViewMode] = useState<'item' | 'category'>('item');
   const [activeChartInfo, setActiveChartInfo] = useState<DashboardChartInfoKey | null>(null);
@@ -203,6 +211,7 @@ export function DashboardScreen() {
   const [errorMessage, setErrorMessage] = useState('');
   const isFocused = useIsFocused();
   const { showTopPopup } = useTopPopup();
+  const monthOptions = useMemo(() => buildRecentMonthOptions(new Date(), 12), []);
 
   async function loadDashboard(month: string, syncFirst: boolean = false) {
     setIsLoading(true);
@@ -232,10 +241,6 @@ export function DashboardScreen() {
   }, [selectedMonth, isFocused]);
 
   useEffect(() => {
-    setMonthInputValue(formatMonthLabel(selectedMonth));
-  }, [selectedMonth]);
-
-  useEffect(() => {
     if (!errorMessage) {
       return;
     }
@@ -247,35 +252,16 @@ export function DashboardScreen() {
     });
   }, [errorMessage, showTopPopup]);
 
-  function handleMonthInputChange(nextValue: string) {
-    setMonthInputValue(nextValue);
-    setErrorMessage('');
-
-    const parsedMonth = parseDisplayMonthToIso(nextValue);
-
-    if (parsedMonth) {
-      setMonthInputError('');
-      setSelectedMonth(parsedMonth);
-      return;
-    }
-
-    if (nextValue.trim().length === 0) {
-      setMonthInputError('Informe o mes no formato MM/AAAA.');
-      return;
-    }
-
-    if (nextValue.trim().length >= 7) {
-      setMonthInputError('Use um mes valido no formato MM/AAAA.');
-    } else {
-      setMonthInputError('');
-    }
-  }
-
   function setCurrentMonth() {
     const currentMonth = getCurrentMonthString();
     setSelectedMonth(currentMonth);
-    setMonthInputValue(formatMonthLabel(currentMonth));
-    setMonthInputError('');
+    setIsMonthMenuOpen(false);
+    setErrorMessage('');
+  }
+
+  function selectMonth(monthValue: string) {
+    setSelectedMonth(monthValue);
+    setIsMonthMenuOpen(false);
     setErrorMessage('');
   }
 
@@ -410,17 +396,46 @@ export function DashboardScreen() {
 
         <View style={styles.controlsCard}>
           <Text style={styles.cardTitle}>Periodo do dashboard</Text>
-          <TextInput
-            value={monthInputValue}
-            onChangeText={handleMonthInputChange}
-            placeholder="MM/AAAA"
-            keyboardType="numbers-and-punctuation"
-            style={[styles.monthInput, monthInputError ? styles.inputError : undefined]}
-          />
+          <View style={styles.monthSelectRoot}>
+            <Pressable
+              style={styles.monthSelectTrigger}
+              onPress={() => setIsMonthMenuOpen((previousState) => !previousState)}
+            >
+              <Text style={styles.monthSelectTriggerText}>{formatMonthLabel(selectedMonth)}</Text>
+              <Text style={styles.monthSelectArrow}>{isMonthMenuOpen ? '▲' : '▼'}</Text>
+            </Pressable>
+            {isMonthMenuOpen ? (
+              <View style={styles.monthSelectMenu}>
+                {monthOptions.map((monthValue, index) => {
+                  const isSelected = selectedMonth === monthValue;
+
+                  return (
+                    <Pressable
+                      key={monthValue}
+                      style={[
+                        styles.monthSelectOption,
+                        index === 0 ? styles.monthSelectOptionFirst : undefined,
+                        isSelected ? styles.monthSelectOptionActive : undefined,
+                      ]}
+                      onPress={() => selectMonth(monthValue)}
+                    >
+                      <Text
+                        style={[
+                          styles.monthSelectOptionText,
+                          isSelected ? styles.monthSelectOptionTextActive : undefined,
+                        ]}
+                      >
+                        {formatMonthLabel(monthValue)}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            ) : null}
+          </View>
           <Pressable style={styles.currentMonthButton} onPress={setCurrentMonth}>
             <Text style={styles.currentMonthButtonText}>Mes atual</Text>
           </Pressable>
-          {monthInputError ? <Text style={styles.errorText}>{monthInputError}</Text> : null}
         </View>
 
         <View style={styles.metricCard}>
@@ -748,17 +763,62 @@ const styles = StyleSheet.create({
     color: '#77158E',
     lineHeight: 18,
   },
-  monthInput: {
+  monthSelectRoot: {
+    gap: 6,
+    position: 'relative',
+    zIndex: 2,
+  },
+  monthSelectTrigger: {
     borderWidth: 1,
     borderColor: '#B690D2',
     backgroundColor: '#F8F1FD',
     borderRadius: 12,
     paddingHorizontal: 12,
     paddingVertical: 10,
-    color: '#2A0834',
+    minHeight: 42,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
   },
-  inputError: {
-    borderColor: '#CF2D2D',
+  monthSelectTriggerText: {
+    color: '#2A0834',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  monthSelectArrow: {
+    color: '#77158E',
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  monthSelectMenu: {
+    borderWidth: 1,
+    borderColor: '#C6A8DD',
+    borderRadius: 12,
+    backgroundColor: '#FCF9FF',
+    overflow: 'hidden',
+    maxHeight: 310,
+  },
+  monthSelectOption: {
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+    borderTopWidth: 1,
+    borderTopColor: '#EFE3FA',
+  },
+  monthSelectOptionFirst: {
+    borderTopWidth: 0,
+  },
+  monthSelectOptionActive: {
+    backgroundColor: '#EDE0F9',
+  },
+  monthSelectOptionText: {
+    color: '#5F1175',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  monthSelectOptionTextActive: {
+    color: '#3A0D49',
+    fontWeight: '800',
   },
   currentMonthButton: {
     borderRadius: 10,
