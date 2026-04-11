@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useIsFocused } from '@react-navigation/native';
 import {
   FlatList,
+  Platform,
   Pressable,
   RefreshControl,
   StyleSheet,
@@ -15,10 +16,11 @@ import { syncAppData } from '../database/sync.service';
 import { SyncStatusCard } from '../components/SyncStatusCard';
 import { StockEmphasis } from '../components/StockEmphasis';
 import { useTopPopup } from '../components/TopPopupProvider';
-import { HeroHeader, KpiTile, MotionEntrance, ScreenShell } from '../components/ui-kit';
+import { HeroHeader, KpiTile, MotionEntrance, ScreenShell, AppButton } from '../components/ui-kit';
 import { tokens } from '../theme/tokens';
 import type { StockCurrentOverviewRow } from '../types/inventory';
 import { formatOriginalAndBaseQuantity } from '../utils/unit-conversion';
+import { generateInventoryReportPdf } from '../utils/inventory-report';
 
 const FILTER_ALL = '__all__';
 const FILTER_UNCATEGORIZED = '__uncategorized__';
@@ -127,6 +129,8 @@ export function StockScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const isFocused = useIsFocused();
   const { showTopPopup } = useTopPopup();
+
+  const [isGeneratingInventory, setIsGeneratingInventory] = useState(false);
 
   async function loadStock(syncFirst: boolean = false) {
     setIsLoading(true);
@@ -276,6 +280,39 @@ export function StockScreen() {
     setSearchQuery(value);
   }
 
+  async function handleGenerateInventory() {
+    if (isGeneratingInventory) {
+      return;
+    }
+
+    setIsGeneratingInventory(true);
+
+    try {
+      const result = await generateInventoryReportPdf();
+
+      showTopPopup({
+        type: 'success',
+        message:
+          Platform.OS === 'web'
+            ? 'Inventario enviado para visualizacao/impressao.'
+            : result.totalItems === 0
+              ? 'Inventario gerado sem itens cadastrados.'
+              : result.shared
+                ? 'Inventario gerado e pronto para compartilhar.'
+                : 'Inventario gerado com sucesso.',
+        durationMs: 3600,
+      });
+    } catch (error) {
+      showTopPopup({
+        type: 'error',
+        message: error instanceof Error ? error.message : 'Falha ao gerar inventario.',
+        durationMs: 4200,
+      });
+    } finally {
+      setIsGeneratingInventory(false);
+    }
+  }
+
   return (
     <ScreenShell>
       <FlatList
@@ -396,6 +433,16 @@ export function StockScreen() {
             </View>
 
             <Text style={styles.listTitle}>Itens no estoque ({filteredItems.length})</Text>
+
+            <View style={styles.reportButtonWrap}>
+              <AppButton
+                label={isGeneratingInventory ? 'Gerando inventario...' : 'Gerar Inventario'}
+                onPress={() => {
+                  void handleGenerateInventory();
+                }}
+                disabled={isGeneratingInventory}
+              />
+            </View>
           </View>
         }
         ListEmptyComponent={
@@ -493,6 +540,9 @@ const styles = StyleSheet.create({
   headerBlock: {
     gap: 12,
     marginBottom: 6,
+  },
+  reportButtonWrap: {
+    marginTop: 2,
   },
   filterCard: {
     backgroundColor: tokens.colors.surface,
