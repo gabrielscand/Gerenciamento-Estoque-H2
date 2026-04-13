@@ -246,7 +246,7 @@ export function Tabs({ currentUser, onLogout, onUsersChanged }: TabsProps) {
 
         {canItems ? (
           <Tab.Screen name="Items" options={{ title: 'Itens' }}>
-            {() => <ItemsScreen />}
+            {() => <ItemsScreen canImportData={currentUser.isAdmin} />}
           </Tab.Screen>
         ) : null}
 

@@ -19,6 +19,7 @@
     "expo": "~55.0.6",
     "expo-asset": "~55.0.10",
     "expo-crypto": "~55.0.10",
+    "expo-document-picker": "~55.0.13",
     "expo-linear-gradient": "~55.0.9",
     "expo-print": "~55.0.9",
     "expo-sharing": "~55.0.14",

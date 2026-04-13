@@ -15,6 +15,7 @@ import {
   View,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import * as DocumentPicker from 'expo-document-picker';
 import { getCategoryLabel } from '../constants/categories';
 import {
   archiveStockItem,
@@ -27,12 +28,23 @@ import {
   updateStockItem,
 } from '../database/items.repository';
 import { syncAppData } from '../database/sync.service';
+import {
+  commitImportItems,
+  previewImportItems,
+  type ImportFileInput,
+  validateImportFile,
+} from '../services/import-items.api';
 import { SyncStatusCard } from '../components/SyncStatusCard';
 import { StockEmphasis } from '../components/StockEmphasis';
 import { useTopPopup } from '../components/TopPopupProvider';
 import { HeroHeader, KpiTile, MotionEntrance, ScreenShell } from '../components/ui-kit';
 import { tokens } from '../theme/tokens';
-import type { CreateStockItemInput, StockItemListRow } from '../types/inventory';
+import type {
+  CreateStockItemInput,
+  ImportConflictAction,
+  ImportPreviewResponse,
+  StockItemListRow,
+} from '../types/inventory';
 import { formatOriginalAndBaseQuantity } from '../utils/unit-conversion';
 
 type FormState = {
@@ -44,11 +56,28 @@ type FormState = {
 
 type FormErrors = Partial<Record<keyof FormState | 'submit', string>>;
 
+type ItemsScreenProps = {
+  canImportData?: boolean;
+};
+
+type ImportDefaultsState = {
+  category: string | '';
+  minQuantity: string;
+};
+
+type SelectedImportFile = ImportFileInput & {
+  size?: number | null;
+};
+
 const initialFormState: FormState = {
   name: '',
   unit: '',
   category: '',
   minQuantity: '',
+};
+const initialImportDefaultsState: ImportDefaultsState = {
+  category: '',
+  minQuantity: '0',
 };
 const MAX_AUTOCOMPLETE_SUGGESTIONS = 6;
 
@@ -261,7 +290,7 @@ async function confirmDuplicateAction(message: string, confirmLabel: string): Pr
   });
 }
 
-export function ItemsScreen() {
+export function ItemsScreen({ canImportData = false }: ItemsScreenProps) {
   const isFocused = useIsFocused();
   const [items, setItems] = useState<StockItemListRow[]>([]);
   const [categoryOptions, setCategoryOptions] = useState<string[]>([]);
@@ -275,12 +304,21 @@ export function ItemsScreen() {
   const [isCreateUnitOpen, setIsCreateUnitOpen] = useState(false);
   const [isEditCategoryOpen, setIsEditCategoryOpen] = useState(false);
   const [isEditUnitOpen, setIsEditUnitOpen] = useState(false);
+  const [isImportCategoryOpen, setIsImportCategoryOpen] = useState(false);
   const [editingItemId, setEditingItemId] = useState<number | null>(null);
   const [isCreating, setIsCreating] = useState(false);
   const [isUpdating, setIsUpdating] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [archiveTarget, setArchiveTarget] = useState<StockItemListRow | null>(null);
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+  const [selectedImportFile, setSelectedImportFile] = useState<SelectedImportFile | null>(null);
+  const [importDefaults, setImportDefaults] = useState<ImportDefaultsState>(initialImportDefaultsState);
+  const [importPreview, setImportPreview] = useState<ImportPreviewResponse | null>(null);
+  const [importConflictActions, setImportConflictActions] = useState<Record<string, ImportConflictAction>>({});
+  const [importError, setImportError] = useState('');
+  const [isRunningImportPreview, setIsRunningImportPreview] = useState(false);
+  const [isRunningImportCommit, setIsRunningImportCommit] = useState(false);
   const { showTopPopup } = useTopPopup();
 
   async function loadCatalogOptions() {
@@ -321,6 +359,179 @@ export function ItemsScreen() {
     }
   }
 
+  function resetImportState() {
+    setSelectedImportFile(null);
+    setImportPreview(null);
+    setImportConflictActions({});
+    setIsImportCategoryOpen(false);
+    setImportDefaults({
+      category: categoryOptions[0] ?? '',
+      minQuantity: '0',
+    });
+    setImportError('');
+    setIsRunningImportPreview(false);
+    setIsRunningImportCommit(false);
+  }
+
+  function openImportModal() {
+    setIsCreateCategoryOpen(false);
+    setIsCreateUnitOpen(false);
+    setIsEditCategoryOpen(false);
+    setIsEditUnitOpen(false);
+    resetImportState();
+    setIsImportModalOpen(true);
+  }
+
+  function closeImportModal() {
+    if (isRunningImportPreview || isRunningImportCommit) {
+      return;
+    }
+
+    setIsImportModalOpen(false);
+  }
+
+  function setImportDefaultField<K extends keyof ImportDefaultsState>(
+    key: K,
+    value: ImportDefaultsState[K],
+  ) {
+    setImportDefaults((prev) => ({ ...prev, [key]: value }));
+    setImportError('');
+  }
+
+  async function handlePickImportFile() {
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        multiple: false,
+        copyToCacheDirectory: true,
+        type: [
+          'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+          'application/octet-stream',
+          '.xlsx',
+        ],
+      });
+
+      if (result.canceled || !result.assets || result.assets.length === 0) {
+        return;
+      }
+
+      const asset = result.assets[0];
+      const pickedFile: SelectedImportFile = {
+        uri: asset.uri,
+        name: asset.name ?? 'importacao.xlsx',
+        mimeType: asset.mimeType ?? null,
+        size: asset.size ?? null,
+      };
+
+      const fileValidationError = validateImportFile(pickedFile);
+
+      if (fileValidationError) {
+        setImportError(fileValidationError);
+        return;
+      }
+
+      setSelectedImportFile(pickedFile);
+      setImportPreview(null);
+      setImportConflictActions({});
+      setImportError('');
+    } catch (error) {
+      setImportError(error instanceof Error ? error.message : 'Falha ao selecionar o arquivo.');
+    }
+  }
+
+  async function handleImportPreview() {
+    if (!selectedImportFile) {
+      setImportError('Selecione um arquivo .xlsx para continuar.');
+      return;
+    }
+
+    if (!importDefaults.category) {
+      setImportError('Selecione a categoria padrao para campos ausentes.');
+      return;
+    }
+
+    const parsedDefaultMin = parseDecimalInput(importDefaults.minQuantity);
+
+    if (parsedDefaultMin === null || parsedDefaultMin < 0) {
+      setImportError('Informe uma quantidade minima padrao valida.');
+      return;
+    }
+
+    setIsRunningImportPreview(true);
+    setImportError('');
+    setImportPreview(null);
+    setImportConflictActions({});
+
+    try {
+      const previewResult = await previewImportItems(selectedImportFile, {
+        defaultCategory: importDefaults.category,
+        defaultMinQuantity: parsedDefaultMin,
+      });
+      setImportPreview(previewResult);
+      setImportConflictActions(
+        previewResult.conflicts.reduce<Record<string, ImportConflictAction>>((acc, conflictRow) => {
+          acc[conflictRow.rowKey] = 'ignore';
+          return acc;
+        }, {}),
+      );
+    } catch (error) {
+      setImportError(error instanceof Error ? error.message : 'Falha no preview da importacao.');
+    } finally {
+      setIsRunningImportPreview(false);
+    }
+  }
+
+  function setConflictAction(rowKey: string, action: ImportConflictAction) {
+    setImportConflictActions((prev) => ({
+      ...prev,
+      [rowKey]: action,
+    }));
+  }
+
+  async function handleImportCommit() {
+    if (!importPreview) {
+      setImportError('Execute o preview antes de confirmar a importacao.');
+      return;
+    }
+
+    setIsRunningImportCommit(true);
+    setImportError('');
+
+    try {
+      const conflictDecisions = importPreview.conflicts.map((conflictRow) => ({
+        rowKey: conflictRow.rowKey,
+        action: importConflictActions[conflictRow.rowKey] ?? 'ignore',
+      }));
+
+      const commitResult = await commitImportItems({
+        importId: importPreview.importId,
+        conflictDecisions,
+      });
+
+      const syncOk = await syncAppData();
+
+      if (!syncOk) {
+        throw new Error('Importacao aplicada, mas nao foi possivel sincronizar agora. Tente sincronizar novamente.');
+      }
+
+      await loadItems();
+      await loadCatalogOptions();
+      setIsImportModalOpen(false);
+      resetImportState();
+      showTopPopup({
+        type: commitResult.summaryCommit.errors > 0 ? 'error' : 'success',
+        message:
+          commitResult.summaryCommit.errors > 0
+            ? `Importacao concluida com ${commitResult.summaryCommit.errors} erro(s).`
+            : `Importacao concluida. ${commitResult.summaryCommit.imported} importado(s), ${commitResult.summaryCommit.updated} atualizado(s), ${commitResult.summaryCommit.ignored} ignorado(s).`,
+        durationMs: 4200,
+      });
+    } catch (error) {
+      setImportError(error instanceof Error ? error.message : 'Falha ao confirmar importacao.');
+    } finally {
+      setIsRunningImportCommit(false);
+    }
+  }
+
   useEffect(() => {
     void loadItems();
     void loadCatalogOptions();
@@ -338,6 +549,19 @@ export function ItemsScreen() {
 
     void loadCatalogOptions();
   }, [isFocused]);
+
+  useEffect(() => {
+    if (!isImportModalOpen) {
+      return;
+    }
+
+    if (!importDefaults.category && categoryOptions.length > 0) {
+      setImportDefaults((prev) => ({
+        ...prev,
+        category: categoryOptions[0],
+      }));
+    }
+  }, [categoryOptions, importDefaults.category, isImportModalOpen]);
 
   function setCreateField<K extends keyof FormState>(key: K, value: FormState[K]) {
     setCreateForm((prev) => ({ ...prev, [key]: value }));
@@ -693,6 +917,18 @@ export function ItemsScreen() {
               </Pressable>
             </View>
 
+            {canImportData ? (
+              <View style={styles.importCard}>
+                <Text style={styles.importCardTitle}>Importacao em lote (.xlsx)</Text>
+                <Text style={styles.importCardDescription}>
+                  Envie uma planilha para criar/atualizar itens com preview e validacao antes de confirmar.
+                </Text>
+                <Pressable style={styles.importButton} onPress={openImportModal}>
+                  <Text style={styles.importButtonText}>Importar Dados</Text>
+                </Pressable>
+              </View>
+            ) : null}
+
             <View style={styles.searchCard}>
               <View style={styles.searchHeader}>
                 <Text style={styles.searchLabel}>Buscar item</Text>
@@ -926,6 +1162,199 @@ export function ItemsScreen() {
       <Modal
         animationType="fade"
         transparent
+        visible={isImportModalOpen}
+        onRequestClose={closeImportModal}
+      >
+        <View style={styles.modalBackdrop}>
+          <View style={styles.importModalCard}>
+            <View style={styles.importModalHeader}>
+              <Text style={styles.modalTitle}>Importar Dados (.xlsx)</Text>
+              <Pressable onPress={closeImportModal} disabled={isRunningImportPreview || isRunningImportCommit}>
+                <Ionicons name="close" size={20} color={tokens.colors.accentDeep} />
+              </Pressable>
+            </View>
+
+            <Text style={styles.modalDescription}>
+              Fase 1: enviar arquivo para preview. Fase 2: revisar conflitos e confirmar importacao.
+            </Text>
+
+            <View style={styles.fieldGroup}>
+              <Text style={styles.label}>Categoria padrao (quando ausente na planilha)</Text>
+              <CatalogSelect
+                value={importDefaults.category}
+                options={categoryOptions}
+                onChange={(value) => setImportDefaultField('category', value)}
+                isOpen={isImportCategoryOpen}
+                onToggle={() => {
+                  setIsImportCategoryOpen((prev) => !prev);
+                }}
+                onClose={() => setIsImportCategoryOpen(false)}
+                formatOptionLabel={getCategoryLabel}
+                placeholder="Selecione uma categoria"
+                disabled={isRunningImportPreview || isRunningImportCommit}
+                compact
+              />
+            </View>
+
+            <View style={styles.fieldGroup}>
+              <Text style={styles.label}>Quantidade minima padrao (quando ausente)</Text>
+              <TextInput
+                value={importDefaults.minQuantity}
+                onChangeText={(value) => setImportDefaultField('minQuantity', value)}
+                keyboardType="decimal-pad"
+                placeholder="0"
+                style={styles.input}
+                editable={!isRunningImportPreview && !isRunningImportCommit}
+              />
+            </View>
+
+            <View style={styles.importFileActions}>
+              <Pressable
+                style={styles.modalSecondaryButton}
+                onPress={() => {
+                  void handlePickImportFile();
+                }}
+                disabled={isRunningImportPreview || isRunningImportCommit}
+              >
+                <Text style={styles.modalSecondaryButtonText}>Selecionar .xlsx</Text>
+              </Pressable>
+              <Pressable
+                style={[styles.submitButton, styles.importPreviewButton, isRunningImportPreview ? styles.submitButtonDisabled : undefined]}
+                onPress={() => {
+                  void handleImportPreview();
+                }}
+                disabled={isRunningImportPreview || isRunningImportCommit}
+              >
+                {isRunningImportPreview ? (
+                  <ActivityIndicator color="#FFFFFF" />
+                ) : (
+                  <Text style={styles.submitButtonText}>Preview</Text>
+                )}
+              </Pressable>
+            </View>
+
+            {selectedImportFile ? (
+              <Text style={styles.importFileInfo}>
+                Arquivo: {selectedImportFile.name}
+                {selectedImportFile.size ? ` (${(selectedImportFile.size / 1024).toFixed(1)} KB)` : ''}
+              </Text>
+            ) : null}
+
+            {importError ? <Text style={styles.errorText}>{importError}</Text> : null}
+
+            {importPreview ? (
+              <View style={styles.importPreviewPanel}>
+                <Text style={styles.importPreviewTitle}>Resumo do preview</Text>
+                <Text style={styles.importPreviewMeta}>
+                  Linhas: {importPreview.summaryPreview.totalRows} | Validas: {importPreview.summaryPreview.validRows} | Novos: {importPreview.summaryPreview.newItems}
+                </Text>
+                <Text style={styles.importPreviewMeta}>
+                  Conflitos: {importPreview.summaryPreview.conflicts} | Invalidas: {importPreview.summaryPreview.invalidRows} | Vazias ignoradas: {importPreview.summaryPreview.ignoredEmptyRows}
+                </Text>
+
+                {importPreview.invalidRows.length > 0 ? (
+                  <View style={styles.importInvalidList}>
+                    <Text style={styles.importSectionTitle}>Linhas invalidas</Text>
+                    {importPreview.invalidRows.slice(0, 6).map((invalidRow) => (
+                      <Text key={`invalid-${invalidRow.rowNumber}-${invalidRow.reason}`} style={styles.importInvalidItem}>
+                        Linha {invalidRow.rowNumber}: {invalidRow.reason}
+                      </Text>
+                    ))}
+                  </View>
+                ) : null}
+
+                {importPreview.conflicts.length > 0 ? (
+                  <ScrollView style={styles.importConflictList} nestedScrollEnabled>
+                    <Text style={styles.importSectionTitle}>Conflitos por item</Text>
+                    {importPreview.conflicts.map((conflictRow) => {
+                      const selectedAction = importConflictActions[conflictRow.rowKey] ?? 'ignore';
+
+                      return (
+                        <View key={conflictRow.rowKey} style={styles.importConflictCard}>
+                          <Text style={styles.importConflictTitle}>
+                            Linha {conflictRow.rowNumber}: {conflictRow.name}
+                          </Text>
+                          <Text style={styles.importConflictText}>
+                            Atual: {conflictRow.existingItemName} ({conflictRow.existingUnit}, min {formatQuantity(conflictRow.existingMinQuantity)})
+                          </Text>
+                          <Text style={styles.importConflictText}>
+                            Planilha: {conflictRow.unit}, min {formatQuantity(conflictRow.minQuantity)}
+                          </Text>
+                          <View style={styles.importConflictActions}>
+                            <Pressable
+                              style={[
+                                styles.importConflictActionButton,
+                                selectedAction === 'ignore' ? styles.importConflictActionButtonActive : undefined,
+                              ]}
+                              onPress={() => setConflictAction(conflictRow.rowKey, 'ignore')}
+                            >
+                              <Text
+                                style={[
+                                  styles.importConflictActionText,
+                                  selectedAction === 'ignore' ? styles.importConflictActionTextActive : undefined,
+                                ]}
+                              >
+                                Ignorar
+                              </Text>
+                            </Pressable>
+                            <Pressable
+                              style={[
+                                styles.importConflictActionButton,
+                                selectedAction === 'update' ? styles.importConflictActionButtonActive : undefined,
+                              ]}
+                              onPress={() => setConflictAction(conflictRow.rowKey, 'update')}
+                            >
+                              <Text
+                                style={[
+                                  styles.importConflictActionText,
+                                  selectedAction === 'update' ? styles.importConflictActionTextActive : undefined,
+                                ]}
+                              >
+                                Atualizar
+                              </Text>
+                            </Pressable>
+                          </View>
+                        </View>
+                      );
+                    })}
+                  </ScrollView>
+                ) : null}
+              </View>
+            ) : null}
+
+            <View style={styles.modalActions}>
+              <Pressable
+                style={styles.modalSecondaryButton}
+                onPress={closeImportModal}
+                disabled={isRunningImportPreview || isRunningImportCommit}
+              >
+                <Text style={styles.modalSecondaryButtonText}>Fechar</Text>
+              </Pressable>
+              <Pressable
+                style={[
+                  styles.submitButton,
+                  styles.importCommitButton,
+                  !importPreview || isRunningImportCommit ? styles.submitButtonDisabled : undefined,
+                ]}
+                onPress={() => {
+                  void handleImportCommit();
+                }}
+                disabled={!importPreview || isRunningImportPreview || isRunningImportCommit}
+              >
+                {isRunningImportCommit ? (
+                  <ActivityIndicator color="#FFFFFF" />
+                ) : (
+                  <Text style={styles.submitButtonText}>Confirmar importacao</Text>
+                )}
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        animationType="fade"
+        transparent
         visible={archiveTarget !== null}
         onRequestClose={closeArchiveModal}
       >
@@ -1019,6 +1448,38 @@ const styles = StyleSheet.create({
     padding: 16,
     gap: 10,
     ...tokens.shadow.card,
+  },
+  importCard: {
+    backgroundColor: tokens.colors.surface,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: tokens.colors.borderSoft,
+    padding: 14,
+    gap: 8,
+    ...tokens.shadow.card,
+  },
+  importCardTitle: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: '#3A0D49',
+  },
+  importCardDescription: {
+    fontSize: 13,
+    lineHeight: 18,
+    color: '#5F1175',
+  },
+  importButton: {
+    marginTop: 2,
+    borderRadius: 12,
+    minHeight: 42,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: tokens.colors.accent,
+  },
+  importButtonText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '700',
   },
   formTitle: {
     fontSize: 18,
@@ -1351,6 +1812,122 @@ const styles = StyleSheet.create({
     padding: 16,
     gap: 12,
     ...tokens.shadow.card,
+  },
+  importModalCard: {
+    backgroundColor: tokens.colors.surface,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: tokens.colors.borderSoft,
+    padding: 16,
+    gap: 10,
+    ...tokens.shadow.card,
+    maxHeight: '92%',
+  },
+  importModalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
+  },
+  importFileActions: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  importPreviewButton: {
+    flex: 1,
+    marginTop: 0,
+    minHeight: 44,
+    borderRadius: 12,
+  },
+  importCommitButton: {
+    flex: 1,
+    marginTop: 0,
+    minHeight: 44,
+    borderRadius: 12,
+  },
+  importFileInfo: {
+    fontSize: 12,
+    color: '#5F1175',
+    fontWeight: '600',
+  },
+  importPreviewPanel: {
+    borderWidth: 1,
+    borderColor: '#D8C3EA',
+    borderRadius: 12,
+    backgroundColor: '#F8F1FD',
+    padding: 10,
+    gap: 8,
+  },
+  importPreviewTitle: {
+    color: '#3A0D49',
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  importPreviewMeta: {
+    color: '#5F1175',
+    fontSize: 12,
+    lineHeight: 17,
+  },
+  importSectionTitle: {
+    color: '#3A0D49',
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  importInvalidList: {
+    gap: 4,
+  },
+  importInvalidItem: {
+    color: '#7F1D1D',
+    fontSize: 12,
+  },
+  importConflictList: {
+    maxHeight: 220,
+  },
+  importConflictCard: {
+    borderWidth: 1,
+    borderColor: '#D8C3EA',
+    borderRadius: 10,
+    padding: 8,
+    gap: 5,
+    backgroundColor: '#FFFFFF',
+    marginTop: 8,
+  },
+  importConflictTitle: {
+    color: '#2A0834',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  importConflictText: {
+    color: '#5F1175',
+    fontSize: 12,
+    lineHeight: 16,
+  },
+  importConflictActions: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 2,
+  },
+  importConflictActionButton: {
+    flex: 1,
+    borderRadius: 9,
+    borderWidth: 1,
+    borderColor: '#B690D2',
+    backgroundColor: '#F5EEFB',
+    minHeight: 34,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  importConflictActionButtonActive: {
+    backgroundColor: '#77158E',
+    borderColor: '#5F1175',
+  },
+  importConflictActionText: {
+    color: '#5F1175',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  importConflictActionTextActive: {
+    color: '#FFFFFF',
   },
   modalTitle: {
     color: '#2A0834',

@@ -58,6 +58,7 @@ Depois edite o `.env` e preencha com os dados do seu projeto Supabase:
 ```env
 EXPO_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
 EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY=your-supabase-publishable-key
+EXPO_PUBLIC_IMPORT_API_URL=http://localhost:3001
 ```
 
 Observacoes importantes:
@@ -83,6 +84,18 @@ Se voce ja vai usar o mesmo projeto Supabase que o restante do time, nao precisa
 Observacao:
 
 - O setup atual foi pensado como prototipo funcional de dono unico. Hoje o schema deixa o RLS desabilitado para simplificar. Se esse projeto for publicado para varios usuarios, o proximo passo recomendado e adicionar autenticacao e politicas de acesso no Supabase.
+
+## API de Importacao (.xlsx)
+
+A importacao em lote da aba `Itens` usa um backend Node separado em `backend/`.
+
+1. Entre em `backend/`.
+2. Rode `npm install`.
+3. Copie `backend/.env.example` para `backend/.env` e preencha:
+   - `SUPABASE_URL`
+   - `SUPABASE_SERVICE_ROLE_KEY`
+4. Rode `npm run start` dentro de `backend/`.
+5. No app, mantenha `EXPO_PUBLIC_IMPORT_API_URL` apontando para essa API (padrao: `http://localhost:3001`).
 
 ## Como abrir pelo terminal
 
@@ -178,6 +191,7 @@ Antes do build, confirme se o arquivo `.env` tem as credenciais do Supabase:
 ```env
 EXPO_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
 EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY=your-supabase-publishable-key
+EXPO_PUBLIC_IMPORT_API_URL=http://localhost:3001
 ```
 
 ### 3. Gerar o APK

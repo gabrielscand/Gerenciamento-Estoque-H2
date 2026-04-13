@@ -70,6 +70,72 @@ export interface UpdateStockItemInput {
   category: string;
 }
 
+export type ImportConflictAction = 'ignore' | 'update';
+
+export interface ImportPreviewSummary {
+  totalRows: number;
+  validRows: number;
+  ignoredEmptyRows: number;
+  newItems: number;
+  conflicts: number;
+  invalidRows: number;
+}
+
+export interface ImportConflictRow {
+  rowKey: string;
+  rowNumber: number;
+  name: string;
+  unit: string;
+  category: string;
+  minQuantity: number;
+  existingItemId: string;
+  existingItemName: string;
+  existingUnit: string;
+  existingCategory: string | null;
+  existingMinQuantity: number;
+}
+
+export interface ImportInvalidRow {
+  rowNumber: number;
+  reason: string;
+}
+
+export interface ImportPreviewResponse {
+  importId: string;
+  summaryPreview: ImportPreviewSummary;
+  conflicts: ImportConflictRow[];
+  invalidRows: ImportInvalidRow[];
+}
+
+export interface ImportConflictDecision {
+  rowKey: string;
+  action: ImportConflictAction;
+}
+
+export interface ImportCommitRequest {
+  importId: string;
+  conflictDecisions: ImportConflictDecision[];
+}
+
+export interface ImportCommitSummary {
+  imported: number;
+  updated: number;
+  ignored: number;
+  errors: number;
+}
+
+export interface ImportCommitErrorDetail {
+  rowKey: string;
+  rowNumber: number;
+  name: string;
+  reason: string;
+}
+
+export interface ImportCommitResponse {
+  summaryCommit: ImportCommitSummary;
+  errorDetails: ImportCommitErrorDetail[];
+}
+
 export interface StockItemListRow {
   id: number;
   name: string;
