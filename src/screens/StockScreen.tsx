@@ -27,10 +27,11 @@ const FILTER_UNCATEGORIZED = '__uncategorized__';
 const MAX_AUTOCOMPLETE_SUGGESTIONS = 6;
 
 type CategoryFilterValue = typeof FILTER_ALL | typeof FILTER_UNCATEGORIZED | string;
-type StockStatusFilter = 'all' | 'needs_purchase' | 'ok' | 'no_stock';
+type StockStatusFilter = 'all' | 'with_stock' | 'needs_purchase' | 'ok' | 'no_stock';
 
 const STATUS_FILTER_OPTIONS: Array<{ value: StockStatusFilter; label: string }> = [
   { value: 'all', label: 'Todos' },
+  { value: 'with_stock', label: 'Com estoque' },
   { value: 'needs_purchase', label: 'Precisa comprar' },
   { value: 'ok', label: 'OK' },
   { value: 'no_stock', label: 'Sem estoque' },
@@ -206,6 +207,10 @@ export function StockScreen() {
 
       if (statusFilter === 'no_stock') {
         return item.currentStockQuantity === null;
+      }
+
+      if (statusFilter === 'with_stock') {
+        return item.currentStockQuantity !== null;
       }
 
       if (statusFilter === 'needs_purchase') {
