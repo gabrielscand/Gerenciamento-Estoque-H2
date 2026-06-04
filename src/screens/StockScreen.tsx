@@ -16,23 +16,29 @@ import { syncAppData } from '../database/sync.service';
 import { SyncStatusCard } from '../components/SyncStatusCard';
 import { StockEmphasis } from '../components/StockEmphasis';
 import { useTopPopup } from '../components/TopPopupProvider';
+import { useNotifications } from '../components/NotificationsProvider';
 import { HeroHeader, KpiTile, MotionEntrance, ScreenShell, AppButton } from '../components/ui-kit';
 import { tokens } from '../theme/tokens';
 import type { StockCurrentOverviewRow } from '../types/inventory';
 import { formatOriginalAndBaseQuantity } from '../utils/unit-conversion';
 import { generateInventoryReportPdf } from '../utils/inventory-report';
+import {
+  gerarMensagemAlertaEstoqueAgrupada,
+  verificarProximidadeEstoqueMinimo,
+} from '../utils/stock-alerts';
 
 const FILTER_ALL = '__all__';
 const FILTER_UNCATEGORIZED = '__uncategorized__';
 const MAX_AUTOCOMPLETE_SUGGESTIONS = 6;
 
 type CategoryFilterValue = typeof FILTER_ALL | typeof FILTER_UNCATEGORIZED | string;
-type StockStatusFilter = 'all' | 'with_stock' | 'needs_purchase' | 'ok' | 'no_stock';
+type StockStatusFilter = 'all' | 'with_stock' | 'needs_purchase' | 'near_min' | 'ok' | 'no_stock';
 
 const STATUS_FILTER_OPTIONS: Array<{ value: StockStatusFilter; label: string }> = [
   { value: 'all', label: 'Todos' },
   { value: 'with_stock', label: 'Com estoque' },
   { value: 'needs_purchase', label: 'Precisa comprar' },
+  { value: 'near_min', label: 'Perto do mínimo' },
   { value: 'ok', label: 'OK' },
   { value: 'no_stock', label: 'Sem estoque' },
 ];
@@ -130,8 +136,33 @@ export function StockScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const isFocused = useIsFocused();
   const { showTopPopup } = useTopPopup();
+  const { syncStockNotifications } = useNotifications();
 
   const [isGeneratingInventory, setIsGeneratingInventory] = useState(false);
+
+  function notifyProximityAlerts(data: StockCurrentOverviewRow[]) {
+    // O contexto cuida da deduplicação, do auto-remover (reabastecidos) e do
+    // contador do sino. Aqui só disparamos o pop-up para as notificações novas.
+    const novas = syncStockNotifications(data);
+
+    if (novas.length === 0) {
+      return;
+    }
+
+    showTopPopup({
+      type: 'warning',
+      title: 'Atenção ao estoque',
+      message: gerarMensagemAlertaEstoqueAgrupada(
+        novas.map((notification) => ({
+          id: notification.itemId,
+          name: notification.name,
+          currentStockQuantity: notification.currentStockQuantity,
+          minQuantity: notification.minQuantity,
+        })),
+      ),
+      durationMs: 7000,
+    });
+  }
 
   async function loadStock(syncFirst: boolean = false) {
     setIsLoading(true);
@@ -143,6 +174,7 @@ export function StockScreen() {
 
       const data = await listStockCurrentOverview();
       setItems(data);
+      notifyProximityAlerts(data);
     } catch (error) {
       showTopPopup({
         type: 'error',
@@ -217,6 +249,10 @@ export function StockScreen() {
         return item.needsPurchase;
       }
 
+      if (statusFilter === 'near_min') {
+        return verificarProximidadeEstoqueMinimo(item);
+      }
+
       return item.currentStockQuantity !== null && !item.needsPurchase;
     });
   }, [categoryFilteredItems, statusFilter]);
@@ -260,6 +296,7 @@ export function StockScreen() {
   const summary = useMemo(() => {
     let initializedItems = 0;
     let needPurchaseItems = 0;
+    let nearMinItems = 0;
     let totalMissingQuantityInBaseUnits = 0;
 
     for (const item of filteredItems) {
@@ -270,6 +307,8 @@ export function StockScreen() {
       if (item.needsPurchase) {
         needPurchaseItems += 1;
         totalMissingQuantityInBaseUnits += item.missingQuantityInBaseUnits;
+      } else if (verificarProximidadeEstoqueMinimo(item)) {
+        nearMinItems += 1;
       }
     }
 
@@ -277,6 +316,7 @@ export function StockScreen() {
       totalItems: filteredItems.length,
       initializedItems,
       needPurchaseItems,
+      nearMinItems,
       totalMissingQuantityInBaseUnits,
     };
   }, [filteredItems]);
@@ -345,6 +385,7 @@ export function StockScreen() {
                   <KpiTile label="Itens" value={String(summary.totalItems)} />
                   <KpiTile label="Com saldo" value={String(summary.initializedItems)} />
                   <KpiTile label="Comprar" value={String(summary.needPurchaseItems)} />
+                  <KpiTile label="Perto do min" value={String(summary.nearMinItems)} />
                   <KpiTile
                     label="Faltante (und)"
                     value={formatQuantity(summary.totalMissingQuantityInBaseUnits)}
@@ -461,6 +502,7 @@ export function StockScreen() {
         }
         renderItem={({ item }) => {
           const hasStock = item.currentStockQuantity !== null;
+          const isNearMin = !item.needsPurchase && verificarProximidadeEstoqueMinimo(item);
 
           return (
             <View style={styles.itemCard}>
@@ -473,11 +515,19 @@ export function StockScreen() {
                       ? styles.statusPending
                       : item.needsPurchase
                         ? styles.statusNeedPurchase
-                        : styles.statusOk,
+                        : isNearMin
+                          ? styles.statusNearMin
+                          : styles.statusOk,
                   ]}
                 >
                   <Text style={styles.statusText}>
-                    {!hasStock ? 'Sem estoque inicial' : item.needsPurchase ? 'Precisa comprar' : 'OK'}
+                    {!hasStock
+                      ? 'Sem estoque inicial'
+                      : item.needsPurchase
+                        ? 'Precisa comprar'
+                        : isNearMin
+                          ? 'Perto do mínimo'
+                          : 'OK'}
                   </Text>
                 </View>
               </View>
@@ -494,13 +544,15 @@ export function StockScreen() {
                       )
                     : '-'
                 }
-                tone={!hasStock ? 'empty' : item.needsPurchase ? 'warning' : 'normal'}
+                tone={!hasStock ? 'empty' : item.needsPurchase || isNearMin ? 'warning' : 'normal'}
                 helperText={
                   !hasStock
                     ? 'Sem estoque inicial'
                     : item.needsPurchase
                       ? 'No minimo ou abaixo do minimo'
-                      : undefined
+                      : isNearMin
+                        ? 'Perto do estoque minimo'
+                        : undefined
                 }
               />
               <Text style={styles.itemMeta}>Categoria: {item.category ? getCategoryLabel(item.category) : 'Sem categoria'}</Text>
@@ -750,6 +802,9 @@ const styles = StyleSheet.create({
   },
   statusNeedPurchase: {
     backgroundColor: '#FCE8E8',
+  },
+  statusNearMin: {
+    backgroundColor: '#FCF3DC',
   },
   statusOk: {
     backgroundColor: '#E8F6EE',

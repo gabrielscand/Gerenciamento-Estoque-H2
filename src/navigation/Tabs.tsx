@@ -15,6 +15,7 @@ import { EntryScreen, ExitScreen } from '../screens/MovementScreen';
 import { PurchaseListScreen } from '../screens/PurchaseListScreen';
 import { StockScreen } from '../screens/StockScreen';
 import { MotionEntrance, ScreenShell, SectionSurface } from '../components/ui-kit';
+import { NotificationBell } from '../components/NotificationBell';
 import { tokens } from '../theme/tokens';
 
 type RootTabParamList = {
@@ -132,6 +133,7 @@ export function Tabs({ currentUser, onLogout, onUsersChanged }: TabsProps) {
                   <Text style={styles.historyButtonText}>Histórico</Text>
                 </Pressable>
               ) : null}
+              <NotificationBell />
               <View style={styles.currentUserBadge}>
                 <Ionicons name="person-circle-outline" size={14} color={tokens.colors.accentStrong} />
                 <Text style={styles.currentUserText} numberOfLines={1} ellipsizeMode="tail">

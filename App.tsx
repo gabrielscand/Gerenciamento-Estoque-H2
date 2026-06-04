@@ -11,6 +11,7 @@ import { refreshSyncStateFromDatabase, syncAppData } from './src/database/sync.s
 import { Tabs } from './src/navigation/Tabs';
 import { LoginScreen } from './src/screens/LoginScreen';
 import { TopPopupProvider } from './src/components/TopPopupProvider';
+import { NotificationsProvider } from './src/components/NotificationsProvider';
 import { MotionEntrance, ScreenShell, SectionSurface } from './src/components/ui-kit';
 import { tokens } from './src/theme/tokens';
 import type { AppUser } from './src/types/inventory';
@@ -147,12 +148,14 @@ export default function App() {
 
   return (
     <TopPopupProvider>
-      <StatusBar style="dark" />
-      <Tabs
-        currentUser={sessionUser}
-        onLogout={handleLogout}
-        onUsersChanged={refreshSessionUser}
-      />
+      <NotificationsProvider>
+        <StatusBar style="dark" />
+        <Tabs
+          currentUser={sessionUser}
+          onLogout={handleLogout}
+          onUsersChanged={refreshSessionUser}
+        />
+      </NotificationsProvider>
     </TopPopupProvider>
   );
 }
