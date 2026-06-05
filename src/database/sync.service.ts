@@ -976,7 +976,7 @@ async function mergeRemoteDailyEntries(db: SQLiteDatabase, remoteEntries: Remote
 async function mergeRemoteAppUsers(db: SQLiteDatabase, remoteUsers: RemoteAppUser[]): Promise<void> {
   await db.withTransactionAsync(async () => {
     for (const remoteUser of remoteUsers) {
-      const local = await db.getFirstAsync<LocalSyncLookupRow>(
+      let local = await db.getFirstAsync<LocalSyncLookupRow>(
         `
           SELECT id, updated_at, sync_status
           FROM app_users
@@ -985,6 +985,33 @@ async function mergeRemoteAppUsers(db: SQLiteDatabase, remoteUsers: RemoteAppUse
         `,
         remoteUser.id,
       );
+
+      // Fallback: se nao encontrou pelo remote_id, busca pelo username_normalized.
+      // Isso resolve o caso em que o banco local criou o usuario padrao (ex.: admh2)
+      // com um UUID diferente do que ja existe no Supabase. Adotamos o UUID remoto
+      // atualizando o remote_id local, o que impede o 409 no push subsequente.
+      if (!local) {
+        const localByUsername = await db.getFirstAsync<LocalSyncLookupRow & { localRemoteId: string }>(
+          `
+            SELECT id, updated_at, sync_status, remote_id AS localRemoteId
+            FROM app_users
+            WHERE username_normalized = ?
+              AND is_deleted = 0
+            LIMIT 1;
+          `,
+          remoteUser.username_normalized,
+        );
+
+        if (localByUsername) {
+          // Adota o UUID do Supabase para evitar conflito de chave duplicada no push.
+          await db.runAsync(
+            `UPDATE app_users SET remote_id = ?, sync_status = 'synced' WHERE id = ?;`,
+            remoteUser.id,
+            localByUsername.id,
+          );
+          local = { ...localByUsername, sync_status: 'synced' };
+        }
+      }
 
       if (!local) {
         await db.runAsync(
@@ -1265,16 +1292,19 @@ async function performSync(): Promise<boolean> {
   });
 
   try {
+    // Puxa usuarios do Supabase PRIMEIRO para resolver conflitos de username
+    // (ex.: admh2 local com UUID diferente do admh2 remoto) antes de tentar
+    // enviar registros pendentes, evitando erro 409 de chave duplicada.
+    const remoteUsers = await fetchRemote<RemoteAppUser[]>(
+      '/app_users?select=id,username,username_normalized,function_name,password_hash,password_salt,is_admin,can_access_dashboard,can_access_stock,can_access_items,can_access_entry,can_access_exit,can_access_history,is_deleted,deleted_at,created_at,updated_at&order=updated_at.asc',
+    );
+    await mergeRemoteAppUsers(db, remoteUsers);
+
     await pushPendingAppUsers(db);
     await pushPendingItemCategories(db);
     await pushPendingMeasurementUnits(db);
     await pushPendingStockItems(db);
     await pushPendingDailyEntries(db);
-
-    const remoteUsers = await fetchRemote<RemoteAppUser[]>(
-      '/app_users?select=id,username,username_normalized,function_name,password_hash,password_salt,is_admin,can_access_dashboard,can_access_stock,can_access_items,can_access_entry,can_access_exit,can_access_history,is_deleted,deleted_at,created_at,updated_at&order=updated_at.asc',
-    );
-    await mergeRemoteAppUsers(db, remoteUsers);
 
     const remoteItems = await fetchRemote<RemoteStockItem[]>(
       '/stock_items?select=id,name,unit,min_quantity,current_stock_quantity,category,is_deleted,deleted_at,created_at,updated_at&order=updated_at.asc',
