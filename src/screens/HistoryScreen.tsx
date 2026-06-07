@@ -871,14 +871,26 @@ export function HistoryScreen({ canManageHistoryActions = false }: HistoryScreen
                             </View>
                           ) : null}
                         </View>
-                        <Text style={styles.entryMeta}>
-                          {getMovementTypeLabel(entry.movementType)}:{' '}
-                          {formatOriginalAndBaseQuantity(
+                        <StockEmphasis
+                          label={getMovementTypeLabel(entry.movementType)}
+                          value={formatOriginalAndBaseQuantity(
                             entry.quantity,
                             entry.unit,
                             entry.conversionFactor,
                             formatQuantity,
-                          )}{' '}
+                          )}
+                          tone="normal"
+                        />
+                        <Text style={styles.entryMeta}>
+                          Saldo apos:{' '}
+                          {entry.stockAfterQuantity === null
+                            ? '-'
+                            : formatOriginalAndBaseQuantity(
+                                entry.stockAfterQuantity,
+                                entry.unit,
+                                entry.conversionFactor,
+                                formatQuantity,
+                              )}{' '}
                           | Min{' '}
                           {formatOriginalAndBaseQuantity(
                             entry.minQuantity,
@@ -890,27 +902,6 @@ export function HistoryScreen({ canManageHistoryActions = false }: HistoryScreen
                         <Text style={styles.entryMeta}>
                           Feito por: {entry.createdByUsername?.trim() ? entry.createdByUsername : 'Nao informado'}
                         </Text>
-                        <StockEmphasis
-                          label="Saldo apos"
-                          value={
-                            entry.stockAfterQuantity === null
-                              ? '-'
-                              : formatOriginalAndBaseQuantity(
-                                  entry.stockAfterQuantity,
-                                  entry.unit,
-                                  entry.conversionFactor,
-                                  formatQuantity,
-                                )
-                          }
-                          tone={
-                            entry.stockAfterQuantity === null
-                              ? 'empty'
-                              : entry.needsPurchase
-                                ? 'warning'
-                                : 'normal'
-                          }
-                          helperText={entry.stockAfterQuantity === null ? 'Sem saldo registrado' : undefined}
-                        />
                         {canManageHistoryActions ? (
                           <View style={styles.entryActions}>
                             <Pressable
@@ -1120,14 +1111,26 @@ export function HistoryScreen({ canManageHistoryActions = false }: HistoryScreen
                                       </View>
                                     ) : null}
                                   </View>
-                                  <Text style={styles.entryMeta}>
-                                    {getDailyMovementFilterLabel(resolveMovementFilter(entry.movementType))}:{' '}
-                                    {formatOriginalAndBaseQuantity(
+                                  <StockEmphasis
+                                    label={getDailyMovementFilterLabel(resolveMovementFilter(entry.movementType))}
+                                    value={formatOriginalAndBaseQuantity(
                                       entry.quantity,
                                       entry.unit,
                                       entry.conversionFactor,
                                       formatQuantity,
-                                    )}{' '}
+                                    )}
+                                    tone="normal"
+                                  />
+                                  <Text style={styles.entryMeta}>
+                                    Saldo apos:{' '}
+                                    {entry.stockAfterQuantity === null
+                                      ? '-'
+                                      : formatOriginalAndBaseQuantity(
+                                          entry.stockAfterQuantity,
+                                          entry.unit,
+                                          entry.conversionFactor,
+                                          formatQuantity,
+                                        )}{' '}
                                     | Min{' '}
                                     {formatOriginalAndBaseQuantity(
                                       entry.minQuantity,
@@ -1139,27 +1142,6 @@ export function HistoryScreen({ canManageHistoryActions = false }: HistoryScreen
                                   <Text style={styles.entryMeta}>
                                     Feito por: {entry.createdByUsername?.trim() ? entry.createdByUsername : 'Nao informado'}
                                   </Text>
-                                  <StockEmphasis
-                                    label="Saldo apos"
-                                    value={
-                                      entry.stockAfterQuantity === null
-                                        ? '-'
-                                        : formatOriginalAndBaseQuantity(
-                                            entry.stockAfterQuantity,
-                                            entry.unit,
-                                            entry.conversionFactor,
-                                            formatQuantity,
-                                          )
-                                    }
-                                    tone={
-                                      entry.stockAfterQuantity === null
-                                        ? 'empty'
-                                        : entry.needsPurchase
-                                          ? 'warning'
-                                          : 'normal'
-                                    }
-                                    helperText={entry.stockAfterQuantity === null ? 'Sem saldo registrado' : undefined}
-                                  />
                                 </View>
                                 <View
                                   style={[
