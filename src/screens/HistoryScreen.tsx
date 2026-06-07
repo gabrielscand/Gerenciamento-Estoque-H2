@@ -65,6 +65,42 @@ function formatQuantity(value: number): string {
   });
 }
 
+const MAX_AUTOCOMPLETE_SUGGESTIONS = 6;
+
+function normalizeSearchValue(value: string): string {
+  return value
+    .trim()
+    .toLocaleLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '');
+}
+
+// Um dia "qualifica" se TODOS os itens selecionados aparecem entre as entries informadas.
+function entriesHaveAllSelected(
+  entries: Array<{ name: string }>,
+  selectedNormalized: string[],
+): boolean {
+  if (selectedNormalized.length === 0) {
+    return true;
+  }
+
+  const present = new Set(entries.map((entry) => normalizeSearchValue(entry.name)));
+  return selectedNormalized.every((selected) => present.has(selected));
+}
+
+// Mantém apenas as entries cujos itens estao selecionados (sem selecao = sem filtro).
+function keepSelectedEntries<T extends { name: string }>(
+  entries: T[],
+  selectedNormalized: string[],
+): T[] {
+  if (selectedNormalized.length === 0) {
+    return entries;
+  }
+
+  const selected = new Set(selectedNormalized);
+  return entries.filter((entry) => selected.has(normalizeSearchValue(entry.name)));
+}
+
 function getMovementTypeLabel(movementType: DailyHistoryEntry['movementType']): string {
   if (movementType === 'entry') {
     return 'Entrada';
@@ -163,9 +199,118 @@ export function HistoryScreen({ canManageHistoryActions = false }: HistoryScreen
   const fallbackPromptResolverRef = useRef<((value: string | null) => void) | null>(null);
   const skipNextModeMonthLoadRef = useRef(false);
   const { showTopPopup } = useTopPopup();
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedItems, setSelectedItems] = useState<string[]>([]);
 
   const isDailyMode = mode === 'diario';
   const monthOptions = useMemo(() => buildRecentMonthOptions(new Date(), 12), []);
+
+  const normalizedSearchQuery = useMemo(() => normalizeSearchValue(searchQuery), [searchQuery]);
+  const selectedNormalized = useMemo(
+    () => selectedItems.map((name) => normalizeSearchValue(name)),
+    [selectedItems],
+  );
+  const hasItemFilter = selectedItems.length > 0;
+
+  // Nomes de item distintos presentes nos dados carregados (fonte das sugestoes).
+  const availableItemNames = useMemo(() => {
+    const names = new Map<string, string>();
+    const collect = (name: string) => {
+      const normalized = normalizeSearchValue(name);
+      if (normalized && !names.has(normalized)) {
+        names.set(normalized, name);
+      }
+    };
+
+    for (const group of dailyGroups) {
+      for (const entry of group.entries) {
+        collect(entry.name);
+      }
+    }
+    for (const group of periodGroups) {
+      for (const day of group.days) {
+        for (const entry of day.entries) {
+          collect(entry.name);
+        }
+      }
+    }
+
+    return Array.from(names.values());
+  }, [dailyGroups, periodGroups]);
+
+  // Sugestoes so aparecem apos digitar (igual a Entrada/Saida/Itens/Estoque).
+  const searchSuggestions = useMemo(() => {
+    if (!normalizedSearchQuery) {
+      return [];
+    }
+
+    const selectedSet = new Set(selectedNormalized);
+    const startsWithMatches: string[] = [];
+    const containsMatches: string[] = [];
+
+    for (const name of availableItemNames) {
+      const normalizedName = normalizeSearchValue(name);
+
+      if (selectedSet.has(normalizedName)) {
+        continue;
+      }
+
+      if (normalizedName.startsWith(normalizedSearchQuery)) {
+        startsWithMatches.push(name);
+        continue;
+      }
+
+      if (normalizedName.includes(normalizedSearchQuery)) {
+        containsMatches.push(name);
+      }
+    }
+
+    return [...startsWithMatches, ...containsMatches].slice(0, MAX_AUTOCOMPLETE_SUGGESTIONS);
+  }, [availableItemNames, normalizedSearchQuery, selectedNormalized]);
+
+  function addSelectedItem(name: string) {
+    const normalized = normalizeSearchValue(name);
+    setSelectedItems((previous) =>
+      previous.some((item) => normalizeSearchValue(item) === normalized) ? previous : [...previous, name],
+    );
+    setSearchQuery('');
+  }
+
+  function removeSelectedItem(name: string) {
+    const normalized = normalizeSearchValue(name);
+    setSelectedItems((previous) => previous.filter((item) => normalizeSearchValue(item) !== normalized));
+  }
+
+  function clearSelectedItems() {
+    setSelectedItems([]);
+    setSearchQuery('');
+  }
+
+  const displayedDailyGroups = useMemo(() => {
+    if (!hasItemFilter) {
+      return dailyGroups;
+    }
+
+    return dailyGroups.filter((group) => {
+      const movementEntries = group.entries.filter(
+        (entry) => resolveMovementFilter(entry.movementType) === dailyMovementFilter,
+      );
+      return entriesHaveAllSelected(movementEntries, selectedNormalized);
+    });
+  }, [dailyGroups, hasItemFilter, selectedNormalized, dailyMovementFilter]);
+
+  const displayedPeriodGroups = useMemo(() => {
+    if (!hasItemFilter) {
+      return periodGroups;
+    }
+
+    return periodGroups
+      .map((group) => ({
+        ...group,
+        days: group.days.filter((day) => entriesHaveAllSelected(day.entries, selectedNormalized)),
+      }))
+      .filter((group) => group.days.length > 0);
+  }, [periodGroups, hasItemFilter, selectedNormalized]);
 
   async function loadHistory(nextMode: HistoryMode, nextMonth: string, syncFirst: boolean = false) {
     setIsLoading(true);
@@ -607,13 +752,13 @@ export function HistoryScreen({ canManageHistoryActions = false }: HistoryScreen
         'Visualize os dias com entrada e saida no mes, com todos os itens movimentados e status de compra.',
     };
   }, [mode]);
-  const totalGroups = isDailyMode ? dailyGroups.length : periodGroups.length;
+  const totalGroups = isDailyMode ? displayedDailyGroups.length : displayedPeriodGroups.length;
   const periodLabel = isDailyMode ? 'Dia' : mode === 'quinzenal' ? 'Quinzena' : 'Mes';
 
   return (
     <ScreenShell>
       <FlatList<DailyHistoryGroup | PeriodHistoryGroup>
-        data={isDailyMode ? dailyGroups : periodGroups}
+        data={isDailyMode ? displayedDailyGroups : displayedPeriodGroups}
         keyExtractor={(item) => ('date' in item ? item.date : item.id)}
         refreshControl={
           <RefreshControl
@@ -672,6 +817,55 @@ export function HistoryScreen({ canManageHistoryActions = false }: HistoryScreen
                   Mensal
                 </Text>
               </Pressable>
+            </View>
+
+            <View style={styles.searchCard}>
+              <View style={styles.searchHeader}>
+                <Text style={styles.searchLabel}>Buscar item</Text>
+                {hasItemFilter ? (
+                  <Pressable style={styles.clearSearchButton} onPress={clearSelectedItems}>
+                    <Text style={styles.clearSearchButtonText}>Limpar</Text>
+                  </Pressable>
+                ) : null}
+              </View>
+              <TextInput
+                value={searchQuery}
+                onChangeText={setSearchQuery}
+                placeholder="Digite o nome do item"
+                style={styles.searchInput}
+              />
+              {searchSuggestions.length > 0 ? (
+                <View style={styles.searchSuggestionsContainer}>
+                  {searchSuggestions.map((suggestion, index) => (
+                    <Pressable
+                      key={`suggestion-${suggestion}`}
+                      style={[
+                        styles.searchSuggestionButton,
+                        index === searchSuggestions.length - 1 ? styles.searchSuggestionButtonLast : undefined,
+                      ]}
+                      onPress={() => addSelectedItem(suggestion)}
+                    >
+                      <Text style={styles.searchSuggestionText}>{suggestion}</Text>
+                    </Pressable>
+                  ))}
+                </View>
+              ) : null}
+              {hasItemFilter ? (
+                <View style={styles.selectedChipsRow}>
+                  {selectedItems.map((item) => (
+                    <Pressable
+                      key={`selected-${item}`}
+                      style={styles.selectedChip}
+                      onPress={() => removeSelectedItem(item)}
+                    >
+                      <Text style={styles.selectedChipText} numberOfLines={1}>
+                        {item}
+                      </Text>
+                      <Text style={styles.selectedChipRemove}>×</Text>
+                    </Pressable>
+                  ))}
+                </View>
+              ) : null}
             </View>
 
             {isDailyMode ? (
@@ -770,6 +964,10 @@ export function HistoryScreen({ canManageHistoryActions = false }: HistoryScreen
         ListEmptyComponent={
           isLoading ? (
             <Text style={styles.emptyText}>Carregando historico...</Text>
+          ) : hasItemFilter ? (
+            <Text style={styles.emptyText}>
+              Nenhuma movimentacao encontrada para os itens selecionados.
+            </Text>
           ) : (
             <Text style={styles.emptyText}>
               {isDailyMode
@@ -781,8 +979,11 @@ export function HistoryScreen({ canManageHistoryActions = false }: HistoryScreen
         renderItem={({ item }) => {
           if ('date' in item) {
             const dailyItem = item;
-            const filteredEntries = dailyItem.entries.filter(
-              (entry) => resolveMovementFilter(entry.movementType) === dailyMovementFilter,
+            const filteredEntries = keepSelectedEntries(
+              dailyItem.entries.filter(
+                (entry) => resolveMovementFilter(entry.movementType) === dailyMovementFilter,
+              ),
+              selectedNormalized,
             );
             const filteredCountedItems = filteredEntries.length;
             const filteredOkItems = filteredEntries.filter((entry) => !entry.needsPurchase).length;
@@ -968,15 +1169,28 @@ export function HistoryScreen({ canManageHistoryActions = false }: HistoryScreen
               <View style={styles.groupHeader}>
                 <Text style={styles.groupDate}>{periodItem.label}</Text>
                 <View style={styles.groupBadge}>
-                  <Text style={styles.groupBadgeText}>{periodItem.inspectedDays} dias</Text>
+                  <Text style={styles.groupBadgeText}>
+                    {hasItemFilter ? periodItem.days.length : periodItem.inspectedDays} dias
+                  </Text>
                 </View>
               </View>
 
-              <Text style={styles.groupSummary}>
-                Registros: {periodItem.countedEntries} | Itens para comprar: {periodItem.itemsToBuyCount} | Faltante
-                total: {formatQuantity(periodItem.totalMissingQuantityInBaseUnits)} und | Consumo total:{' '}
-                {formatQuantity(periodItem.totalConsumedQuantityInBaseUnits)} und
-              </Text>
+              {hasItemFilter ? (
+                <Text style={styles.groupSummary}>
+                  Filtro de itens ativo · {periodItem.days.length} dia(s) ·{' '}
+                  {periodItem.days.reduce(
+                    (sum, day) => sum + keepSelectedEntries(day.entries, selectedNormalized).length,
+                    0,
+                  )}{' '}
+                  movimentacao(oes)
+                </Text>
+              ) : (
+                <Text style={styles.groupSummary}>
+                  Registros: {periodItem.countedEntries} | Itens para comprar: {periodItem.itemsToBuyCount} | Faltante
+                  total: {formatQuantity(periodItem.totalMissingQuantityInBaseUnits)} und | Consumo total:{' '}
+                  {formatQuantity(periodItem.totalConsumedQuantityInBaseUnits)} und
+                </Text>
+              )}
 
               {periodItem.days.length === 0 ? (
                 <Text style={styles.entryMeta}>Sem movimentacoes neste periodo.</Text>
@@ -986,14 +1200,17 @@ export function HistoryScreen({ canManageHistoryActions = false }: HistoryScreen
                     const dayKey = `${periodItem.id}-${day.date}`;
                     const isExpanded = expandedPeriodDays[dayKey] === true;
                     const selectedDayFilter = periodDayFilters[dayKey] ?? 'all';
-                    const filteredDayEntries =
+                    const baseDayEntries =
                       selectedDayFilter === 'all'
                         ? day.entries
                         : day.entries.filter(
                             (entry) => resolveMovementFilter(entry.movementType) === selectedDayFilter,
                           );
+                    const filteredDayEntries = keepSelectedEntries(baseDayEntries, selectedNormalized);
                     const movementCount =
-                      selectedDayFilter === 'all' ? day.entries.length : filteredDayEntries.length;
+                      selectedDayFilter === 'all' && !hasItemFilter
+                        ? day.entries.length
+                        : filteredDayEntries.length;
 
                     return (
                       <View key={dayKey} style={styles.periodDayCard}>
@@ -1437,6 +1654,99 @@ const styles = StyleSheet.create({
   },
   reportButtonWrap: {
     marginTop: 2,
+  },
+  searchCard: {
+    backgroundColor: tokens.colors.surface,
+    borderWidth: 1,
+    borderColor: tokens.colors.borderSoft,
+    borderRadius: 18,
+    padding: 12,
+    gap: 8,
+    ...tokens.shadow.card,
+  },
+  searchHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  searchLabel: {
+    fontSize: 13,
+    color: '#77158E',
+    fontWeight: '700',
+  },
+  clearSearchButton: {
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: '#B690D2',
+    backgroundColor: '#F5EEFB',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+  },
+  clearSearchButtonText: {
+    color: '#5F1175',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  searchInput: {
+    borderWidth: 1,
+    borderColor: '#B690D2',
+    backgroundColor: '#F8F1FD',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    color: '#2A0834',
+    fontSize: 14,
+  },
+  searchSuggestionsContainer: {
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#D8C3EA',
+    overflow: 'hidden',
+    backgroundColor: '#FFFFFF',
+  },
+  searchSuggestionButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#EAD9F6',
+  },
+  searchSuggestionButtonLast: {
+    borderBottomWidth: 0,
+  },
+  searchSuggestionText: {
+    color: '#3A0D49',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  selectedChipsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  selectedChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    maxWidth: 220,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: '#9D63C4',
+    backgroundColor: '#EDE0F9',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+  },
+  selectedChipText: {
+    flexShrink: 1,
+    color: '#441055',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  selectedChipRemove: {
+    color: '#5F1175',
+    fontSize: 15,
+    fontWeight: '900',
+    lineHeight: 16,
   },
   successText: {
     color: '#2F8A5F',
