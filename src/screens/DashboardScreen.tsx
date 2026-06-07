@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useIsFocused } from '@react-navigation/native';
 import {
   Modal,
+  Platform,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -198,6 +199,12 @@ const EXIT_SOFT = '#FDEAEA';
 const ACCENT_COLOR = tokens.colors.accent;
 const ACCENT_DARK = tokens.colors.accentDeep;
 const GRID_COLOR = '#E9D8F3';
+// Mesma fonte do sistema usada no restante do app (default do react-native-web),
+// para o texto SVG dos graficos victory nao destoar das demais telas.
+const CHART_FONT_FAMILY =
+  Platform.OS === 'web'
+    ? '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif'
+    : 'System';
 
 function ChartCardHeader({
   title,
@@ -345,14 +352,14 @@ function DailyMovementChart({
         key={chartKey}
         width={width}
         height={280}
-        padding={{ top: 22, right: 28, bottom: 42, left: 58 }}
+        padding={{ top: 22, right: 28, bottom: 42, left: 68 }}
         domainPadding={{ x: 14, y: 18 }}
       >
         <VictoryAxis
           tickValues={tickValues}
           style={{
             axis: { stroke: GRID_COLOR },
-            tickLabels: { fill: '#6B5177', fontSize: 10, fontWeight: 700 },
+            tickLabels: { fill: '#6B5177', fontSize: 10, fontWeight: 700, fontFamily: CHART_FONT_FAMILY },
             grid: { stroke: 'transparent' },
           }}
         />
@@ -362,7 +369,7 @@ function DailyMovementChart({
           style={{
             axis: { stroke: 'transparent' },
             grid: { stroke: GRID_COLOR, strokeDasharray: '5,5' },
-            tickLabels: { fill: '#6B5177', fontSize: 10, fontWeight: 700, padding: 6 },
+            tickLabels: { fill: '#6B5177', fontSize: 10, fontWeight: 700, padding: 6, fontFamily: CHART_FONT_FAMILY },
           }}
         />
         <VictoryStack>
@@ -424,14 +431,14 @@ function RankingChart({
         horizontal
         width={width}
         height={Math.max(230, chartData.length * 46)}
-        padding={{ top: 14, right: 52, bottom: 34, left: 116 }}
+        padding={{ top: 14, right: 64, bottom: 34, left: 132 }}
         domainPadding={{ x: 18, y: 20 }}
       >
         <VictoryAxis
           style={{
             axis: { stroke: 'transparent' },
             grid: { stroke: 'transparent' },
-            tickLabels: { fill: '#34223D', fontSize: 11, fontWeight: 800, padding: 6 },
+            tickLabels: { fill: '#34223D', fontSize: 11, fontWeight: 800, padding: 6, fontFamily: CHART_FONT_FAMILY },
           }}
         />
         <VictoryAxis
@@ -440,7 +447,7 @@ function RankingChart({
           style={{
             axis: { stroke: 'transparent' },
             grid: { stroke: GRID_COLOR, strokeDasharray: '5,5' },
-            tickLabels: { fill: '#755984', fontSize: 10, fontWeight: 700, padding: 4 },
+            tickLabels: { fill: '#755984', fontSize: 10, fontWeight: 700, padding: 4, fontFamily: CHART_FONT_FAMILY },
           }}
         />
         <VictoryBar
@@ -449,7 +456,7 @@ function RankingChart({
           cornerRadius={{ top: 8, bottom: 8 }}
           style={{
             data: { fill: color, width: 20 },
-            labels: { fill: ACCENT_DARK, fontSize: 10, fontWeight: 800 },
+            labels: { fill: ACCENT_DARK, fontSize: 10, fontWeight: 800, fontFamily: CHART_FONT_FAMILY },
           }}
           animate={{ duration: 520, onLoad: { duration: 520 } }}
         />
@@ -515,7 +522,7 @@ function AbcVictoryChart({ points, width, chartKey }: { points: DashboardAbcPoin
         key={chartKey}
         width={width}
         height={300}
-        padding={{ top: 24, right: 28, bottom: 46, left: 56 }}
+        padding={{ top: 24, right: 28, bottom: 46, left: 64 }}
         domain={{ x: [1, maxRank], y: [0, 100] }}
       >
         <VictoryAxis
@@ -523,7 +530,7 @@ function AbcVictoryChart({ points, width, chartKey }: { points: DashboardAbcPoin
           tickFormat={(tick) => `#${tick}`}
           style={{
             axis: { stroke: GRID_COLOR },
-            tickLabels: { fill: '#6B5177', fontSize: 10, fontWeight: 700 },
+            tickLabels: { fill: '#6B5177', fontSize: 10, fontWeight: 700, fontFamily: CHART_FONT_FAMILY },
             grid: { stroke: 'transparent' },
           }}
         />
@@ -534,7 +541,7 @@ function AbcVictoryChart({ points, width, chartKey }: { points: DashboardAbcPoin
           style={{
             axis: { stroke: 'transparent' },
             grid: { stroke: GRID_COLOR, strokeDasharray: '5,5' },
-            tickLabels: { fill: '#6B5177', fontSize: 10, fontWeight: 700, padding: 6 },
+            tickLabels: { fill: '#6B5177', fontSize: 10, fontWeight: 700, padding: 6, fontFamily: CHART_FONT_FAMILY },
           }}
         />
         <VictoryLine
