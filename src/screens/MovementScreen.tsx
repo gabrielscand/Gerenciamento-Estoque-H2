@@ -35,10 +35,15 @@ import {
 import { DateField } from '../components/DateField';
 import { HeroHeader, KpiTile, MotionEntrance, ScreenShell } from '../components/ui-kit';
 import { tokens } from '../theme/tokens';
-import { formatOriginalAndBaseQuantity } from '../utils/unit-conversion';
+import {
+  convertToBaseUnits,
+  formatOriginalAndBaseQuantity,
+  roundQuantity,
+} from '../utils/unit-conversion';
 
 type MovementMode = 'entry' | 'exit';
 type QuantityFormMap = Record<string, string>;
+type QuantityModeMap = Record<string, QuantityFieldMode>;
 type QuantityErrorMap = Record<string, string>;
 type CartResolutionAction = 'replace' | 'sum' | 'cancel';
 type DateChangeAction = 'clear' | 'keep' | 'cancel';
@@ -81,6 +86,29 @@ function formatQuantity(value: number): string {
     minimumFractionDigits: Number.isInteger(value) ? 0 : 2,
     maximumFractionDigits: 2,
   });
+}
+
+const FARDO_FACTORS = new Set([4, 6, 12, 24]);
+
+function isUnitInputItem(item: { conversionFactor: number }): boolean {
+  return FARDO_FACTORS.has(item.conversionFactor);
+}
+
+type QuantityFieldMode = 'fardo' | 'unidade';
+
+// Converte o que foi digitado para a unidade do item (fardos).
+// Item de fardo + campo "unidade": unidades digitadas / fator.
+// Item de fardo + campo "fardo" (ou nao-fardo): valor como esta.
+function toItemUnitQuantity(
+  item: { conversionFactor: number },
+  typed: number,
+  fieldMode?: QuantityFieldMode,
+): number {
+  if (isUnitInputItem(item) && fieldMode === 'unidade') {
+    return roundQuantity(typed / item.conversionFactor);
+  }
+
+  return typed;
 }
 
 function normalizeSearchValue(value: string): string {
@@ -193,6 +221,7 @@ function StockMovementScreen({ mode }: { mode: MovementMode }) {
   const [isCategoryFilterOpen, setIsCategoryFilterOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [quantities, setQuantities] = useState<QuantityFormMap>({});
+  const [quantityModes, setQuantityModes] = useState<QuantityModeMap>({});
   const [focusedInputItemId, setFocusedInputItemId] = useState<number | null>(null);
   const [fieldErrors, setFieldErrors] = useState<QuantityErrorMap>({});
   const [cartItems, setCartItems] = useState<MovementCartItem[]>([]);
@@ -214,6 +243,7 @@ function StockMovementScreen({ mode }: { mode: MovementMode }) {
     if (!isValidDateString(date)) {
       setItems([]);
       setQuantities({});
+      setQuantityModes({});
       setFieldErrors({});
       setSelectedDateError('Informe uma data valida no formato DD/MM/AAAA.');
       setIsLoading(false);
@@ -235,6 +265,7 @@ function StockMovementScreen({ mode }: { mode: MovementMode }) {
       }
 
       setQuantities(nextQuantities);
+      setQuantityModes({});
       setFieldErrors({});
     } catch (error) {
       showTopPopup({
@@ -358,7 +389,9 @@ function StockMovementScreen({ mode }: { mode: MovementMode }) {
     let evaluatedItems = 0;
 
     for (const item of filteredItems) {
-      const parsed = parseDecimalInput(quantities[String(item.id)] ?? '');
+      const typed = parseDecimalInput(quantities[String(item.id)] ?? '');
+      const fieldMode = quantityModes[String(item.id)];
+      const parsed = typed === null ? null : toItemUnitQuantity(item, typed, fieldMode);
       const currentStock = item.currentStockQuantity;
 
       if (parsed !== null && parsed < 0) {
@@ -401,7 +434,7 @@ function StockMovementScreen({ mode }: { mode: MovementMode }) {
       countedItems: evaluatedItems,
       totalMissingQuantityInBaseUnits,
     };
-  }, [filteredItems, quantities, mode]);
+  }, [filteredItems, quantities, quantityModes, mode]);
 
   const cartTotalQuantityInBaseUnits = useMemo(
     () =>
@@ -460,9 +493,32 @@ function StockMovementScreen({ mode }: { mode: MovementMode }) {
     setFieldErrors((prev) => ({ ...prev, [String(itemId)]: '' }));
   }
 
+  // Para itens de fardo: grava o valor e marca em qual campo (fardo/unidade)
+  // foi digitado. Campo vazio reabre os dois campos (remove o modo).
+  function setFieldValue(itemId: number, value: string, fieldMode: QuantityFieldMode) {
+    const key = String(itemId);
+    setQuantities((prev) => ({ ...prev, [key]: value }));
+    setFieldErrors((prev) => ({ ...prev, [key]: '' }));
+    setQuantityModes((prev) => {
+      const next = { ...prev };
+      if (value.trim().length === 0) {
+        delete next[key];
+      } else {
+        next[key] = fieldMode;
+      }
+      return next;
+    });
+  }
+
   function clearItemInput(itemId: number) {
-    setQuantities((prev) => ({ ...prev, [String(itemId)]: '' }));
-    setFieldErrors((prev) => ({ ...prev, [String(itemId)]: '' }));
+    const key = String(itemId);
+    setQuantities((prev) => ({ ...prev, [key]: '' }));
+    setFieldErrors((prev) => ({ ...prev, [key]: '' }));
+    setQuantityModes((prev) => {
+      const next = { ...prev };
+      delete next[key];
+      return next;
+    });
   }
 
   function handleDateChangeDecision(action: DateChangeAction) {
@@ -538,14 +594,17 @@ function StockMovementScreen({ mode }: { mode: MovementMode }) {
       return;
     }
 
-    const parsed = parseDecimalInput(rawValue);
+    const typed = parseDecimalInput(rawValue);
 
-    if (parsed === null) {
+    if (typed === null) {
       setFieldErrors((prev) => ({ ...prev, [String(item.id)]: 'Informe uma quantidade valida.' }));
       return;
     }
 
-    const quantityError = getQuantityValidationError(item, parsed);
+    const fieldMode = quantityModes[String(item.id)];
+    const quantity = toItemUnitQuantity(item, typed, fieldMode);
+
+    const quantityError = getQuantityValidationError(item, quantity);
 
     if (quantityError) {
       setFieldErrors((prev) => ({ ...prev, [String(item.id)]: quantityError }));
@@ -555,7 +614,7 @@ function StockMovementScreen({ mode }: { mode: MovementMode }) {
     const existing = cartItems.find((entry) => entry.itemId === item.id);
 
     if (existing) {
-      setPendingDuplicateAdd({ item, quantity: parsed });
+      setPendingDuplicateAdd({ item, quantity });
       return;
     }
 
@@ -566,7 +625,7 @@ function StockMovementScreen({ mode }: { mode: MovementMode }) {
         name: item.name,
         unit: item.unit,
         conversionFactor: item.conversionFactor,
-        quantity: parsed,
+        quantity,
       },
     ]);
     clearItemInput(item.id);
@@ -866,7 +925,10 @@ function StockMovementScreen({ mode }: { mode: MovementMode }) {
         }
         renderItem={({ item }) => {
           const cartItem = cartItems.find((entry) => entry.itemId === item.id);
-          const parsed = parseDecimalInput(quantities[String(item.id)] ?? '');
+          const typed = parseDecimalInput(quantities[String(item.id)] ?? '');
+          const fieldMode = quantityModes[String(item.id)];
+          const parsed = typed === null ? null : toItemUnitQuantity(item, typed, fieldMode);
+          const isUnitInput = isUnitInputItem(item);
           const currentStock = item.currentStockQuantity;
           const needsPurchaseByCurrentStock =
             currentStock !== null && currentStock <= item.minQuantity;
@@ -983,19 +1045,70 @@ function StockMovementScreen({ mode }: { mode: MovementMode }) {
                   : 'Saida do dia'}
               </Text>
 
-              <TextInput
-                value={quantities[String(item.id)] ?? ''}
-                onChangeText={(value) => setQuantity(item.id, value)}
-                onFocus={() => setFocusedInputItemId(item.id)}
-                onBlur={() => setFocusedInputItemId((current) => (current === item.id ? null : current))}
-                placeholder={mode === 'entry' ? 'Ex.: 50' : 'Ex.: 3'}
-                keyboardType="decimal-pad"
-                style={[
-                  styles.input,
-                  focusedInputItemId === item.id ? styles.inputFocused : undefined,
-                  fieldErrors[String(item.id)] ? styles.inputError : undefined,
-                ]}
-              />
+              {isUnitInput ? (
+                <View style={styles.dualInputRow}>
+                  <View style={styles.dualInputCol}>
+                    <Text style={styles.dualInputLabel}>Fardos (de {formatQuantity(item.conversionFactor)})</Text>
+                    <TextInput
+                      value={
+                        fieldMode === 'fardo'
+                          ? quantities[String(item.id)] ?? ''
+                          : parsed !== null
+                            ? formatQuantity(parsed)
+                            : ''
+                      }
+                      onChangeText={(value) => setFieldValue(item.id, value, 'fardo')}
+                      onFocus={() => setFocusedInputItemId(item.id)}
+                      onBlur={() => setFocusedInputItemId((current) => (current === item.id ? null : current))}
+                      editable={fieldMode !== 'unidade'}
+                      placeholder="Ex.: 2"
+                      keyboardType="decimal-pad"
+                      style={[
+                        styles.input,
+                        fieldMode === 'unidade' ? styles.inputDisabled : undefined,
+                        fieldErrors[String(item.id)] ? styles.inputError : undefined,
+                      ]}
+                    />
+                  </View>
+                  <View style={styles.dualInputCol}>
+                    <Text style={styles.dualInputLabel}>Unidades</Text>
+                    <TextInput
+                      value={
+                        fieldMode === 'unidade'
+                          ? quantities[String(item.id)] ?? ''
+                          : parsed !== null
+                            ? formatQuantity(convertToBaseUnits(parsed, item.conversionFactor) ?? 0)
+                            : ''
+                      }
+                      onChangeText={(value) => setFieldValue(item.id, value, 'unidade')}
+                      onFocus={() => setFocusedInputItemId(item.id)}
+                      onBlur={() => setFocusedInputItemId((current) => (current === item.id ? null : current))}
+                      editable={fieldMode !== 'fardo'}
+                      placeholder={`Ex.: ${formatQuantity(item.conversionFactor)}`}
+                      keyboardType="decimal-pad"
+                      style={[
+                        styles.input,
+                        fieldMode === 'fardo' ? styles.inputDisabled : undefined,
+                        fieldErrors[String(item.id)] ? styles.inputError : undefined,
+                      ]}
+                    />
+                  </View>
+                </View>
+              ) : (
+                <TextInput
+                  value={quantities[String(item.id)] ?? ''}
+                  onChangeText={(value) => setQuantity(item.id, value)}
+                  onFocus={() => setFocusedInputItemId(item.id)}
+                  onBlur={() => setFocusedInputItemId((current) => (current === item.id ? null : current))}
+                  placeholder={mode === 'entry' ? 'Ex.: 50' : 'Ex.: 3'}
+                  keyboardType="decimal-pad"
+                  style={[
+                    styles.input,
+                    focusedInputItemId === item.id ? styles.inputFocused : undefined,
+                    fieldErrors[String(item.id)] ? styles.inputError : undefined,
+                  ]}
+                />
+              )}
 
               <Pressable
                 style={[styles.addToCartButton, isSaving ? styles.submitButtonDisabled : undefined]}
@@ -1477,6 +1590,24 @@ const styles = StyleSheet.create({
   },
   inputError: {
     borderColor: '#D74A4A',
+  },
+  inputDisabled: {
+    backgroundColor: '#EFE9F3',
+    borderColor: '#D8CCE3',
+    color: '#9A86AC',
+  },
+  dualInputRow: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  dualInputCol: {
+    flex: 1,
+    gap: 4,
+  },
+  dualInputLabel: {
+    fontSize: 12,
+    color: '#77158E',
+    fontWeight: '700',
   },
   addToCartButton: {
     marginTop: 8,
