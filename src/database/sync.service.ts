@@ -748,6 +748,7 @@ async function pushPendingMeasurementUnits(db: SQLiteDatabase): Promise<void> {
           remote_id,
           name,
           name_normalized,
+          conversion_factor,
           is_deleted,
           deleted_at,
           created_at,
@@ -771,7 +772,9 @@ async function pushPendingMeasurementUnits(db: SQLiteDatabase): Promise<void> {
       id: row.remote_id,
       name: row.name,
       name_normalized: row.name_normalized,
-      conversion_factor: row.conversion_factor,
+      conversion_factor: Number.isFinite(row.conversion_factor) && row.conversion_factor > 0
+        ? row.conversion_factor
+        : 1,
       is_deleted: row.is_deleted === 1,
       deleted_at: row.deleted_at ? normalizeTimestamp(row.deleted_at) : null,
       created_at: normalizeTimestamp(row.created_at),
@@ -1130,6 +1133,55 @@ async function mergeRemoteItemCategories(
       );
 
       if (!local) {
+        if (!remoteCategory.is_deleted) {
+          const localByNormalized = await db.getFirstAsync<LocalSyncLookupRow>(
+            `
+              SELECT id, updated_at, sync_status
+              FROM item_categories
+              WHERE name_normalized = ?
+                AND is_deleted = 0
+              LIMIT 1;
+            `,
+            remoteCategory.name_normalized,
+          );
+
+          if (localByNormalized) {
+            const shouldKeepLocal =
+              localByNormalized.sync_status !== 'synced' &&
+              toTimestamp(localByNormalized.updated_at) > toTimestamp(remoteCategory.updated_at);
+
+            if (shouldKeepLocal) {
+              continue;
+            }
+
+            await db.runAsync(
+              `
+                UPDATE item_categories
+                SET
+                  remote_id = ?,
+                  name = ?,
+                  name_normalized = ?,
+                  is_deleted = ?,
+                  deleted_at = ?,
+                  created_at = ?,
+                  updated_at = ?,
+                  sync_status = 'synced'
+                WHERE id = ?;
+              `,
+              remoteCategory.id,
+              remoteCategory.name,
+              remoteCategory.name_normalized,
+              remoteCategory.is_deleted ? 1 : 0,
+              remoteCategory.deleted_at,
+              remoteCategory.created_at,
+              remoteCategory.updated_at,
+              localByNormalized.id,
+            );
+            hasCatalogChanges = true;
+            continue;
+          }
+        }
+
         await db.runAsync(
           `
             INSERT INTO item_categories (
@@ -1213,6 +1265,59 @@ async function mergeRemoteMeasurementUnits(
       );
 
       if (!local) {
+        if (!remoteUnit.is_deleted) {
+          const localByNormalized = await db.getFirstAsync<LocalSyncLookupRow>(
+            `
+              SELECT id, updated_at, sync_status
+              FROM measurement_units
+              WHERE name_normalized = ?
+                AND is_deleted = 0
+              LIMIT 1;
+            `,
+            remoteUnit.name_normalized,
+          );
+
+          if (localByNormalized) {
+            const shouldKeepLocal =
+              localByNormalized.sync_status !== 'synced' &&
+              toTimestamp(localByNormalized.updated_at) > toTimestamp(remoteUnit.updated_at);
+
+            if (shouldKeepLocal) {
+              continue;
+            }
+
+            await db.runAsync(
+              `
+                UPDATE measurement_units
+                SET
+                  remote_id = ?,
+                  name = ?,
+                  name_normalized = ?,
+                  conversion_factor = ?,
+                  is_deleted = ?,
+                  deleted_at = ?,
+                  created_at = ?,
+                  updated_at = ?,
+                  sync_status = 'synced'
+                WHERE id = ?;
+              `,
+              remoteUnit.id,
+              remoteUnit.name,
+              remoteUnit.name_normalized,
+              Number.isFinite(remoteUnit.conversion_factor) && remoteUnit.conversion_factor > 0
+                ? remoteUnit.conversion_factor
+                : 1,
+              remoteUnit.is_deleted ? 1 : 0,
+              remoteUnit.deleted_at,
+              remoteUnit.created_at,
+              remoteUnit.updated_at,
+              localByNormalized.id,
+            );
+            hasCatalogChanges = true;
+            continue;
+          }
+        }
+
         await db.runAsync(
           `
             INSERT INTO measurement_units (
@@ -1231,7 +1336,9 @@ async function mergeRemoteMeasurementUnits(
           remoteUnit.id,
           remoteUnit.name,
           remoteUnit.name_normalized,
-          remoteUnit.conversion_factor,
+          Number.isFinite(remoteUnit.conversion_factor) && remoteUnit.conversion_factor > 0
+            ? remoteUnit.conversion_factor
+            : 1,
           remoteUnit.is_deleted ? 1 : 0,
           remoteUnit.deleted_at,
           remoteUnit.created_at,
@@ -1265,7 +1372,9 @@ async function mergeRemoteMeasurementUnits(
         `,
         remoteUnit.name,
         remoteUnit.name_normalized,
-        remoteUnit.conversion_factor,
+        Number.isFinite(remoteUnit.conversion_factor) && remoteUnit.conversion_factor > 0
+          ? remoteUnit.conversion_factor
+          : 1,
         remoteUnit.is_deleted ? 1 : 0,
         remoteUnit.deleted_at,
         remoteUnit.created_at,
