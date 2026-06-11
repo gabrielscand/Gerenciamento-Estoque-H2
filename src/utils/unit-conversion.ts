@@ -57,6 +57,25 @@ export function roundQuantity(value: number): number {
   return Math.round(value * 1000) / 1000;
 }
 
+const FARDO_CONVERSION_FACTORS = new Set([4, 6, 12, 24]);
+
+export function isFardoConversionFactor(conversionFactor: number | null | undefined): boolean {
+  return typeof conversionFactor === 'number' && FARDO_CONVERSION_FACTORS.has(conversionFactor);
+}
+
+// Quantidade de fardos a comprar, arredondada para cima (nao se compra fracao de fardo).
+// Itens nao-fardo retornam a quantidade original.
+export function purchaseQuantityForBuy(
+  missingQuantity: number,
+  conversionFactor: number | null | undefined,
+): number {
+  if (!isFardoConversionFactor(conversionFactor)) {
+    return missingQuantity;
+  }
+
+  return Math.ceil(missingQuantity);
+}
+
 export function formatOriginalAndBaseQuantity(
   quantity: number | null | undefined,
   unit: string | null | undefined,

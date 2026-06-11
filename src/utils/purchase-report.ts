@@ -6,6 +6,7 @@ import { listStockCurrentOverview } from '../database/items.repository';
 import { syncAppData } from '../database/sync.service';
 import type { StockCurrentOverviewRow } from '../types/inventory';
 import { getTodayLocalDateString } from './date';
+import { purchaseQuantityForBuy } from './unit-conversion';
 
 type PurchaseReportItem = {
   id: number;
@@ -69,9 +70,13 @@ function escapeHtml(value: string): string {
     .replaceAll("'", '&#39;');
 }
 
+function getPurchaseQuantity(item: PurchaseReportItem): number {
+  return purchaseQuantityForBuy(item.missingQuantity, item.conversionFactor);
+}
+
 function getStatusLabel(item: PurchaseReportItem): string {
   if (item.missingQuantity > 0) {
-    return `Faltam ${formatOriginalAndBase(item.missingQuantity, item.unit, item.conversionFactor)}`;
+    return `Faltam ${formatOriginalAndBase(getPurchaseQuantity(item), item.unit, item.conversionFactor)}`;
   }
 
   return 'No minimo (comprar)';
@@ -123,7 +128,7 @@ function buildPdfHtml(payload: PurchaseReportPayload): string {
                   formatOriginalAndBase(item.minQuantity, item.unit, item.conversionFactor),
                 )}</td>
                 <td>${escapeHtml(
-                  formatOriginalAndBase(item.missingQuantity, item.unit, item.conversionFactor),
+                  formatOriginalAndBase(getPurchaseQuantity(item), item.unit, item.conversionFactor),
                 )}</td>
                 <td>${escapeHtml(getStatusLabel(item))}</td>
               </tr>
@@ -316,7 +321,7 @@ async function generateWebPdf(payload: PurchaseReportPayload): Promise<void> {
             ? '-'
             : formatOriginalAndBase(item.currentStockQuantity, item.unit, item.conversionFactor),
           formatOriginalAndBase(item.minQuantity, item.unit, item.conversionFactor),
-          formatOriginalAndBase(item.missingQuantity, item.unit, item.conversionFactor),
+          formatOriginalAndBase(getPurchaseQuantity(item), item.unit, item.conversionFactor),
           getStatusLabel(item),
         ])
       : [['-', 'Nenhum item para compra no momento.', '-', '-', '-', '-', '-']];
@@ -357,7 +362,7 @@ export async function generatePurchaseReportPdf(): Promise<GeneratePurchaseRepor
   const payload: PurchaseReportPayload = {
     generatedAt: new Date(),
     items,
-    totalMissingQuantity: items.reduce((sum, item) => sum + item.missingQuantity, 0),
+    totalMissingQuantity: items.reduce((sum, item) => sum + getPurchaseQuantity(item), 0),
     totalMissingQuantityInBaseUnits: items.reduce(
       (sum, item) => sum + item.missingQuantityInBaseUnits,
       0,

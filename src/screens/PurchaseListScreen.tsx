@@ -11,13 +11,38 @@ import { AppButton, HeroHeader, KpiTile, MotionEntrance, ScreenShell } from '../
 import { tokens } from '../theme/tokens';
 import type { StockCurrentOverviewRow } from '../types/inventory';
 import { generatePurchaseReportPdf } from '../utils/purchase-report';
-import { formatOriginalAndBaseQuantity } from '../utils/unit-conversion';
+import {
+  formatOriginalAndBaseQuantity,
+  isFardoConversionFactor,
+  purchaseQuantityForBuy,
+} from '../utils/unit-conversion';
 
 function formatQuantity(value: number): string {
   return value.toLocaleString('pt-BR', {
     minimumFractionDigits: Number.isInteger(value) ? 0 : 2,
     maximumFractionDigits: 2,
   });
+}
+
+// "Faltante para compra": para itens de fardo, arredonda os fardos para cima
+// (nao se compra fracao de fardo), mantendo as unidades como o faltante real.
+function formatPurchaseQuantity(item: StockCurrentOverviewRow): string {
+  if (!isFardoConversionFactor(item.conversionFactor)) {
+    return formatOriginalAndBaseQuantity(
+      item.missingQuantity,
+      item.unit,
+      item.conversionFactor,
+      formatQuantity,
+    );
+  }
+
+  const buyQty = purchaseQuantityForBuy(item.missingQuantity, item.conversionFactor);
+  const baseText = `${formatQuantity(item.missingQuantityInBaseUnits)} und`;
+  const safeUnit = (item.unit ?? '').trim();
+
+  return safeUnit
+    ? `${formatQuantity(buyQty)} ${safeUnit} (${baseText})`
+    : `${formatQuantity(buyQty)} (${baseText})`;
 }
 
 export function PurchaseListScreen() {
@@ -194,12 +219,7 @@ export function PurchaseListScreen() {
 
               <StockEmphasis
                 label="Faltante para compra"
-                value={formatOriginalAndBaseQuantity(
-                  item.missingQuantity,
-                  item.unit,
-                  item.conversionFactor,
-                  formatQuantity,
-                )}
+                value={formatPurchaseQuantity(item)}
                 tone={isBelowMinimum ? 'warning' : 'normal'}
                 helperText={isBelowMinimum ? 'Priorize reposicao deste item' : 'Reposicao preventiva sugerida'}
               />
