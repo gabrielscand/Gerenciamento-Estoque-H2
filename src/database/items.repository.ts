@@ -95,6 +95,7 @@ type DailyHistorySummaryRow = {
 type DailyHistoryDetailRow = {
   id: number;
   date: string;
+  createdAt: string;
   itemId: number;
   name: string;
   unit: string;
@@ -930,7 +931,9 @@ async function recalculateItemStockTimeline(
   database: Awaited<ReturnType<typeof getDatabase>>,
   itemId: number,
   reason: RecalculateReason = 'generic',
+  options: { lenient?: boolean } = {},
 ): Promise<void> {
+  const lenient = options.lenient === true;
   const item = await database.getFirstAsync<{
     id: number;
     name: string;
@@ -966,6 +969,11 @@ async function recalculateItemStockTimeline(
     itemId,
   );
 
+  // Sem movimentos ativos: nao mexe no estoque atual (evita zerar itens sem historico).
+  if (timeline.length === 0) {
+    return;
+  }
+
   let running: number | null = null;
 
   for (const entry of timeline) {
@@ -984,10 +992,14 @@ async function recalculateItemStockTimeline(
       running = nextStockAfter;
     } else {
       if (running === null) {
-        throw createMissingBaseError(reason);
+        if (!lenient) {
+          throw createMissingBaseError(reason);
+        }
+        // Modo tolerante (recalculo pos-sync): trata base ausente como 0.
+        running = 0;
       }
 
-      if (isGreaterThan(entry.quantity, running)) {
+      if (!lenient && isGreaterThan(entry.quantity, running)) {
         throw createInsufficientStockError(reason, item.name, entry.date);
       }
 
@@ -1041,6 +1053,31 @@ async function recalculateItemStockTimeline(
       itemId,
     );
   }
+}
+
+// Recalcula o estoque de TODOS os itens a partir do historico completo (modo tolerante).
+// Usado apos o sync puxar todos os movimentos, garantindo que o estoque atual seja
+// sempre derivado do historico e nao um valor sobrescrito por sessoes fora de sincronia.
+export async function repairAllStockTimelines(
+  database: Awaited<ReturnType<typeof getDatabase>>,
+): Promise<void> {
+  const items = await database.getAllAsync<{ id: number }>(
+    `
+      SELECT id
+      FROM stock_items
+      WHERE is_deleted = 0;
+    `,
+  );
+
+  if (items.length === 0) {
+    return;
+  }
+
+  await database.withTransactionAsync(async () => {
+    for (const { id } of items) {
+      await recalculateItemStockTimeline(database, id, 'generic', { lenient: true });
+    }
+  });
 }
 
 export async function listStockItems(): Promise<StockItemListRow[]> {
@@ -1801,6 +1838,7 @@ export async function listDailyHistoryGrouped(): Promise<DailyHistoryGroup[]> {
       SELECT
         daily_stock_entries.id AS id,
         daily_stock_entries.date AS date,
+        daily_stock_entries.created_at AS createdAt,
         stock_items.id AS itemId,
         stock_items.name AS name,
         stock_items.unit AS unit,
@@ -1831,7 +1869,7 @@ export async function listDailyHistoryGrouped(): Promise<DailyHistoryGroup[]> {
         ON measurement_units.name_normalized = stock_items.unit
        AND measurement_units.is_deleted = 0
       WHERE daily_stock_entries.is_deleted = 0
-      ORDER BY daily_stock_entries.date DESC, stock_items.name COLLATE NOCASE ASC;
+      ORDER BY daily_stock_entries.date DESC, stock_items.name COLLATE NOCASE ASC, daily_stock_entries.created_at ASC, daily_stock_entries.id ASC;
     `,
   );
 
@@ -1843,6 +1881,7 @@ export async function listDailyHistoryGrouped(): Promise<DailyHistoryGroup[]> {
     dateEntries.push({
       id: detail.id,
       date: detail.date,
+      createdAt: detail.createdAt,
       itemId: detail.itemId,
       name: detail.name,
       unit: detail.unit,

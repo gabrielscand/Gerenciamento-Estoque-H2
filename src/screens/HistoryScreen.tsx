@@ -65,6 +65,68 @@ function formatQuantity(value: number): string {
   });
 }
 
+// Horario local (HH:MM) a partir do timestamp ISO da movimentacao.
+function formatTime(value: string | null | undefined): string {
+  if (!value) {
+    return '';
+  }
+
+  const parsed = new Date(value);
+
+  if (Number.isNaN(parsed.getTime())) {
+    return '';
+  }
+
+  return parsed.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+}
+
+// Intervalo maximo entre itens da MESMA finalizacao (um lote grava todos em < 1s;
+// finalizacoes distintas ficam minutos/horas separadas).
+const MOVEMENT_GROUP_GAP_MS = 60_000;
+
+type DailyMovementGroup = { key: string; time: string | undefined; entries: DailyHistoryEntry[] };
+
+function entryTimeValue(entry: DailyHistoryEntry): number | null {
+  if (!entry.createdAt) {
+    return null;
+  }
+  const parsed = new Date(entry.createdAt).getTime();
+  return Number.isNaN(parsed) ? null : parsed;
+}
+
+// Agrupa as movimentacoes do dia por proximidade de horario: itens gravados quase
+// juntos (mesma finalizacao de carrinho) viram um bloco; finalizacoes distintas, outro.
+function groupEntriesByMovement(entries: DailyHistoryEntry[]): DailyMovementGroup[] {
+  const sorted = [...entries].sort((left, right) => {
+    const timeLeft = entryTimeValue(left) ?? 0;
+    const timeRight = entryTimeValue(right) ?? 0;
+    return timeLeft - timeRight || left.id - right.id;
+  });
+
+  const groups: DailyMovementGroup[] = [];
+  let current: DailyMovementGroup | null = null;
+  let lastTime: number | null = null;
+
+  for (const entry of sorted) {
+    const time = entryTimeValue(entry);
+    const startNew =
+      current === null ||
+      lastTime === null ||
+      time === null ||
+      time - lastTime > MOVEMENT_GROUP_GAP_MS;
+
+    if (startNew || current === null) {
+      current = { key: `mov-${entry.id}`, time: entry.createdAt, entries: [] };
+      groups.push(current);
+    }
+
+    current.entries.push(entry);
+    lastTime = time ?? lastTime;
+  }
+
+  return groups;
+}
+
 const MAX_AUTOCOMPLETE_SUGGESTIONS = 6;
 
 function normalizeSearchValue(value: string): string {
@@ -985,6 +1047,7 @@ export function HistoryScreen({ canManageHistoryActions = false }: HistoryScreen
               ),
               selectedNormalized,
             );
+            const movementGroups = groupEntriesByMovement(filteredEntries);
             const filteredCountedItems = filteredEntries.length;
             const filteredOkItems = filteredEntries.filter((entry) => !entry.needsPurchase).length;
             const filteredNeedPurchaseItems = filteredEntries.filter((entry) => entry.needsPurchase).length;
@@ -1061,8 +1124,14 @@ export function HistoryScreen({ canManageHistoryActions = false }: HistoryScreen
                     Sem movimentacoes de {getDailyMovementFilterLabel(dailyMovementFilter)} neste dia.
                   </Text>
                 ) : (
-                  filteredEntries.map((entry) => (
-                    <View key={String(entry.id)} style={styles.entryRow}>
+                  movementGroups.map((group, groupIndex) => (
+                    <View key={group.key} style={styles.movementGroup}>
+                      <Text style={styles.movementGroupHeader}>
+                        Movimentacao {groupIndex + 1}o · {formatDateLabel(dailyItem.date)}
+                        {group.time ? ` ${formatTime(group.time)}` : ''}
+                      </Text>
+                      {group.entries.map((entry) => (
+                        <View key={String(entry.id)} style={styles.entryRow}>
                       <View style={styles.entryInfo}>
                         <View style={styles.entryTitleRow}>
                           <Text style={styles.entryName}>{entry.name}</Text>
@@ -1155,6 +1224,8 @@ export function HistoryScreen({ canManageHistoryActions = false }: HistoryScreen
                             : 'OK'}
                         </Text>
                       </View>
+                        </View>
+                      ))}
                     </View>
                   ))
                 )}
@@ -1925,6 +1996,18 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '700',
     color: '#77158E',
+  },
+  movementGroup: {
+    gap: 6,
+    marginTop: 4,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: '#E4D4F2',
+  },
+  movementGroupHeader: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#5F1175',
   },
   entryRow: {
     backgroundColor: '#F8F1FD',

@@ -1,6 +1,7 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 import { getDatabase } from './index';
 import { emitCatalogOptionsChanged } from './catalog.events';
+import { repairAllStockTimelines } from './items.repository';
 
 type LocalPendingStockItemRow = {
   remote_id: string;
@@ -1434,6 +1435,13 @@ async function performSync(): Promise<boolean> {
       '/daily_stock_entries?select=id,item_id,date,quantity,movement_type,stock_after_quantity,created_by_user_remote_id,created_by_username,is_deleted,deleted_at,created_at,updated_at&order=updated_at.asc',
     );
     await mergeRemoteDailyEntries(db, remoteEntries);
+
+    // Recalcula o estoque de todos os itens a partir do historico completo recem-sincronizado
+    // e propaga as correcoes, evitando que valores sobrescritos por sessoes fora de sincronia
+    // permanecam errados.
+    await repairAllStockTimelines(db);
+    await pushPendingStockItems(db);
+    await pushPendingDailyEntries(db);
 
     const completedAt = nowIsoString();
     await setSyncMeta(db, 'last_sync_error', '');

@@ -184,6 +184,7 @@ export interface DailyCountUpdateInput {
 export interface DailyHistoryEntry {
   id: number;
   date: string;
+  createdAt?: string;
   itemId: number;
   name: string;
   unit: string;
