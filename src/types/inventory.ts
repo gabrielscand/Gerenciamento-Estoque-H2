@@ -176,9 +176,12 @@ export interface StockMovementItem {
   currentQuantityInBaseUnits: number | null;
 }
 
+export type MovementReason = 'perda' | 'ajuste';
+
 export interface DailyCountUpdateInput {
   itemId: number;
   quantity: number;
+  reason?: MovementReason | null;
 }
 
 export interface DailyHistoryEntry {
@@ -195,6 +198,7 @@ export interface DailyHistoryEntry {
   minQuantity: number;
   minQuantityInBaseUnits: number;
   movementType: 'entry' | 'exit' | 'initial' | 'consumption' | 'legacy_snapshot';
+  reason?: MovementReason | null;
   stockAfterQuantity: number | null;
   stockAfterQuantityInBaseUnits: number | null;
   needsPurchase: boolean;

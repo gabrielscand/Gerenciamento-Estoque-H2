@@ -22,6 +22,7 @@ type LocalPendingDailyEntryRow = {
   date: string;
   quantity: number;
   movement_type: string | null;
+  movement_reason: string | null;
   stock_after_quantity: number | null;
   created_by_user_remote_id: string | null;
   created_by_username: string | null;
@@ -99,6 +100,7 @@ type RemoteDailyEntry = {
   date: string;
   quantity: number;
   movement_type: string | null;
+  movement_reason: string | null;
   stock_after_quantity: number | null;
   created_by_user_remote_id: string | null;
   created_by_username: string | null;
@@ -404,6 +406,7 @@ async function pushPendingDailyEntries(db: SQLiteDatabase): Promise<void> {
         daily_stock_entries.date AS date,
         daily_stock_entries.quantity AS quantity,
         daily_stock_entries.movement_type AS movement_type,
+        daily_stock_entries.movement_reason AS movement_reason,
         daily_stock_entries.stock_after_quantity AS stock_after_quantity,
         daily_stock_entries.created_by_user_remote_id AS created_by_user_remote_id,
         daily_stock_entries.created_by_username AS created_by_username,
@@ -430,6 +433,7 @@ async function pushPendingDailyEntries(db: SQLiteDatabase): Promise<void> {
       date: row.date,
       quantity: row.quantity,
       movement_type: row.movement_type,
+      movement_reason: row.movement_reason,
       stock_after_quantity: row.stock_after_quantity,
       created_by_user_remote_id: row.created_by_user_remote_id,
       created_by_username: row.created_by_username,
@@ -909,6 +913,7 @@ async function mergeRemoteDailyEntries(db: SQLiteDatabase, remoteEntries: Remote
               date,
               quantity,
               movement_type,
+              movement_reason,
               stock_after_quantity,
               created_by_user_remote_id,
               created_by_username,
@@ -917,13 +922,14 @@ async function mergeRemoteDailyEntries(db: SQLiteDatabase, remoteEntries: Remote
               created_at,
               updated_at
             )
-            VALUES (?, ?, 'synced', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+            VALUES (?, ?, 'synced', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
           `,
           localItem.id,
           remoteEntry.id,
           remoteEntry.date,
           remoteEntry.quantity,
           remoteEntry.movement_type,
+          remoteEntry.movement_reason,
           remoteEntry.stock_after_quantity,
           remoteEntry.created_by_user_remote_id,
           remoteEntry.created_by_username,
@@ -950,6 +956,7 @@ async function mergeRemoteDailyEntries(db: SQLiteDatabase, remoteEntries: Remote
             date = ?,
             quantity = ?,
             movement_type = ?,
+            movement_reason = ?,
             stock_after_quantity = ?,
             created_by_user_remote_id = ?,
             created_by_username = ?,
@@ -964,6 +971,7 @@ async function mergeRemoteDailyEntries(db: SQLiteDatabase, remoteEntries: Remote
         remoteEntry.date,
         remoteEntry.quantity,
         remoteEntry.movement_type,
+        remoteEntry.movement_reason,
         remoteEntry.stock_after_quantity,
         remoteEntry.created_by_user_remote_id,
         remoteEntry.created_by_username,
@@ -1432,7 +1440,7 @@ async function performSync(): Promise<boolean> {
     await mergeRemoteMeasurementUnits(db, remoteUnits);
 
     const remoteEntries = await fetchRemote<RemoteDailyEntry[]>(
-      '/daily_stock_entries?select=id,item_id,date,quantity,movement_type,stock_after_quantity,created_by_user_remote_id,created_by_username,is_deleted,deleted_at,created_at,updated_at&order=updated_at.asc',
+      '/daily_stock_entries?select=id,item_id,date,quantity,movement_type,movement_reason,stock_after_quantity,created_by_user_remote_id,created_by_username,is_deleted,deleted_at,created_at,updated_at&order=updated_at.asc',
     );
     await mergeRemoteDailyEntries(db, remoteEntries);
 

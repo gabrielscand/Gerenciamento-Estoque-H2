@@ -183,6 +183,18 @@ function getMovementTypeLabel(movementType: DailyHistoryEntry['movementType']): 
   return 'Consumo';
 }
 
+function getReasonLabel(reason: DailyHistoryEntry['reason']): string | null {
+  if (reason === 'perda') {
+    return 'Perda';
+  }
+
+  if (reason === 'ajuste') {
+    return 'Ajuste';
+  }
+
+  return null;
+}
+
 function resolveMovementFilter(movementType: DailyHistoryEntry['movementType']): DailyMovementFilter {
   if (movementType === 'entry' || movementType === 'initial' || movementType === 'legacy_snapshot') {
     return 'entry';
@@ -1140,6 +1152,11 @@ export function HistoryScreen({ canManageHistoryActions = false }: HistoryScreen
                               <Text style={styles.deletedBadgeText}>Item arquivado</Text>
                             </View>
                           ) : null}
+                          {getReasonLabel(entry.reason) ? (
+                            <View style={styles.reasonBadge}>
+                              <Text style={styles.reasonBadgeText}>{getReasonLabel(entry.reason)}</Text>
+                            </View>
+                          ) : null}
                         </View>
                         <StockEmphasis
                           label={getMovementTypeLabel(entry.movementType)}
@@ -2044,6 +2061,17 @@ const styles = StyleSheet.create({
   },
   deletedBadgeText: {
     color: '#A12020',
+    fontSize: 10,
+    fontWeight: '700',
+  },
+  reasonBadge: {
+    backgroundColor: '#F3E7FA',
+    borderRadius: 999,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+  },
+  reasonBadgeText: {
+    color: '#7A1FA0',
     fontSize: 10,
     fontWeight: '700',
   },

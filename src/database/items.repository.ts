@@ -26,6 +26,7 @@ import type {
   DailyCountUpdateInput,
   DailyHistoryEntry,
   DailyHistoryGroup,
+  MovementReason,
   HistoryReportEntry,
   PeriodHistoryDay,
   PeriodHistoryDayEntry,
@@ -106,12 +107,17 @@ type DailyHistoryDetailRow = {
   minQuantity: number;
   minQuantityInBaseUnits: number | null;
   movementType: 'entry' | 'exit' | 'initial' | 'consumption' | 'legacy_snapshot';
+  reason: string | null;
   stockAfterQuantity: number | null;
   stockAfterQuantityInBaseUnits: number | null;
   missingQuantity: number;
   missingQuantityInBaseUnits: number | null;
   itemDeleted: number;
 };
+
+function normalizeMovementReason(value: string | null | undefined): MovementReason | null {
+  return value === 'perda' || value === 'ajuste' ? value : null;
+}
 
 type PeriodHistorySummaryRow = {
   countedEntries: number;
@@ -1530,6 +1536,7 @@ async function saveStockMovements(
             date,
             quantity,
             movement_type,
+            movement_reason,
             stock_after_quantity,
             created_by_user_remote_id,
             created_by_username,
@@ -1538,13 +1545,14 @@ async function saveStockMovements(
             created_at,
             updated_at
           )
-          VALUES (?, ?, 'pending', ?, ?, ?, NULL, ?, ?, 0, NULL, ?, ?);
+          VALUES (?, ?, 'pending', ?, ?, ?, ?, NULL, ?, ?, 0, NULL, ?, ?);
         `,
         update.itemId,
         entryRemoteId,
         date,
         update.quantity,
         movementType,
+        update.reason ?? null,
         sessionAuthor?.remote_id ?? null,
         sessionAuthor?.username ?? null,
         timestamp,
@@ -1847,6 +1855,7 @@ export async function listDailyHistoryGrouped(): Promise<DailyHistoryGroup[]> {
         daily_stock_entries.quantity * COALESCE(measurement_units.conversion_factor, 1) AS quantityInBaseUnits,
         daily_stock_entries.created_by_username AS createdByUsername,
         daily_stock_entries.movement_type AS movementType,
+        daily_stock_entries.movement_reason AS reason,
         daily_stock_entries.stock_after_quantity AS stockAfterQuantity,
         daily_stock_entries.stock_after_quantity * COALESCE(measurement_units.conversion_factor, 1) AS stockAfterQuantityInBaseUnits,
         stock_items.min_quantity AS minQuantity,
@@ -1893,6 +1902,7 @@ export async function listDailyHistoryGrouped(): Promise<DailyHistoryGroup[]> {
       minQuantityInBaseUnits:
         convertQuantityForUnit(detail.minQuantity, detail.unit, conversionFactor) ?? 0,
       movementType: normalizeMovementType(detail.movementType, 'exit'),
+      reason: normalizeMovementReason(detail.reason),
       stockAfterQuantity: detail.stockAfterQuantity,
       stockAfterQuantityInBaseUnits: convertQuantityForUnit(
         detail.stockAfterQuantity,

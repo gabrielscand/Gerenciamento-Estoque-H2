@@ -25,7 +25,7 @@ import { syncAppData } from '../database/sync.service';
 import { SyncStatusCard } from '../components/SyncStatusCard';
 import { StockEmphasis } from '../components/StockEmphasis';
 import { useTopPopup } from '../components/TopPopupProvider';
-import type { DailyCountUpdateInput, StockMovementItem } from '../types/inventory';
+import type { DailyCountUpdateInput, MovementReason, StockMovementItem } from '../types/inventory';
 import {
   formatDateLabel,
   getTodayLocalDateString,
@@ -53,6 +53,7 @@ type MovementCartItem = {
   unit: string;
   conversionFactor: number;
   quantity: number;
+  reason?: MovementReason | null;
 };
 
 const FILTER_ALL = '__all__';
@@ -640,6 +641,18 @@ function StockMovementScreen({ mode }: { mode: MovementMode }) {
     setCartItems((prev) => prev.filter((entry) => entry.itemId !== itemId));
   }
 
+  // Alterna a marca (perda/ajuste) do item no carrinho. Clicar na mesma opcao
+  // desmarca (volta a movimentacao normal, sem rotulo).
+  function setCartItemReason(itemId: number, reason: MovementReason) {
+    setCartItems((prev) =>
+      prev.map((entry) =>
+        entry.itemId === itemId
+          ? { ...entry, reason: entry.reason === reason ? null : reason }
+          : entry,
+      ),
+    );
+  }
+
   function clearCart() {
     setCartItems([]);
     showTopPopup({
@@ -721,7 +734,7 @@ function StockMovementScreen({ mode }: { mode: MovementMode }) {
         continue;
       }
 
-      updates.push({ itemId: item.id, quantity: cartItem.quantity });
+      updates.push({ itemId: item.id, quantity: cartItem.quantity, reason: cartItem.reason ?? null });
     }
 
     if (Object.keys(nextErrors).length > 0) {
@@ -1174,6 +1187,42 @@ function StockMovementScreen({ mode }: { mode: MovementMode }) {
                             formatQuantity,
                           )}
                         </Text>
+                        {mode === 'exit' ? (
+                          <View style={styles.cartReasonRow}>
+                            <Pressable
+                              style={[
+                                styles.cartReasonButton,
+                                cartItem.reason === 'perda' ? styles.cartReasonButtonActive : undefined,
+                              ]}
+                              onPress={() => setCartItemReason(cartItem.itemId, 'perda')}
+                            >
+                              <Text
+                                style={[
+                                  styles.cartReasonText,
+                                  cartItem.reason === 'perda' ? styles.cartReasonTextActive : undefined,
+                                ]}
+                              >
+                                Perda
+                              </Text>
+                            </Pressable>
+                            <Pressable
+                              style={[
+                                styles.cartReasonButton,
+                                cartItem.reason === 'ajuste' ? styles.cartReasonButtonActive : undefined,
+                              ]}
+                              onPress={() => setCartItemReason(cartItem.itemId, 'ajuste')}
+                            >
+                              <Text
+                                style={[
+                                  styles.cartReasonText,
+                                  cartItem.reason === 'ajuste' ? styles.cartReasonTextActive : undefined,
+                                ]}
+                              >
+                                Ajuste
+                              </Text>
+                            </Pressable>
+                          </View>
+                        ) : null}
                       </View>
                       <Pressable
                         style={styles.cartRemoveButton}
@@ -1726,6 +1775,31 @@ const styles = StyleSheet.create({
     color: '#77158E',
     fontSize: 12,
     fontWeight: '600',
+  },
+  cartReasonRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 6,
+  },
+  cartReasonButton: {
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: '#D8CCE3',
+    backgroundColor: '#F5EEFB',
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+  },
+  cartReasonButtonActive: {
+    borderColor: '#8C24A8',
+    backgroundColor: '#8C24A8',
+  },
+  cartReasonText: {
+    color: '#77158E',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  cartReasonTextActive: {
+    color: '#FFFFFF',
   },
   cartRemoveButton: {
     borderRadius: 8,
