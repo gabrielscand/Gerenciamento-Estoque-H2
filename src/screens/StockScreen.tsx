@@ -22,6 +22,7 @@ import { tokens } from '../theme/tokens';
 import type { StockCurrentOverviewRow } from '../types/inventory';
 import { formatOriginalAndBaseQuantity } from '../utils/unit-conversion';
 import { generateInventoryReportPdf } from '../utils/inventory-report';
+import { StockAdjustmentModal } from './StockAdjustmentScreen';
 import {
   gerarMensagemAlertaEstoqueAgrupada,
   verificarProximidadeEstoqueMinimo,
@@ -139,6 +140,7 @@ export function StockScreen() {
   const { syncStockNotifications } = useNotifications();
 
   const [isGeneratingInventory, setIsGeneratingInventory] = useState(false);
+  const [isAdjustOpen, setIsAdjustOpen] = useState(false);
 
   function notifyProximityAlerts(data: StockCurrentOverviewRow[]) {
     // O contexto cuida da deduplicação, do auto-remover (reabastecidos) e do
@@ -489,6 +491,13 @@ export function StockScreen() {
                 disabled={isGeneratingInventory}
               />
             </View>
+
+            <View style={styles.reportButtonWrap}>
+              <AppButton
+                label="Ajuste de Estoque"
+                onPress={() => setIsAdjustOpen(true)}
+              />
+            </View>
           </View>
         }
         ListEmptyComponent={
@@ -583,6 +592,14 @@ export function StockScreen() {
           );
         }}
         contentContainerStyle={styles.listContent}
+      />
+
+      <StockAdjustmentModal
+        visible={isAdjustOpen}
+        onClose={() => setIsAdjustOpen(false)}
+        onSaved={() => {
+          void loadStock();
+        }}
       />
     </ScreenShell>
   );

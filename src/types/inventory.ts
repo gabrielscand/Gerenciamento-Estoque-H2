@@ -184,6 +184,12 @@ export interface DailyCountUpdateInput {
   reason?: MovementReason | null;
 }
 
+export interface StockAdjustmentInput {
+  itemId: number;
+  targetQuantity: number;
+  previousQuantity: number | null;
+}
+
 export interface DailyHistoryEntry {
   id: number;
   date: string;
@@ -197,8 +203,11 @@ export interface DailyHistoryEntry {
   createdByUsername: string | null;
   minQuantity: number;
   minQuantityInBaseUnits: number;
-  movementType: 'entry' | 'exit' | 'initial' | 'consumption' | 'legacy_snapshot';
+  movementType: 'entry' | 'exit' | 'initial' | 'consumption' | 'legacy_snapshot' | 'adjustment';
   reason?: MovementReason | null;
+  observation?: string | null;
+  previousQuantity?: number | null;
+  previousQuantityInBaseUnits?: number | null;
   stockAfterQuantity: number | null;
   stockAfterQuantityInBaseUnits: number | null;
   needsPurchase: boolean;
@@ -232,7 +241,7 @@ export interface PeriodHistoryDayEntry {
   createdByUsername: string | null;
   minQuantity: number;
   minQuantityInBaseUnits: number;
-  movementType: 'entry' | 'exit' | 'initial' | 'consumption' | 'legacy_snapshot';
+  movementType: 'entry' | 'exit' | 'initial' | 'consumption' | 'legacy_snapshot' | 'adjustment';
   stockAfterQuantity: number | null;
   stockAfterQuantityInBaseUnits: number | null;
   needsPurchase: boolean;

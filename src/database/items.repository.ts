@@ -27,6 +27,7 @@ import type {
   DailyHistoryEntry,
   DailyHistoryGroup,
   MovementReason,
+  StockAdjustmentInput,
   HistoryReportEntry,
   PeriodHistoryDay,
   PeriodHistoryDayEntry,
@@ -106,8 +107,10 @@ type DailyHistoryDetailRow = {
   createdByUsername: string | null;
   minQuantity: number;
   minQuantityInBaseUnits: number | null;
-  movementType: 'entry' | 'exit' | 'initial' | 'consumption' | 'legacy_snapshot';
+  movementType: 'entry' | 'exit' | 'initial' | 'consumption' | 'legacy_snapshot' | 'adjustment';
   reason: string | null;
+  observation: string | null;
+  previousQuantity: number | null;
   stockAfterQuantity: number | null;
   stockAfterQuantityInBaseUnits: number | null;
   missingQuantity: number;
@@ -399,7 +402,11 @@ async function ensureCatalogBackfillFromStockItems(
   await activeCatalogBackfill;
 }
 
-function createMovementRemoteId(itemRemoteId: string, date: string, movementType: 'entry' | 'exit'): string {
+function createMovementRemoteId(
+  itemRemoteId: string,
+  date: string,
+  movementType: 'entry' | 'exit' | 'adjustment',
+): string {
   const uniquePart = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
   return `${itemRemoteId}:${date}:${movementType}:${uniquePart}`;
 }
@@ -412,7 +419,8 @@ function isMovementType(
     value === 'exit' ||
     value === 'initial' ||
     value === 'consumption' ||
-    value === 'legacy_snapshot'
+    value === 'legacy_snapshot' ||
+    value === 'adjustment'
   );
 }
 
@@ -992,7 +1000,11 @@ async function recalculateItemStockTimeline(
           : currentType;
     let nextStockAfter: number;
 
-    if (nextType === 'entry') {
+    if (nextType === 'adjustment') {
+      // Ajuste de estoque: define o saldo de forma absoluta para o novo valor.
+      nextStockAfter = roundQuantity(entry.quantity);
+      running = nextStockAfter;
+    } else if (nextType === 'entry') {
       const base = running ?? 0;
       nextStockAfter = roundQuantity(base + entry.quantity);
       running = nextStockAfter;
@@ -1537,6 +1549,8 @@ async function saveStockMovements(
             quantity,
             movement_type,
             movement_reason,
+            observation,
+            previous_quantity,
             stock_after_quantity,
             created_by_user_remote_id,
             created_by_username,
@@ -1545,7 +1559,7 @@ async function saveStockMovements(
             created_at,
             updated_at
           )
-          VALUES (?, ?, 'pending', ?, ?, ?, ?, NULL, ?, ?, 0, NULL, ?, ?);
+          VALUES (?, ?, 'pending', ?, ?, ?, ?, NULL, NULL, NULL, ?, ?, 0, NULL, ?, ?);
         `,
         update.itemId,
         entryRemoteId,
@@ -1580,6 +1594,93 @@ export async function saveStockExits(
   date: string = getTodayLocalDateString(),
 ): Promise<void> {
   return saveStockMovements(updates, 'exit', date);
+}
+
+export async function saveStockAdjustments(
+  adjustments: StockAdjustmentInput[],
+  observation: string | null = null,
+  date: string = getTodayLocalDateString(),
+): Promise<void> {
+  if (!isValidDateString(date)) {
+    throw new Error('Data de ajuste invalida.');
+  }
+
+  if (adjustments.length === 0) {
+    return;
+  }
+
+  const database = await getDatabase();
+  const sessionAuthor = await getCurrentSessionAuthor(database);
+  const trimmedObservation = observation && observation.trim().length > 0 ? observation.trim() : null;
+  const uniqueItemIds = Array.from(new Set(adjustments.map((adjustment) => adjustment.itemId)));
+  const itemIdPlaceholders = uniqueItemIds.map(() => '?').join(', ');
+  const itemRows = await database.getAllAsync<StockItemRemoteRow>(
+    `
+      SELECT id, name, remote_id, current_stock_quantity
+      FROM stock_items
+      WHERE id IN (${itemIdPlaceholders})
+        AND is_deleted = 0;
+    `,
+    ...uniqueItemIds,
+  );
+  const itemById = new Map<number, StockItemRemoteRow>(itemRows.map((row) => [row.id, row]));
+
+  await database.withTransactionAsync(async () => {
+    for (const adjustment of adjustments) {
+      if (!Number.isFinite(adjustment.targetQuantity) || adjustment.targetQuantity < 0) {
+        throw new Error('Quantidade invalida para ajuste de estoque.');
+      }
+
+      const item = itemById.get(adjustment.itemId);
+
+      if (!item || !item.remote_id) {
+        throw new Error('Item nao encontrado para sincronizacao do ajuste.');
+      }
+
+      const entryRemoteId = createMovementRemoteId(item.remote_id, date, 'adjustment');
+      const timestamp = nowIsoString();
+
+      await database.runAsync(
+        `
+          INSERT INTO daily_stock_entries (
+            item_id,
+            remote_id,
+            sync_status,
+            date,
+            quantity,
+            movement_type,
+            movement_reason,
+            observation,
+            previous_quantity,
+            stock_after_quantity,
+            created_by_user_remote_id,
+            created_by_username,
+            is_deleted,
+            deleted_at,
+            created_at,
+            updated_at
+          )
+          VALUES (?, ?, 'pending', ?, ?, 'adjustment', NULL, ?, ?, NULL, ?, ?, 0, NULL, ?, ?);
+        `,
+        adjustment.itemId,
+        entryRemoteId,
+        date,
+        adjustment.targetQuantity,
+        trimmedObservation,
+        adjustment.previousQuantity,
+        sessionAuthor?.remote_id ?? null,
+        sessionAuthor?.username ?? null,
+        timestamp,
+        timestamp,
+      );
+    }
+
+    for (const itemId of uniqueItemIds) {
+      await recalculateItemStockTimeline(database, itemId);
+    }
+  });
+
+  syncAppDataInBackground();
 }
 
 export async function updateDailyHistoryEntry(
@@ -1733,7 +1834,7 @@ export async function archiveDailyHistoryDate(date: string): Promise<void> {
 
 export async function archiveDailyHistoryDateByMovement(
   date: string,
-  movementFilter: 'entry' | 'exit',
+  movementFilter: 'entry' | 'exit' | 'adjustment',
 ): Promise<void> {
   if (!isValidDateString(date)) {
     throw new Error('Data de vistoria invalida.');
@@ -1742,8 +1843,15 @@ export async function archiveDailyHistoryDateByMovement(
   const movementTypes =
     movementFilter === 'entry'
       ? ['entry', 'initial', 'legacy_snapshot']
-      : ['exit', 'consumption'];
-  const movementLabel = movementFilter === 'entry' ? 'Entrada' : 'Saida';
+      : movementFilter === 'adjustment'
+        ? ['adjustment']
+        : ['exit', 'consumption'];
+  const movementLabel =
+    movementFilter === 'entry'
+      ? 'Entrada'
+      : movementFilter === 'adjustment'
+        ? 'Ajuste de estoque'
+        : 'Saida';
   const placeholders = movementTypes.map(() => '?').join(', ');
 
   const database = await getDatabase();
@@ -1856,6 +1964,8 @@ export async function listDailyHistoryGrouped(): Promise<DailyHistoryGroup[]> {
         daily_stock_entries.created_by_username AS createdByUsername,
         daily_stock_entries.movement_type AS movementType,
         daily_stock_entries.movement_reason AS reason,
+        daily_stock_entries.observation AS observation,
+        daily_stock_entries.previous_quantity AS previousQuantity,
         daily_stock_entries.stock_after_quantity AS stockAfterQuantity,
         daily_stock_entries.stock_after_quantity * COALESCE(measurement_units.conversion_factor, 1) AS stockAfterQuantityInBaseUnits,
         stock_items.min_quantity AS minQuantity,
@@ -1903,6 +2013,12 @@ export async function listDailyHistoryGrouped(): Promise<DailyHistoryGroup[]> {
         convertQuantityForUnit(detail.minQuantity, detail.unit, conversionFactor) ?? 0,
       movementType: normalizeMovementType(detail.movementType, 'exit'),
       reason: normalizeMovementReason(detail.reason),
+      observation: detail.observation,
+      previousQuantity: detail.previousQuantity,
+      previousQuantityInBaseUnits:
+        detail.previousQuantity === null
+          ? null
+          : convertQuantityForUnit(detail.previousQuantity, detail.unit, conversionFactor),
       stockAfterQuantity: detail.stockAfterQuantity,
       stockAfterQuantityInBaseUnits: convertQuantityForUnit(
         detail.stockAfterQuantity,

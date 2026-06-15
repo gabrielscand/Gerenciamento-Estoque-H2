@@ -42,7 +42,7 @@ import { generateHistoryReportPdf } from '../utils/history-report';
 import { formatOriginalAndBaseQuantity } from '../utils/unit-conversion';
 
 type HistoryMode = 'diario' | 'quinzenal' | 'mensal';
-type DailyMovementFilter = 'entry' | 'exit';
+type DailyMovementFilter = 'entry' | 'exit' | 'adjustment';
 type PeriodDayMovementFilter = 'all' | DailyMovementFilter;
 
 type HistoryScreenProps = {
@@ -172,6 +172,10 @@ function getMovementTypeLabel(movementType: DailyHistoryEntry['movementType']): 
     return 'Saida';
   }
 
+  if (movementType === 'adjustment') {
+    return 'Ajuste de estoque';
+  }
+
   if (movementType === 'initial') {
     return 'Inicial';
   }
@@ -196,6 +200,10 @@ function getReasonLabel(reason: DailyHistoryEntry['reason']): string | null {
 }
 
 function resolveMovementFilter(movementType: DailyHistoryEntry['movementType']): DailyMovementFilter {
+  if (movementType === 'adjustment') {
+    return 'adjustment';
+  }
+
   if (movementType === 'entry' || movementType === 'initial' || movementType === 'legacy_snapshot') {
     return 'entry';
   }
@@ -204,7 +212,15 @@ function resolveMovementFilter(movementType: DailyHistoryEntry['movementType']):
 }
 
 function getDailyMovementFilterLabel(filter: DailyMovementFilter): string {
-  return filter === 'entry' ? 'Entrada' : 'Saida';
+  if (filter === 'entry') {
+    return 'Entrada';
+  }
+
+  if (filter === 'adjustment') {
+    return 'Ajuste de estoque';
+  }
+
+  return 'Saida';
 }
 
 function getHistoryReportPeriodLabel(period: HistoryReportPeriod): string {
@@ -976,6 +992,22 @@ export function HistoryScreen({ canManageHistoryActions = false }: HistoryScreen
                     Saida
                   </Text>
                 </Pressable>
+                <Pressable
+                  style={[
+                    styles.dailyFilterButton,
+                    dailyMovementFilter === 'adjustment' ? styles.dailyFilterButtonActive : undefined,
+                  ]}
+                  onPress={() => setDailyMovementFilter('adjustment')}
+                >
+                  <Text
+                    style={[
+                      styles.dailyFilterText,
+                      dailyMovementFilter === 'adjustment' ? styles.dailyFilterTextActive : undefined,
+                    ]}
+                  >
+                    Ajuste
+                  </Text>
+                </Pressable>
               </View>
             ) : null}
 
@@ -1160,14 +1192,35 @@ export function HistoryScreen({ canManageHistoryActions = false }: HistoryScreen
                         </View>
                         <StockEmphasis
                           label={getMovementTypeLabel(entry.movementType)}
-                          value={formatOriginalAndBaseQuantity(
-                            entry.quantity,
-                            entry.unit,
-                            entry.conversionFactor,
-                            formatQuantity,
-                          )}
+                          value={
+                            entry.movementType === 'adjustment'
+                              ? `de ${
+                                  entry.previousQuantity != null
+                                    ? formatOriginalAndBaseQuantity(
+                                        entry.previousQuantity,
+                                        entry.unit,
+                                        entry.conversionFactor,
+                                        formatQuantity,
+                                      )
+                                    : '-'
+                                } para ${formatOriginalAndBaseQuantity(
+                                  entry.quantity,
+                                  entry.unit,
+                                  entry.conversionFactor,
+                                  formatQuantity,
+                                )}`
+                              : formatOriginalAndBaseQuantity(
+                                  entry.quantity,
+                                  entry.unit,
+                                  entry.conversionFactor,
+                                  formatQuantity,
+                                )
+                          }
                           tone="normal"
                         />
+                        {entry.observation ? (
+                          <Text style={styles.entryMeta}>Obs.: {entry.observation}</Text>
+                        ) : null}
                         <Text style={styles.entryMeta}>
                           Saldo apos:{' '}
                           {entry.stockAfterQuantity === null
