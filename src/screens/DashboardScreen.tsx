@@ -22,7 +22,7 @@ import {
 } from 'victory-native';
 import { SyncStatusCard } from '../components/SyncStatusCard';
 import { useTopPopup } from '../components/TopPopupProvider';
-import { HeroHeader, KpiTile, MotionEntrance, ScreenShell } from '../components/ui-kit';
+import { AppButton, HeroHeader, KpiTile, MotionEntrance, ScreenShell } from '../components/ui-kit';
 import { tokens } from '../theme/tokens';
 import { getDashboardAnalytics } from '../database/items.repository';
 import { syncAppData } from '../database/sync.service';
@@ -34,6 +34,7 @@ import type {
   DashboardItemAnalyticsRow,
 } from '../types/inventory';
 import { formatMonthLabel, getCurrentMonthString } from '../utils/date';
+import { generateAbcReportPdf } from '../utils/abc-report';
 import { formatOriginalAndBaseQuantity } from '../utils/unit-conversion';
 
 function formatQuantity(value: number): string {
@@ -590,6 +591,8 @@ export function DashboardScreen() {
   const [isMonthMenuOpen, setIsMonthMenuOpen] = useState(false);
   const [selectedMetric, setSelectedMetric] = useState<DashboardAbcMetric>('movement');
   const [viewMode, setViewMode] = useState<'item' | 'category'>('item');
+  const [selectedAbcClass, setSelectedAbcClass] = useState<DashboardAbcClass | null>(null);
+  const [isGeneratingAbcReport, setIsGeneratingAbcReport] = useState(false);
   const [activeChartInfo, setActiveChartInfo] = useState<DashboardChartInfoKey | null>(null);
   const [dashboardData, setDashboardData] = useState<DashboardAnalyticsData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -698,6 +701,68 @@ export function DashboardScreen() {
     () => buildAbcPoints(activeDataList, selectedMetric),
     [activeDataList, selectedMetric],
   );
+
+  const abcClassCounts = useMemo(() => {
+    const counts = { A: 0, B: 0, C: 0 };
+    for (const point of abcPoints) {
+      counts[point.abcClass] += 1;
+    }
+    return counts;
+  }, [abcPoints]);
+
+  const visibleAbcPoints = useMemo(
+    () =>
+      selectedAbcClass
+        ? abcPoints.filter((point) => point.abcClass === selectedAbcClass)
+        : abcPoints.slice(0, 10),
+    [abcPoints, selectedAbcClass],
+  );
+
+  useEffect(() => {
+    setSelectedAbcClass(null);
+  }, [selectedMonth, selectedMetric, viewMode]);
+
+  async function handleGenerateAbcReport() {
+    if (isGeneratingAbcReport) {
+      return;
+    }
+
+    if (abcPoints.length === 0) {
+      showTopPopup({
+        type: 'warning',
+        message: 'Sem itens na Curva ABC para gerar o relatorio.',
+        durationMs: 3200,
+      });
+      return;
+    }
+
+    setIsGeneratingAbcReport(true);
+
+    try {
+      await generateAbcReportPdf(abcPoints, {
+        monthLabel: formatMonthLabel(selectedMonth),
+        metricLabel: getMetricLabel(selectedMetric),
+        viewLabel: viewMode === 'item' ? 'Por item' : 'Por categoria',
+      });
+
+      showTopPopup({
+        type: 'success',
+        message:
+          Platform.OS === 'web'
+            ? 'Relatorio da Curva ABC enviado para visualizacao/impressao.'
+            : 'Relatorio da Curva ABC gerado com sucesso.',
+        durationMs: 3200,
+      });
+    } catch (error) {
+      showTopPopup({
+        type: 'error',
+        message: error instanceof Error ? error.message : 'Falha ao gerar relatorio da Curva ABC.',
+        durationMs: 4200,
+      });
+    } finally {
+      setIsGeneratingAbcReport(false);
+    }
+  }
 
   const topEntryItems = useMemo(
     () =>
@@ -948,8 +1013,66 @@ export function DashboardScreen() {
                 />
 
                 {abcPoints.length > 0 ? (
+                  <View style={styles.abcFilterRow}>
+                    {(['A', 'B', 'C'] as DashboardAbcClass[]).map((abcClass) => {
+                      const isActive = selectedAbcClass === abcClass;
+                      const activeStyle =
+                        abcClass === 'A'
+                          ? styles.abcFilterButtonA
+                          : abcClass === 'B'
+                            ? styles.abcFilterButtonB
+                            : styles.abcFilterButtonC;
+
+                      return (
+                        <Pressable
+                          key={abcClass}
+                          disabled={abcClassCounts[abcClass] === 0}
+                          style={[
+                            styles.abcFilterButton,
+                            isActive ? activeStyle : undefined,
+                            abcClassCounts[abcClass] === 0 ? styles.abcFilterButtonDisabled : undefined,
+                          ]}
+                          onPress={() =>
+                            setSelectedAbcClass((current) => (current === abcClass ? null : abcClass))
+                          }
+                        >
+                          <Text
+                            style={[
+                              styles.abcFilterText,
+                              isActive ? styles.abcFilterTextActive : undefined,
+                            ]}
+                          >
+                            {abcClass} ({abcClassCounts[abcClass]})
+                          </Text>
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+                ) : null}
+
+                <View style={styles.abcReportButtonWrap}>
+                  <AppButton
+                    label={isGeneratingAbcReport ? 'Gerando relatorio...' : 'Gerar Relatorio'}
+                    onPress={() => {
+                      void handleGenerateAbcReport();
+                    }}
+                    disabled={isGeneratingAbcReport || abcPoints.length === 0}
+                  />
+                </View>
+
+                {abcPoints.length > 0 ? (
+                  <Text style={styles.abcFilterCaption}>
+                    {selectedAbcClass
+                      ? `Mostrando classe ${selectedAbcClass} (${abcClassCounts[selectedAbcClass]} ${
+                          abcClassCounts[selectedAbcClass] === 1 ? 'item' : 'itens'
+                        })`
+                      : 'Top 10 itens (use A/B/C para ver todos de uma classe)'}
+                  </Text>
+                ) : null}
+
+                {abcPoints.length > 0 ? (
                   <View style={styles.abcList}>
-                    {abcPoints.slice(0, 10).map((point) => (
+                    {visibleAbcPoints.map((point) => (
                       <View key={`${point.itemId}-${point.rank}`} style={styles.abcRow}>
                         <View style={styles.abcRankBubble}>
                           <Text style={styles.abcRankText}>{point.rank}</Text>
@@ -1409,6 +1532,52 @@ const styles = StyleSheet.create({
     color: '#4A155A',
     fontSize: 12,
     fontWeight: '900',
+  },
+  abcFilterRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 8,
+  },
+  abcFilterButton: {
+    flex: 1,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: '#D8C3EA',
+    backgroundColor: '#FCF9FF',
+    paddingVertical: 9,
+    alignItems: 'center',
+  },
+  abcFilterButtonDisabled: {
+    opacity: 0.45,
+  },
+  abcFilterButtonA: {
+    borderColor: '#2F8A5F',
+    backgroundColor: '#2F8A5F',
+  },
+  abcFilterButtonB: {
+    borderColor: '#B87914',
+    backgroundColor: '#B87914',
+  },
+  abcFilterButtonC: {
+    borderColor: '#B73636',
+    backgroundColor: '#B73636',
+  },
+  abcFilterText: {
+    color: '#5F1175',
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  abcFilterTextActive: {
+    color: '#FFFFFF',
+  },
+  abcReportButtonWrap: {
+    marginTop: 10,
+  },
+  abcFilterCaption: {
+    marginTop: 10,
+    color: '#6B5177',
+    fontSize: 12,
+    fontWeight: '700',
   },
   abcList: {
     gap: 8,
