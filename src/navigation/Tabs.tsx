@@ -2,8 +2,6 @@ import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { Asset } from 'expo-asset';
-import { SvgUri } from 'react-native-svg';
 import { canAccessTab } from '../database/auth.repository';
 import type { AppUser } from '../types/inventory';
 import { AdminPanelScreen } from '../screens/AdminPanelScreen';
@@ -32,7 +30,6 @@ type RootTabParamList = {
 };
 
 const Tab = createBottomTabNavigator<RootTabParamList>();
-const h2LogoAsset = Asset.fromModule(require('../../assets/logo-2024.svg'));
 
 type TabsProps = {
   currentUser: AppUser;
@@ -70,12 +67,6 @@ export function Tabs({ currentUser, onLogout, onUsersChanged }: TabsProps) {
   const canAdmin = currentUser.isAdmin;
   const hasAnyAccess = canDashboard || canStock || canItems || canEntry || canExit || canHistory || canAdmin;
   const isCompactHeader = viewportWidth < 430;
-  const isTabletHeader = viewportWidth >= 900;
-  const logoSize = isCompactHeader
-    ? { width: 38, height: 26 }
-    : isTabletHeader
-      ? { width: 56, height: 38 }
-      : { width: 50, height: 34 };
 
   const initialRouteName: keyof RootTabParamList = hasAnyAccess ? 'Home' : 'NoAccess';
 
@@ -115,10 +106,6 @@ export function Tabs({ currentUser, onLogout, onUsersChanged }: TabsProps) {
                 isCompactHeader ? styles.headerUserActionsCompact : styles.headerUserActionsDefault,
               ]}
             >
-              <View style={[styles.headerBrand, isCompactHeader ? styles.headerBrandCompact : undefined]}>
-                <SvgUri uri={h2LogoAsset?.uri ?? ''} width={logoSize.width} height={logoSize.height} />
-                <Text style={styles.headerBrandText}>{'sports\nbar &\npoker'}</Text>
-              </View>
               {canHistory && route.name !== 'History' ? (
                 <Pressable
                   style={({ pressed }) => [
@@ -305,23 +292,6 @@ const styles = StyleSheet.create({
   headerUserActionsDefault: {
     gap: 8,
     maxWidth: 480,
-  },
-  headerBrand: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-  },
-  headerBrandCompact: {
-    gap: 4,
-  },
-  headerBrandText: {
-    color: tokens.colors.accentStrong,
-    fontSize: 11,
-    lineHeight: 12,
-    fontWeight: '800',
-    letterSpacing: 0.4,
-    textAlign: 'center',
   },
   menuButton: {
     marginLeft: 10,
