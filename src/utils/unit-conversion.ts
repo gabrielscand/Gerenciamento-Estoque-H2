@@ -50,14 +50,17 @@ export function convertToBaseUnits(
   }
 
   const factor = normalizeConversionFactor(conversionFactor, unitName);
-  return roundQuantity(quantity * factor);
+  const raw = quantity * factor;
+  // Itens de fardo sao pacotes discretos: a quantidade em unidades (base) e
+  // sempre inteira. Arredonda para inteiro para nao exibir casas decimais.
+  return isFardoConversionFactor(factor) ? Math.round(raw) : roundQuantity(raw);
 }
 
 export function roundQuantity(value: number): number {
   return Math.round(value * 1000) / 1000;
 }
 
-const FARDO_CONVERSION_FACTORS = new Set([4, 6, 12, 24]);
+const FARDO_CONVERSION_FACTORS = new Set([4, 6, 8, 12, 24]);
 
 export function isFardoConversionFactor(conversionFactor: number | null | undefined): boolean {
   return typeof conversionFactor === 'number' && FARDO_CONVERSION_FACTORS.has(conversionFactor);

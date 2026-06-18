@@ -33,9 +33,9 @@ import type {
   DashboardAnalyticsData,
   DashboardItemAnalyticsRow,
 } from '../types/inventory';
-import { formatMonthLabel, getCurrentMonthString } from '../utils/date';
+import { formatMonthLabel, getCurrentMonthString, getTodayLocalDateString } from '../utils/date';
 import { generateAbcReportPdf } from '../utils/abc-report';
-import { formatOriginalAndBaseQuantity } from '../utils/unit-conversion';
+import { formatOriginalAndBaseQuantity, isFardoConversionFactor } from '../utils/unit-conversion';
 
 function formatQuantity(value: number): string {
   return value.toLocaleString('pt-BR', {
@@ -321,7 +321,12 @@ function DailyMovementChart({
   width: number;
   chartKey: string;
 }) {
-  const activeDays = data.filter((point) => point.entryQuantityInBaseUnits > 0 || point.exitQuantityInBaseUnits > 0);
+  const today = getTodayLocalDateString();
+  const activeDays = data.filter(
+    (point) =>
+      point.date <= today &&
+      (point.entryQuantityInBaseUnits > 0 || point.exitQuantityInBaseUnits > 0),
+  );
 
   if (activeDays.length === 0) {
     return <EmptyChart message="Registre entradas ou saidas para visualizar o movimento diario." />;
@@ -419,10 +424,16 @@ function RankingChart({
     return <EmptyChart message={emptyMessage} />;
   }
 
+  // Itens de fardo mostram unidades inteiras (pacotes discretos).
+  const baseValueOf = (item: DashboardItemAnalyticsRow): number => {
+    const value = metric === 'entry' ? item.entryQuantityInBaseUnits : item.exitQuantityInBaseUnits;
+    return isFardoConversionFactor(item.conversionFactor) ? Math.round(value) : value;
+  };
+
   const chartItems = items.slice(0, 6).reverse();
   const chartData = chartItems.map((item) => ({
     x: item.name.length > 18 ? `${item.name.slice(0, 16)}...` : item.name,
-    y: metric === 'entry' ? item.entryQuantityInBaseUnits : item.exitQuantityInBaseUnits,
+    y: baseValueOf(item),
   }));
 
   return (
@@ -465,7 +476,7 @@ function RankingChart({
       <View style={styles.rankingList}>
         {items.slice(0, 4).map((item, index) => {
           const originalValue = metric === 'entry' ? item.entryQuantity : item.exitQuantity;
-          const baseValue = metric === 'entry' ? item.entryQuantityInBaseUnits : item.exitQuantityInBaseUnits;
+          const baseValue = baseValueOf(item);
 
           return (
             <View key={`${metric}-${item.itemId}`} style={[styles.rankingRow, { backgroundColor: index === 0 ? softColor : '#FFFFFF' }]}>
@@ -797,7 +808,9 @@ export function DashboardScreen() {
   const totalMovement = dashboardData?.totals.movementTotalInBaseUnits ?? 0;
   const totalItems = dashboardData?.totals.activeItems ?? 0;
   const movementDays = dashboardData?.dailySeries.filter(
-    (point) => point.entryQuantityInBaseUnits > 0 || point.exitQuantityInBaseUnits > 0,
+    (point) =>
+      point.date <= getTodayLocalDateString() &&
+      (point.entryQuantityInBaseUnits > 0 || point.exitQuantityInBaseUnits > 0),
   ).length ?? 0;
   const leadingEntryName = topEntryItems[0]?.name ?? 'Sem entrada';
   const leadingExitName = topExitItems[0]?.name ?? 'Sem saida';

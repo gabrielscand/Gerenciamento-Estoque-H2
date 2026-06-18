@@ -89,7 +89,7 @@ function formatQuantity(value: number): string {
   });
 }
 
-const FARDO_FACTORS = new Set([4, 6, 12, 24]);
+const FARDO_FACTORS = new Set([4, 6, 8, 12, 24]);
 
 function isUnitInputItem(item: { conversionFactor: number }): boolean {
   return FARDO_FACTORS.has(item.conversionFactor);

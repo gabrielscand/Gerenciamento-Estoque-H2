@@ -2392,6 +2392,8 @@ export async function getDashboardAnalytics(month: string): Promise<DashboardAna
           CASE
             WHEN movement_type IN ('entry', 'initial', 'legacy_snapshot')
               THEN quantity
+            WHEN movement_type = 'adjustment'
+              THEN quantity - COALESCE(previous_quantity, quantity)
             ELSE 0
           END
         ) AS totalEntryQuantity,
@@ -2399,6 +2401,8 @@ export async function getDashboardAnalytics(month: string): Promise<DashboardAna
           CASE
             WHEN movement_type IN ('entry', 'initial', 'legacy_snapshot')
               THEN quantity * COALESCE(measurement_units.conversion_factor, 1)
+            WHEN movement_type = 'adjustment'
+              THEN (quantity - COALESCE(previous_quantity, quantity)) * COALESCE(measurement_units.conversion_factor, 1)
             ELSE 0
           END
         ) AS totalEntryQuantityInBaseUnits,
@@ -2441,6 +2445,8 @@ export async function getDashboardAnalytics(month: string): Promise<DashboardAna
           CASE
             WHEN daily_stock_entries.movement_type IN ('entry', 'initial', 'legacy_snapshot')
               THEN daily_stock_entries.quantity
+            WHEN daily_stock_entries.movement_type = 'adjustment'
+              THEN daily_stock_entries.quantity - COALESCE(daily_stock_entries.previous_quantity, daily_stock_entries.quantity)
             ELSE 0
           END
         ) AS entryQuantity,
@@ -2448,6 +2454,8 @@ export async function getDashboardAnalytics(month: string): Promise<DashboardAna
           CASE
             WHEN daily_stock_entries.movement_type IN ('entry', 'initial', 'legacy_snapshot')
               THEN daily_stock_entries.quantity * COALESCE(measurement_units.conversion_factor, 1)
+            WHEN daily_stock_entries.movement_type = 'adjustment'
+              THEN (daily_stock_entries.quantity - COALESCE(daily_stock_entries.previous_quantity, daily_stock_entries.quantity)) * COALESCE(measurement_units.conversion_factor, 1)
             ELSE 0
           END
         ) AS entryQuantityInBaseUnits,
@@ -2479,6 +2487,8 @@ export async function getDashboardAnalytics(month: string): Promise<DashboardAna
             CASE
               WHEN daily_stock_entries.movement_type IN ('entry', 'initial', 'legacy_snapshot')
                 THEN daily_stock_entries.quantity * COALESCE(measurement_units.conversion_factor, 1)
+              WHEN daily_stock_entries.movement_type = 'adjustment'
+                THEN (daily_stock_entries.quantity - COALESCE(daily_stock_entries.previous_quantity, daily_stock_entries.quantity)) * COALESCE(measurement_units.conversion_factor, 1)
               ELSE 0
             END
           ) +
