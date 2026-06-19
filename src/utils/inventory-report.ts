@@ -68,10 +68,15 @@ function escapeHtml(value: string): string {
 function collectInventoryItems(items: StockCurrentOverviewRow[]): InventoryReportItem[] {
   return items
     .filter((item) => item.currentStockQuantity !== null)
-    .sort(
-      (left, right) =>
-        left.name.localeCompare(right.name, 'pt-BR', { sensitivity: 'base' }),
-    )
+    .sort((left, right) => {
+      const catLeft = left.category ? getCategoryLabel(left.category) : 'Sem categoria';
+      const catRight = right.category ? getCategoryLabel(right.category) : 'Sem categoria';
+      const byCategory = catLeft.localeCompare(catRight, 'pt-BR', { sensitivity: 'base' });
+      if (byCategory !== 0) {
+        return byCategory;
+      }
+      return left.name.localeCompare(right.name, 'pt-BR', { sensitivity: 'base' });
+    })
     .map((item) => ({
       id: item.id,
       name: item.name,

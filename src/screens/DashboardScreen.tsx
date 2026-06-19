@@ -16,9 +16,9 @@ import {
   VictoryAxis,
   VictoryBar,
   VictoryChart,
+  VictoryGroup,
   VictoryLine,
   VictoryScatter,
-  VictoryStack,
 } from 'victory-native';
 import { SyncStatusCard } from '../components/SyncStatusCard';
 import { useTopPopup } from '../components/TopPopupProvider';
@@ -341,6 +341,7 @@ function DailyMovementChart({
   const tickValues = chartData
     .filter((_, index) => index % tickStep === 0 || index === chartData.length - 1)
     .map((point) => point.x);
+  const barWidth = Math.max(5, Math.min(13, Math.round((width - 96) / Math.max(activeDays.length, 1) / 2.5)));
 
   return (
     <View style={styles.chartCanvas}>
@@ -360,6 +361,7 @@ function DailyMovementChart({
         height={280}
         padding={{ top: 22, right: 28, bottom: 42, left: 68 }}
         domainPadding={{ x: 14, y: 18 }}
+        categories={{ x: chartData.map((point) => point.x) }}
       >
         <VictoryAxis
           tickValues={tickValues}
@@ -378,24 +380,24 @@ function DailyMovementChart({
             tickLabels: { fill: '#6B5177', fontSize: 10, fontWeight: 700, padding: 6, fontFamily: CHART_FONT_FAMILY },
           }}
         />
-        <VictoryStack>
+        <VictoryGroup offset={barWidth + 2}>
           <VictoryBar
             data={chartData}
             x="x"
             y="entry"
-            cornerRadius={{ top: 5, bottom: 5 }}
-            style={{ data: { fill: ENTRY_COLOR, width: 12 } }}
+            cornerRadius={{ top: 3 }}
+            style={{ data: { fill: ENTRY_COLOR, width: barWidth } }}
             animate={{ duration: 450, onLoad: { duration: 450 } }}
           />
           <VictoryBar
             data={chartData}
             x="x"
             y="exit"
-            cornerRadius={{ top: 5, bottom: 5 }}
-            style={{ data: { fill: EXIT_COLOR, width: 12 } }}
+            cornerRadius={{ top: 3 }}
+            style={{ data: { fill: EXIT_COLOR, width: barWidth } }}
             animate={{ duration: 450, onLoad: { duration: 450 } }}
           />
-        </VictoryStack>
+        </VictoryGroup>
       </VictoryChart>
     </View>
   );
@@ -957,7 +959,7 @@ export function DashboardScreen() {
                   onPressInfo={() => setActiveChartInfo('dailySeries')}
                 />
                 <Text style={styles.cardSubtitle}>
-                  Barras empilhadas por dia em unidade base. Use para enxergar picos de compra e consumo.
+                  Barras lado a lado por dia (entrada e saida) em unidade base. Use para enxergar picos de compra e consumo.
                 </Text>
                 <DailyMovementChart
                   data={dashboardData.dailySeries}
