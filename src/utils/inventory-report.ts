@@ -48,14 +48,6 @@ function formatQuantity(value: number): string {
   });
 }
 
-function formatOriginalAndBase(quantity: number, unit: string, _conversionFactor: number): string {
-  if (!unit || unit.trim().length === 0) {
-    return formatQuantity(quantity);
-  }
-
-  return `${formatQuantity(quantity)} ${unit}`;
-}
-
 function escapeHtml(value: string): string {
   return value
     .replaceAll('&', '&amp;')
@@ -104,15 +96,9 @@ function buildPdfHtml(payload: InventoryReportPayload): string {
                 <td>${escapeHtml(
                   item.currentStockQuantity === null
                     ? '-'
-                    : formatOriginalAndBase(
-                        item.currentStockQuantity,
-                        item.unit,
-                        item.conversionFactor,
-                      ),
+                    : formatQuantity(item.currentStockQuantityInBaseUnits ?? 0),
                 )}</td>
-                <td>${escapeHtml(
-                  formatOriginalAndBase(item.minQuantity, item.unit, item.conversionFactor),
-                )}</td>
+                <td>${escapeHtml(formatQuantity(item.minQuantityInBaseUnits))}</td>
               </tr>
             `,
           )
@@ -294,8 +280,8 @@ async function generateWebPdf(payload: InventoryReportPayload): Promise<void> {
           item.unit,
           item.currentStockQuantity === null
             ? '-'
-            : formatOriginalAndBase(item.currentStockQuantity, item.unit, item.conversionFactor),
-          formatOriginalAndBase(item.minQuantity, item.unit, item.conversionFactor),
+            : formatQuantity(item.currentStockQuantityInBaseUnits ?? 0),
+          formatQuantity(item.minQuantityInBaseUnits),
         ])
       : [['-', 'Nenhum item cadastrado no momento.', '-', '-', '-', '-']];
 

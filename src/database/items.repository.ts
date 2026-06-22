@@ -796,6 +796,25 @@ export async function listItemCategories(): Promise<string[]> {
   return rows.map((row) => row.name).filter((row) => row.length > 0);
 }
 
+// Categorias realmente atribuidas a itens (para filtros). Evita opcoes do
+// catalogo sem itens e variacoes que nao casam com stock_items.category.
+export async function listUsedItemCategories(): Promise<string[]> {
+  const database = await getDatabase();
+  const rows = await database.getAllAsync<{ category: string | null }>(
+    `
+      SELECT DISTINCT TRIM(category) AS category
+      FROM stock_items
+      WHERE is_deleted = 0
+        AND category IS NOT NULL
+        AND TRIM(category) <> ''
+      ORDER BY category COLLATE NOCASE ASC;
+    `,
+  );
+  return rows
+    .map((row) => row.category)
+    .filter((category): category is string => typeof category === 'string' && category.length > 0);
+}
+
 export async function listMeasurementUnits(): Promise<string[]> {
   const rows = await listCatalogOptions('measurement_units');
   return rows.map((row) => row.name).filter((row) => row.length > 0);
@@ -2371,7 +2390,10 @@ export async function listMonthlyHistoryGrouped(month: string): Promise<PeriodHi
   ];
 }
 
-export async function getDashboardAnalytics(month: string): Promise<DashboardAnalyticsData> {
+export async function getDashboardAnalytics(
+  month: string,
+  category?: string | null,
+): Promise<DashboardAnalyticsData> {
   if (!isValidMonthString(month)) {
     throw new Error('Mes invalido para dashboard.');
   }
@@ -2383,6 +2405,11 @@ export async function getDashboardAnalytics(month: string): Promise<DashboardAna
   }
 
   const { startDate, endDate } = monthRange;
+  // Filtro opcional por categoria: quando definido, todo o dashboard (KPIs,
+  // itens da Curva ABC/rankings e serie diaria) considera so essa categoria.
+  const categoryFilter = category && category.trim().length > 0 ? category.trim() : null;
+  const categoryClause = categoryFilter ? ' AND TRIM(stock_items.category) = TRIM(?)' : '';
+  const categoryParams = categoryFilter ? [categoryFilter] : [];
   const database = await getDatabase();
 
   const summaryRow = await database.getFirstAsync<DashboardSummaryRow>(
@@ -2427,10 +2454,11 @@ export async function getDashboardAnalytics(month: string): Promise<DashboardAna
         ON measurement_units.name_normalized = stock_items.unit
        AND measurement_units.is_deleted = 0
       WHERE daily_stock_entries.is_deleted = 0
-        AND daily_stock_entries.date BETWEEN ? AND ?;
+        AND daily_stock_entries.date BETWEEN ? AND ?${categoryClause};
     `,
     startDate,
     endDate,
+    ...categoryParams,
   );
 
   const itemRows = await database.getAllAsync<DashboardItemTotalsRow>(
@@ -2479,7 +2507,7 @@ export async function getDashboardAnalytics(month: string): Promise<DashboardAna
         ON measurement_units.name_normalized = stock_items.unit
        AND measurement_units.is_deleted = 0
       WHERE daily_stock_entries.is_deleted = 0
-        AND daily_stock_entries.date BETWEEN ? AND ?
+        AND daily_stock_entries.date BETWEEN ? AND ?${categoryClause}
       GROUP BY stock_items.id, stock_items.name, stock_items.unit, stock_items.category, measurement_units.conversion_factor
       ORDER BY
         (
@@ -2504,6 +2532,7 @@ export async function getDashboardAnalytics(month: string): Promise<DashboardAna
     `,
     startDate,
     endDate,
+    ...categoryParams,
   );
 
   const dailyRows = await database.getAllAsync<DashboardDailySeriesRow>(
@@ -2544,12 +2573,13 @@ export async function getDashboardAnalytics(month: string): Promise<DashboardAna
         ON measurement_units.name_normalized = stock_items.unit
        AND measurement_units.is_deleted = 0
       WHERE daily_stock_entries.is_deleted = 0
-        AND daily_stock_entries.date BETWEEN ? AND ?
+        AND daily_stock_entries.date BETWEEN ? AND ?${categoryClause}
       GROUP BY daily_stock_entries.date
       ORDER BY daily_stock_entries.date ASC;
     `,
     startDate,
     endDate,
+    ...categoryParams,
   );
 
   const items: DashboardItemAnalyticsRow[] = itemRows

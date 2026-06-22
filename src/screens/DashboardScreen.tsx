@@ -24,7 +24,8 @@ import { SyncStatusCard } from '../components/SyncStatusCard';
 import { useTopPopup } from '../components/TopPopupProvider';
 import { AppButton, HeroHeader, KpiTile, MotionEntrance, ScreenShell } from '../components/ui-kit';
 import { tokens } from '../theme/tokens';
-import { getDashboardAnalytics } from '../database/items.repository';
+import { getCategoryLabel } from '../constants/categories';
+import { getDashboardAnalytics, listUsedItemCategories } from '../database/items.repository';
 import { syncAppData } from '../database/sync.service';
 import type {
   DashboardAbcClass,
@@ -604,6 +605,9 @@ export function DashboardScreen() {
   const [isMonthMenuOpen, setIsMonthMenuOpen] = useState(false);
   const [selectedMetric, setSelectedMetric] = useState<DashboardAbcMetric>('movement');
   const [viewMode, setViewMode] = useState<'item' | 'category'>('item');
+  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+  const [categoryOptions, setCategoryOptions] = useState<string[]>([]);
+  const [isCategoryMenuOpen, setIsCategoryMenuOpen] = useState(false);
   const [selectedAbcClass, setSelectedAbcClass] = useState<DashboardAbcClass | null>(null);
   const [isGeneratingAbcReport, setIsGeneratingAbcReport] = useState(false);
   const [activeChartInfo, setActiveChartInfo] = useState<DashboardChartInfoKey | null>(null);
@@ -627,7 +631,7 @@ export function DashboardScreen() {
         await syncAppData();
       }
 
-      const data = await getDashboardAnalytics(month);
+      const data = await getDashboardAnalytics(month, selectedCategory);
       setDashboardData(data);
     } catch (error) {
       setDashboardData(null);
@@ -643,7 +647,28 @@ export function DashboardScreen() {
     }
 
     void loadDashboard(selectedMonth);
-  }, [selectedMonth, isFocused]);
+  }, [selectedMonth, selectedCategory, isFocused]);
+
+  useEffect(() => {
+    if (!isFocused) {
+      return;
+    }
+
+    let active = true;
+    void listUsedItemCategories()
+      .then((categories) => {
+        if (active) {
+          setCategoryOptions(categories);
+        }
+      })
+      .catch(() => {
+        // catalogo indisponivel: mantem opcoes atuais (so "Todas as categorias")
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [isFocused]);
 
   useEffect(() => {
     if (!errorMessage) {
@@ -667,6 +692,12 @@ export function DashboardScreen() {
   function selectMonth(monthValue: string) {
     setSelectedMonth(monthValue);
     setIsMonthMenuOpen(false);
+    setErrorMessage('');
+  }
+
+  function selectCategory(category: string | null) {
+    setSelectedCategory(category);
+    setIsCategoryMenuOpen(false);
     setErrorMessage('');
   }
 
@@ -708,7 +739,9 @@ export function DashboardScreen() {
     return Array.from(map.values());
   }, [dashboardData]);
 
-  const activeDataList = viewMode === 'item' ? (dashboardData?.items ?? []) : groupedByCategory;
+  // Com uma categoria filtrada, agrupar "Por categoria" nao faz sentido (so 1 categoria) -> visao por item.
+  const effectiveViewMode = selectedCategory ? 'item' : viewMode;
+  const activeDataList = effectiveViewMode === 'item' ? (dashboardData?.items ?? []) : groupedByCategory;
 
   const abcPoints = useMemo(
     () => buildAbcPoints(activeDataList, selectedMetric),
@@ -733,7 +766,7 @@ export function DashboardScreen() {
 
   useEffect(() => {
     setSelectedAbcClass(null);
-  }, [selectedMonth, selectedMetric, viewMode]);
+  }, [selectedMonth, selectedMetric, viewMode, selectedCategory]);
 
   async function handleGenerateAbcReport() {
     if (isGeneratingAbcReport) {
@@ -755,7 +788,7 @@ export function DashboardScreen() {
       await generateAbcReportPdf(abcPoints, {
         monthLabel: formatMonthLabel(selectedMonth),
         metricLabel: getMetricLabel(selectedMetric),
-        viewLabel: viewMode === 'item' ? 'Por item' : 'Por categoria',
+        viewLabel: effectiveViewMode === 'item' ? 'Por item' : 'Por categoria',
       });
 
       showTopPopup({
@@ -816,7 +849,7 @@ export function DashboardScreen() {
   ).length ?? 0;
   const leadingEntryName = topEntryItems[0]?.name ?? 'Sem entrada';
   const leadingExitName = topExitItems[0]?.name ?? 'Sem saida';
-  const dashboardChartKey = `${selectedMonth}-${viewMode}-${selectedMetric}`;
+  const dashboardChartKey = `${selectedMonth}-${selectedCategory ?? 'all'}-${effectiveViewMode}-${selectedMetric}`;
 
   return (
     <ScreenShell>
@@ -855,7 +888,10 @@ export function DashboardScreen() {
               <View style={styles.monthSelectRoot}>
                 <Pressable
                   style={styles.monthSelectTrigger}
-                  onPress={() => setIsMonthMenuOpen((previousState) => !previousState)}
+                  onPress={() => {
+                    setIsCategoryMenuOpen(false);
+                    setIsMonthMenuOpen((previousState) => !previousState);
+                  }}
                 >
                   <Text style={styles.monthSelectTriggerText}>{formatMonthLabel(selectedMonth)}</Text>
                   <Text style={styles.monthSelectArrow}>{isMonthMenuOpen ? '^' : 'v'}</Text>
@@ -894,16 +930,80 @@ export function DashboardScreen() {
               </Pressable>
             </View>
 
-            <ControlSegment
-              title="Agrupamento"
-              value={viewMode}
-              onBeforeChange={() => setIsMonthMenuOpen(false)}
-              onChange={setViewMode}
-              options={[
-                { label: 'Por item', value: 'item' },
-                { label: 'Por categoria', value: 'category' },
-              ]}
-            />
+            <View style={styles.monthControl}>
+              <Text style={styles.controlLabel}>Categoria</Text>
+              <View style={styles.monthSelectRoot}>
+                <Pressable
+                  style={styles.monthSelectTrigger}
+                  onPress={() => {
+                    setIsMonthMenuOpen(false);
+                    setIsCategoryMenuOpen((previousState) => !previousState);
+                  }}
+                >
+                  <Text style={styles.monthSelectTriggerText} numberOfLines={1}>
+                    {selectedCategory ? getCategoryLabel(selectedCategory) : 'Todas as categorias'}
+                  </Text>
+                  <Text style={styles.monthSelectArrow}>{isCategoryMenuOpen ? '^' : 'v'}</Text>
+                </Pressable>
+                {isCategoryMenuOpen ? (
+                  <View style={styles.monthSelectMenu}>
+                    <Pressable
+                      style={[
+                        styles.monthSelectOption,
+                        styles.monthSelectOptionFirst,
+                        selectedCategory === null ? styles.monthSelectOptionActive : undefined,
+                      ]}
+                      onPress={() => selectCategory(null)}
+                    >
+                      <Text
+                        style={[
+                          styles.monthSelectOptionText,
+                          selectedCategory === null ? styles.monthSelectOptionTextActive : undefined,
+                        ]}
+                      >
+                        Todas as categorias
+                      </Text>
+                    </Pressable>
+                    {categoryOptions.map((category) => {
+                      const isSelected = selectedCategory === category;
+
+                      return (
+                        <Pressable
+                          key={category}
+                          style={[
+                            styles.monthSelectOption,
+                            isSelected ? styles.monthSelectOptionActive : undefined,
+                          ]}
+                          onPress={() => selectCategory(category)}
+                        >
+                          <Text
+                            style={[
+                              styles.monthSelectOptionText,
+                              isSelected ? styles.monthSelectOptionTextActive : undefined,
+                            ]}
+                          >
+                            {getCategoryLabel(category)}
+                          </Text>
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+                ) : null}
+              </View>
+            </View>
+
+            {selectedCategory === null ? (
+              <ControlSegment
+                title="Agrupamento"
+                value={viewMode}
+                onBeforeChange={() => setIsMonthMenuOpen(false)}
+                onChange={setViewMode}
+                options={[
+                  { label: 'Por item', value: 'item' },
+                  { label: 'Por categoria', value: 'category' },
+                ]}
+              />
+            ) : null}
 
             <ControlSegment
               title="Metrica da Curva ABC"
@@ -973,7 +1073,7 @@ export function DashboardScreen() {
               <MotionEntrance delay={260}>
                 <View style={styles.chartCardSplit}>
                   <ChartCardHeader
-                    title={viewMode === 'item' ? 'Mais comprados' : 'Categorias mais compradas'}
+                    title={effectiveViewMode === 'item' ? 'Mais comprados' : 'Categorias mais compradas'}
                     eyebrow="Ranking de entrada"
                     onPressInfo={() => setActiveChartInfo('topEntries')}
                   />
@@ -985,7 +1085,7 @@ export function DashboardScreen() {
                     width={splitChartWidth}
                     emptyMessage="Sem compras registradas neste periodo."
                     chartKey={`${dashboardChartKey}-entry`}
-                    showOriginalUnitDetails={viewMode === 'item'}
+                    showOriginalUnitDetails={effectiveViewMode === 'item'}
                   />
                 </View>
               </MotionEntrance>
@@ -993,7 +1093,7 @@ export function DashboardScreen() {
               <MotionEntrance delay={310}>
                 <View style={styles.chartCardSplit}>
                   <ChartCardHeader
-                    title={viewMode === 'item' ? 'Mais sairam' : 'Categorias que mais sairam'}
+                    title={effectiveViewMode === 'item' ? 'Mais sairam' : 'Categorias que mais sairam'}
                     eyebrow="Ranking de saida"
                     onPressInfo={() => setActiveChartInfo('topExits')}
                   />
@@ -1005,7 +1105,7 @@ export function DashboardScreen() {
                     width={splitChartWidth}
                     emptyMessage="Sem saidas registradas neste periodo."
                     chartKey={`${dashboardChartKey}-exit`}
-                    showOriginalUnitDetails={viewMode === 'item'}
+                    showOriginalUnitDetails={effectiveViewMode === 'item'}
                   />
                 </View>
               </MotionEntrance>
@@ -1096,7 +1196,7 @@ export function DashboardScreen() {
                           <Text style={styles.abcItemName}>{point.name}</Text>
                           <Text style={styles.abcItemMeta}>
                             {getMetricLabel(selectedMetric)}: {formatQuantity(point.metricValue)} und
-                            {viewMode === 'item'
+                            {effectiveViewMode === 'item'
                               ? ` | ${formatOriginalAndBaseQuantity(
                                   getMetricValueOriginal(point, selectedMetric),
                                   point.unit,
