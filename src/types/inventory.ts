@@ -49,6 +49,8 @@ export interface StockItem {
   conversionFactor: number;
   minQuantity: number;
   minQuantityInBaseUnits: number;
+  maxQuantity: number | null;
+  maxQuantityInBaseUnits: number | null;
   category: string | null;
   currentStockQuantity: number | null;
   currentStockQuantityInBaseUnits: number | null;
@@ -60,6 +62,7 @@ export interface CreateStockItemInput {
   name: string;
   unit: string;
   minQuantity: number;
+  maxQuantity: number | null;
   category: string;
 }
 
@@ -67,6 +70,7 @@ export interface UpdateStockItemInput {
   name: string;
   unit: string;
   minQuantity: number;
+  maxQuantity: number | null;
   category: string;
 }
 
@@ -143,6 +147,8 @@ export interface StockItemListRow {
   conversionFactor: number;
   minQuantity: number;
   minQuantityInBaseUnits: number;
+  maxQuantity: number | null;
+  maxQuantityInBaseUnits: number | null;
   category: string | null;
   currentStockQuantity: number | null;
   currentStockQuantityInBaseUnits: number | null;
@@ -169,6 +175,8 @@ export interface StockMovementItem {
   conversionFactor: number;
   minQuantity: number;
   minQuantityInBaseUnits: number;
+  maxQuantity: number | null;
+  maxQuantityInBaseUnits: number | null;
   category: string | null;
   currentStockQuantity: number | null;
   currentStockQuantityInBaseUnits: number | null;
@@ -347,6 +355,8 @@ export interface StockCurrentOverviewRow {
   conversionFactor: number;
   minQuantity: number;
   minQuantityInBaseUnits: number;
+  maxQuantity: number | null;
+  maxQuantityInBaseUnits: number | null;
   category: string | null;
   currentStockQuantity: number | null;
   currentStockQuantityInBaseUnits: number | null;

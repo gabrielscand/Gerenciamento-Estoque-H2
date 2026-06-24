@@ -6,6 +6,7 @@ import { listStockCurrentOverview } from '../database/items.repository';
 import { syncAppData } from '../database/sync.service';
 import type { StockCurrentOverviewRow } from '../types/inventory';
 import { getTodayLocalDateString } from './date';
+import { isFardoConversionFactor } from './unit-conversion';
 
 type InventoryReportItem = {
   id: number;
@@ -15,6 +16,8 @@ type InventoryReportItem = {
   category: string | null;
   minQuantity: number;
   minQuantityInBaseUnits: number;
+  maxQuantity: number | null;
+  maxQuantityInBaseUnits: number | null;
   currentStockQuantity: number | null;
   currentStockQuantityInBaseUnits: number | null;
 };
@@ -48,6 +51,30 @@ function formatQuantity(value: number): string {
   });
 }
 
+// Abrevia a medida quando for fardo: "fardo de 12" -> "fd de 12".
+function formatUnitLabel(item: InventoryReportItem): string {
+  if (isFardoConversionFactor(item.conversionFactor)) {
+    return item.unit.replace(/fardos?/gi, 'fd');
+  }
+  return item.unit;
+}
+
+// Estoque em fardos (so para itens de fardo). Nao-fardo: "-".
+function formatStockFardo(item: InventoryReportItem): string {
+  if (!isFardoConversionFactor(item.conversionFactor) || item.currentStockQuantity === null) {
+    return '-';
+  }
+  return formatQuantity(item.currentStockQuantity);
+}
+
+// Estoque em unidades (base).
+function formatStockUnd(item: InventoryReportItem): string {
+  if (item.currentStockQuantity === null) {
+    return '-';
+  }
+  return formatQuantity(item.currentStockQuantityInBaseUnits ?? 0);
+}
+
 function escapeHtml(value: string): string {
   return value
     .replaceAll('&', '&amp;')
@@ -77,6 +104,8 @@ function collectInventoryItems(items: StockCurrentOverviewRow[]): InventoryRepor
       category: item.category,
       minQuantity: item.minQuantity,
       minQuantityInBaseUnits: item.minQuantityInBaseUnits,
+      maxQuantity: item.maxQuantity,
+      maxQuantityInBaseUnits: item.maxQuantityInBaseUnits,
       currentStockQuantity: item.currentStockQuantity,
       currentStockQuantityInBaseUnits: item.currentStockQuantityInBaseUnits,
     }));
@@ -92,20 +121,22 @@ function buildPdfHtml(payload: InventoryReportPayload): string {
                 <td>${index + 1}</td>
                 <td><strong>${escapeHtml(item.name)}</strong></td>
                 <td>${escapeHtml(item.category ? getCategoryLabel(item.category) : 'Sem categoria')}</td>
-                <td>${escapeHtml(item.unit)}</td>
-                <td>${escapeHtml(
-                  item.currentStockQuantity === null
-                    ? '-'
-                    : formatQuantity(item.currentStockQuantityInBaseUnits ?? 0),
-                )}</td>
+                <td>${escapeHtml(formatUnitLabel(item))}</td>
+                <td>${escapeHtml(formatStockFardo(item))}</td>
+                <td>${escapeHtml(formatStockUnd(item))}</td>
                 <td>${escapeHtml(formatQuantity(item.minQuantityInBaseUnits))}</td>
+                <td>${escapeHtml(
+                  item.maxQuantityInBaseUnits === null
+                    ? '-'
+                    : formatQuantity(item.maxQuantityInBaseUnits),
+                )}</td>
               </tr>
             `,
           )
           .join('')
       : `
           <tr>
-            <td colspan="6" class="empty-cell">Nenhum item cadastrado no momento.</td>
+            <td colspan="8" class="empty-cell">Nenhum item cadastrado no momento.</td>
           </tr>
         `;
 
@@ -115,7 +146,7 @@ function buildPdfHtml(payload: InventoryReportPayload): string {
       <head>
         <meta charset="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
-        <title>Inventario de Estoque</title>
+        <title>Controle de Estoque</title>
         <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
         <style>
           * { box-sizing: border-box; }
@@ -201,7 +232,7 @@ function buildPdfHtml(payload: InventoryReportPayload): string {
       </head>
       <body>
         <div class="header">
-          <h1 class="title">Inventario de Estoque</h1>
+          <h1 class="title">Controle de Estoque</h1>
           <p class="subtitle">Itens cadastrados e suas quantidades atuais</p>
         </div>
 
@@ -223,8 +254,10 @@ function buildPdfHtml(payload: InventoryReportPayload): string {
               <th>Item</th>
               <th>Categoria</th>
               <th>Unidade</th>
-              <th>Estoque atual</th>
+              <th>Estoque atual (fd)</th>
+              <th>Estoque atual (und)</th>
               <th>Minimo</th>
+              <th>Maximo</th>
             </tr>
           </thead>
           <tbody>
@@ -237,7 +270,7 @@ function buildPdfHtml(payload: InventoryReportPayload): string {
 }
 
 function buildPdfFileName(referenceDate: Date): string {
-  return `inventario-estoque-${getTodayLocalDateString(referenceDate)}.pdf`;
+  return `controle-estoque-${getTodayLocalDateString(referenceDate)}.pdf`;
 }
 
 async function generateWebPdf(payload: InventoryReportPayload): Promise<void> {
@@ -251,7 +284,7 @@ async function generateWebPdf(payload: InventoryReportPayload): Promise<void> {
   doc.setTextColor(255, 255, 255);
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(22);
-  doc.text('INVENTARIO DE ESTOQUE', 40, 55);
+  doc.text('CONTROLE DE ESTOQUE', 40, 55);
 
   let currentY = 118;
 
@@ -277,18 +310,18 @@ async function generateWebPdf(payload: InventoryReportPayload): Promise<void> {
           String(index + 1),
           item.name,
           item.category ? getCategoryLabel(item.category) : 'Sem categoria',
-          item.unit,
-          item.currentStockQuantity === null
-            ? '-'
-            : formatQuantity(item.currentStockQuantityInBaseUnits ?? 0),
+          formatUnitLabel(item),
+          formatStockFardo(item),
+          formatStockUnd(item),
           formatQuantity(item.minQuantityInBaseUnits),
+          item.maxQuantityInBaseUnits === null ? '-' : formatQuantity(item.maxQuantityInBaseUnits),
         ])
-      : [['-', 'Nenhum item cadastrado no momento.', '-', '-', '-', '-']];
+      : [['-', 'Nenhum item cadastrado no momento.', '-', '-', '-', '-', '-', '-']];
 
   autoTable(doc, {
     startY: currentY,
     theme: 'striped',
-    head: [['#', 'Item', 'Categoria', 'Unidade', 'Estoque atual', 'Minimo']],
+    head: [['#', 'Item', 'Categoria', 'Unidade', 'Estoque atual (fd)', 'Estoque atual (und)', 'Minimo', 'Maximo']],
     body: rows,
     headStyles: { fillColor: [95, 17, 117], textColor: 255, fontStyle: 'bold' },
     styles: { fontSize: 9, cellPadding: 6 },

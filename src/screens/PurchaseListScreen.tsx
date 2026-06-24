@@ -248,6 +248,17 @@ export function PurchaseListScreen() {
                   formatQuantity,
                 )}
               </Text>
+              <Text style={styles.itemMeta}>
+                Maximo:{' '}
+                {item.maxQuantity === null
+                  ? '—'
+                  : formatOriginalAndBaseQuantity(
+                      item.maxQuantity,
+                      item.unit,
+                      item.conversionFactor,
+                      formatQuantity,
+                    )}
+              </Text>
             </View>
           );
         }}

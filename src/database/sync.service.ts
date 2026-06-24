@@ -8,6 +8,7 @@ type LocalPendingStockItemRow = {
   name: string;
   unit: string;
   min_quantity: number;
+  max_quantity: number | null;
   current_stock_quantity: number | null;
   category: string | null;
   is_deleted: number;
@@ -88,6 +89,7 @@ type RemoteStockItem = {
   name: string;
   unit: string;
   min_quantity: number;
+  max_quantity: number | null;
   current_stock_quantity: number | null;
   category: string | null;
   is_deleted: boolean;
@@ -363,6 +365,7 @@ async function pushPendingStockItems(db: SQLiteDatabase): Promise<void> {
         name,
         unit,
         min_quantity,
+        max_quantity,
         current_stock_quantity,
         category,
         is_deleted,
@@ -386,6 +389,7 @@ async function pushPendingStockItems(db: SQLiteDatabase): Promise<void> {
       name: row.name,
       unit: row.unit,
       min_quantity: row.min_quantity,
+      max_quantity: row.max_quantity,
       current_stock_quantity: row.current_stock_quantity,
       category: row.category,
       is_deleted: row.is_deleted === 1,
@@ -823,6 +827,7 @@ async function mergeRemoteStockItems(db: SQLiteDatabase, remoteItems: RemoteStoc
             name,
             unit,
             min_quantity,
+            max_quantity,
             current_stock_quantity,
             category,
             is_deleted,
@@ -830,12 +835,13 @@ async function mergeRemoteStockItems(db: SQLiteDatabase, remoteItems: RemoteStoc
             created_at,
             updated_at
           )
-          VALUES (?, 'synced', ?, ?, ?, ?, ?, ?, ?, ?, ?);
+          VALUES (?, 'synced', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
         `,
         remoteItem.id,
         remoteItem.name,
         remoteItem.unit,
         remoteItem.min_quantity,
+        remoteItem.max_quantity,
         remoteItem.current_stock_quantity,
         remoteItem.category,
         remoteItem.is_deleted ? 1 : 0,
@@ -860,6 +866,7 @@ async function mergeRemoteStockItems(db: SQLiteDatabase, remoteItems: RemoteStoc
             name = ?,
             unit = ?,
             min_quantity = ?,
+            max_quantity = ?,
             current_stock_quantity = ?,
             category = ?,
             is_deleted = ?,
@@ -872,6 +879,7 @@ async function mergeRemoteStockItems(db: SQLiteDatabase, remoteItems: RemoteStoc
         remoteItem.name,
         remoteItem.unit,
         remoteItem.min_quantity,
+        remoteItem.max_quantity,
         remoteItem.current_stock_quantity,
         remoteItem.category,
         remoteItem.is_deleted ? 1 : 0,
@@ -1441,7 +1449,7 @@ async function performSync(): Promise<boolean> {
     await pushPendingDailyEntries(db);
 
     const remoteItems = await fetchRemote<RemoteStockItem[]>(
-      '/stock_items?select=id,name,unit,min_quantity,current_stock_quantity,category,is_deleted,deleted_at,created_at,updated_at&order=updated_at.asc',
+      '/stock_items?select=id,name,unit,min_quantity,max_quantity,current_stock_quantity,category,is_deleted,deleted_at,created_at,updated_at&order=updated_at.asc',
     );
     await mergeRemoteStockItems(db, remoteItems);
 

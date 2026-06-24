@@ -575,6 +575,17 @@ export function StockScreen() {
                   formatQuantity,
                 )}
               </Text>
+              <Text style={styles.itemMeta}>
+                Maximo:{' '}
+                {item.maxQuantity === null
+                  ? '—'
+                  : formatOriginalAndBaseQuantity(
+                      item.maxQuantity,
+                      item.unit,
+                      item.conversionFactor,
+                      formatQuantity,
+                    )}
+              </Text>
               {item.needsPurchase && item.missingQuantity > 0 ? (
                 <Pressable style={styles.purchaseHint}>
                   <Text style={styles.purchaseHintText}>

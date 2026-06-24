@@ -2,7 +2,7 @@ import type { SQLiteDatabase } from 'expo-sqlite';
 import { DEFAULT_MEASUREMENT_UNITS, DEFAULT_STOCK_CATEGORIES, normalizeCatalogName } from '../constants/categories';
 import { getDefaultConversionFactorForUnit } from '../utils/unit-conversion';
 
-const SCHEMA_VERSION = 14;
+const SCHEMA_VERSION = 15;
 
 async function applySchemaV1(db: SQLiteDatabase): Promise<void> {
   await db.execAsync(`
@@ -663,6 +663,12 @@ async function applySchemaV14(db: SQLiteDatabase): Promise<void> {
   `).catch(() => {});
 }
 
+async function applySchemaV15(db: SQLiteDatabase): Promise<void> {
+  await db.execAsync(`
+    ALTER TABLE stock_items ADD COLUMN max_quantity REAL;
+  `).catch(() => {});
+}
+
 export async function applyMigrations(db: SQLiteDatabase): Promise<void> {
   const row = await db.getFirstAsync<{ user_version: number }>('PRAGMA user_version;');
   const currentVersion = row?.user_version ?? 0;
@@ -726,6 +732,10 @@ export async function applyMigrations(db: SQLiteDatabase): Promise<void> {
 
     if (currentVersion < 14) {
       await applySchemaV14(db);
+    }
+
+    if (currentVersion < 15) {
+      await applySchemaV15(db);
     }
 
     await db.execAsync(`PRAGMA user_version = ${SCHEMA_VERSION};`);

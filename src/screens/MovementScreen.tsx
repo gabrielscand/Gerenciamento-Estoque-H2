@@ -1003,6 +1003,17 @@ function StockMovementScreen({ mode }: { mode: MovementMode }) {
                   formatQuantity,
                 )}
               </Text>
+              <Text style={styles.itemMeta}>
+                Maximo:{' '}
+                {item.maxQuantity === null
+                  ? '—'
+                  : formatOriginalAndBaseQuantity(
+                      item.maxQuantity,
+                      item.unit,
+                      item.conversionFactor,
+                      formatQuantity,
+                    )}
+              </Text>
               <StockEmphasis
                 label="Estoque atual"
                 value={

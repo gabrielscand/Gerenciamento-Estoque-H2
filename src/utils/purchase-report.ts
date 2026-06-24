@@ -16,6 +16,8 @@ type PurchaseReportItem = {
   category: string | null;
   minQuantity: number;
   minQuantityInBaseUnits: number;
+  maxQuantity: number | null;
+  maxQuantityInBaseUnits: number | null;
   currentStockQuantity: number | null;
   currentStockQuantityInBaseUnits: number | null;
   missingQuantity: number;
@@ -98,6 +100,8 @@ function collectPurchaseItems(items: StockCurrentOverviewRow[]): PurchaseReportI
       category: item.category,
       minQuantity: item.minQuantity,
       minQuantityInBaseUnits: item.minQuantityInBaseUnits,
+      maxQuantity: item.maxQuantity,
+      maxQuantityInBaseUnits: item.maxQuantityInBaseUnits,
       currentStockQuantity: item.currentStockQuantity,
       currentStockQuantityInBaseUnits: item.currentStockQuantityInBaseUnits,
       missingQuantity: item.missingQuantity,
@@ -128,6 +132,11 @@ function buildPdfHtml(payload: PurchaseReportPayload): string {
                   formatOriginalAndBase(item.minQuantity, item.unit, item.conversionFactor),
                 )}</td>
                 <td>${escapeHtml(
+                  item.maxQuantity === null
+                    ? '-'
+                    : formatOriginalAndBase(item.maxQuantity, item.unit, item.conversionFactor),
+                )}</td>
+                <td>${escapeHtml(
                   formatOriginalAndBase(getPurchaseQuantity(item), item.unit, item.conversionFactor),
                 )}</td>
                 <td>${escapeHtml(getStatusLabel(item))}</td>
@@ -137,7 +146,7 @@ function buildPdfHtml(payload: PurchaseReportPayload): string {
           .join('')
       : `
           <tr>
-            <td colspan="7" class="empty-cell">Nenhum item para compra no momento.</td>
+            <td colspan="8" class="empty-cell">Nenhum item para compra no momento.</td>
           </tr>
         `;
 
@@ -262,6 +271,7 @@ function buildPdfHtml(payload: PurchaseReportPayload): string {
               <th>Categoria</th>
               <th>Estoque atual</th>
               <th>Minimo</th>
+              <th>Maximo</th>
               <th>Faltante</th>
               <th>Status</th>
             </tr>
@@ -321,22 +331,25 @@ async function generateWebPdf(payload: PurchaseReportPayload): Promise<void> {
             ? '-'
             : formatOriginalAndBase(item.currentStockQuantity, item.unit, item.conversionFactor),
           formatOriginalAndBase(item.minQuantity, item.unit, item.conversionFactor),
+          item.maxQuantity === null
+            ? '-'
+            : formatOriginalAndBase(item.maxQuantity, item.unit, item.conversionFactor),
           formatOriginalAndBase(getPurchaseQuantity(item), item.unit, item.conversionFactor),
           getStatusLabel(item),
         ])
-      : [['-', 'Nenhum item para compra no momento.', '-', '-', '-', '-', '-']];
+      : [['-', 'Nenhum item para compra no momento.', '-', '-', '-', '-', '-', '-']];
 
   autoTable(doc, {
     startY: currentY,
     theme: 'striped',
-    head: [['#', 'Item', 'Categoria', 'Estoque atual', 'Minimo', 'Faltante', 'Status']],
+    head: [['#', 'Item', 'Categoria', 'Estoque atual', 'Minimo', 'Maximo', 'Faltante', 'Status']],
     body: rows,
     headStyles: { fillColor: [95, 17, 117], textColor: 255, fontStyle: 'bold' },
     styles: { fontSize: 9, cellPadding: 6 },
     alternateRowStyles: { fillColor: [250, 245, 253] },
     margin: { left: 40, right: 40 },
     didParseCell: function didParseCell(data: any) {
-      if (data.section === 'body' && data.column.index === 6) {
+      if (data.section === 'body' && data.column.index === 7) {
         if (String(data.cell.raw).includes('Faltam')) {
           data.cell.styles.textColor = [176, 35, 35];
           data.cell.styles.fontStyle = 'bold';

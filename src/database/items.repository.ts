@@ -45,6 +45,7 @@ type StockItemRow = {
   unit: string;
   conversion_factor?: number | null;
   min_quantity: number;
+  max_quantity?: number | null;
   current_stock_quantity?: number | null;
   category?: string | null;
   is_deleted?: number;
@@ -60,6 +61,7 @@ type StockItemListRowQuery = {
   unit: string;
   conversionFactor: number | null;
   minQuantity: number;
+  maxQuantity: number | null;
   currentStockQuantity: number | null;
   category: string | null;
 };
@@ -70,6 +72,7 @@ type StockCurrentOverviewQuery = {
   unit: string;
   conversionFactor: number | null;
   minQuantity: number;
+  maxQuantity: number | null;
   currentStockQuantity: number | null;
   category: string | null;
 };
@@ -80,6 +83,7 @@ type StockMovementItemQuery = {
   unit: string;
   conversionFactor: number | null;
   minQuantity: number;
+  maxQuantity: number | null;
   currentStockQuantity: number | null;
   category: string | null;
   currentQuantity: number | null;
@@ -1127,6 +1131,7 @@ export async function listStockItems(): Promise<StockItemListRow[]> {
         stock_items.name AS name,
         stock_items.unit AS unit,
         stock_items.min_quantity AS minQuantity,
+        stock_items.max_quantity AS maxQuantity,
         stock_items.current_stock_quantity AS currentStockQuantity,
         stock_items.category AS category,
         measurement_units.conversion_factor AS conversionFactor
@@ -1151,6 +1156,12 @@ export async function listStockItems(): Promise<StockItemListRow[]> {
         row.unit,
         resolveConversionFactor(row.unit, row.conversionFactor),
       ) ?? 0,
+    maxQuantity: row.maxQuantity ?? null,
+    maxQuantityInBaseUnits: convertQuantityForUnit(
+      row.maxQuantity ?? null,
+      row.unit,
+      resolveConversionFactor(row.unit, row.conversionFactor),
+    ),
     currentStockQuantity: row.currentStockQuantity,
     currentStockQuantityInBaseUnits: convertQuantityForUnit(
       row.currentStockQuantity,
@@ -1171,6 +1182,7 @@ export async function listStockCurrentOverview(): Promise<StockCurrentOverviewRo
         stock_items.name AS name,
         stock_items.unit AS unit,
         stock_items.min_quantity AS minQuantity,
+        stock_items.max_quantity AS maxQuantity,
         stock_items.current_stock_quantity AS currentStockQuantity,
         stock_items.category AS category,
         measurement_units.conversion_factor AS conversionFactor
@@ -1200,6 +1212,8 @@ export async function listStockCurrentOverview(): Promise<StockCurrentOverviewRo
       minQuantity: row.minQuantity,
       minQuantityInBaseUnits:
         convertQuantityForUnit(row.minQuantity, row.unit, conversionFactor) ?? 0,
+      maxQuantity: row.maxQuantity ?? null,
+      maxQuantityInBaseUnits: convertQuantityForUnit(row.maxQuantity ?? null, row.unit, conversionFactor),
       category: normalizeCategory(row.category),
       currentStockQuantity: currentStock,
       currentStockQuantityInBaseUnits: convertQuantityForUnit(currentStock, row.unit, conversionFactor),
@@ -1228,6 +1242,7 @@ export async function listStockMovementItems(
         stock_items.name AS name,
         stock_items.unit AS unit,
         stock_items.min_quantity AS minQuantity,
+        stock_items.max_quantity AS maxQuantity,
         stock_items.current_stock_quantity AS currentStockQuantity,
         stock_items.category AS category,
         measurement_units.conversion_factor AS conversionFactor,
@@ -1265,6 +1280,12 @@ export async function listStockMovementItems(
         row.unit,
         resolveConversionFactor(row.unit, row.conversionFactor),
       ) ?? 0,
+    maxQuantity: row.maxQuantity ?? null,
+    maxQuantityInBaseUnits: convertQuantityForUnit(
+      row.maxQuantity ?? null,
+      row.unit,
+      resolveConversionFactor(row.unit, row.conversionFactor),
+    ),
     currentStockQuantity: row.currentStockQuantity,
     currentStockQuantityInBaseUnits: convertQuantityForUnit(
       row.currentStockQuantity,
@@ -1297,6 +1318,7 @@ export async function findItemByNormalizedName(
           stock_items.name AS name,
           stock_items.unit AS unit,
           stock_items.min_quantity AS min_quantity,
+          stock_items.max_quantity AS max_quantity,
           stock_items.current_stock_quantity AS current_stock_quantity,
           stock_items.category AS category,
           measurement_units.conversion_factor AS conversion_factor,
@@ -1322,6 +1344,7 @@ export async function findItemByNormalizedName(
           stock_items.name AS name,
           stock_items.unit AS unit,
           stock_items.min_quantity AS min_quantity,
+          stock_items.max_quantity AS max_quantity,
           stock_items.current_stock_quantity AS current_stock_quantity,
           stock_items.category AS category,
           measurement_units.conversion_factor AS conversion_factor,
@@ -1355,6 +1378,12 @@ export async function findItemByNormalizedName(
         row.unit,
         resolveConversionFactor(row.unit, row.conversion_factor),
       ) ?? 0,
+    maxQuantity: row.max_quantity ?? null,
+    maxQuantityInBaseUnits: convertQuantityForUnit(
+      row.max_quantity ?? null,
+      row.unit,
+      resolveConversionFactor(row.unit, row.conversion_factor),
+    ),
     currentStockQuantity: row.current_stock_quantity ?? null,
     currentStockQuantityInBaseUnits: convertQuantityForUnit(
       row.current_stock_quantity ?? null,
@@ -1391,16 +1420,18 @@ export async function createStockItem(input: CreateStockItemInput): Promise<void
         name,
         unit,
         min_quantity,
+        max_quantity,
         category,
         created_at,
         updated_at
       )
-      VALUES (?, 'pending', ?, ?, ?, ?, ?, ?);
+      VALUES (?, 'pending', ?, ?, ?, ?, ?, ?, ?);
     `,
     remoteId,
     name,
     unit,
     input.minQuantity,
+    input.maxQuantity,
     category,
     timestamp,
     timestamp,
@@ -1431,6 +1462,7 @@ export async function updateStockItem(itemId: number, input: UpdateStockItemInpu
         name = ?,
         unit = ?,
         min_quantity = ?,
+        max_quantity = ?,
         category = ?,
         updated_at = ?,
         sync_status = 'pending'
@@ -1440,6 +1472,7 @@ export async function updateStockItem(itemId: number, input: UpdateStockItemInpu
     name,
     unit,
     input.minQuantity,
+    input.maxQuantity,
     category,
     timestamp,
     itemId,

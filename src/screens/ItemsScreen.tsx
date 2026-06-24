@@ -52,6 +52,7 @@ type FormState = {
   unit: string | '';
   category: string | '';
   minQuantity: string;
+  maxQuantity: string;
 };
 
 type FormErrors = Partial<Record<keyof FormState | 'submit', string>>;
@@ -74,6 +75,7 @@ const initialFormState: FormState = {
   unit: '',
   category: '',
   minQuantity: '',
+  maxQuantity: '',
 };
 const initialImportDefaultsState: ImportDefaultsState = {
   category: '',
@@ -108,6 +110,8 @@ function buildValidationErrors(form: FormState): { errors: FormErrors; parsed?: 
   const unit = form.unit.trim();
   const category = form.category;
   const minQuantity = parseDecimalInput(form.minQuantity);
+  const maxQuantityRaw = form.maxQuantity.trim();
+  const maxQuantity = maxQuantityRaw.length === 0 ? null : parseDecimalInput(form.maxQuantity);
 
   if (name.length === 0) {
     errors.name = 'Informe o nome do item.';
@@ -127,6 +131,16 @@ function buildValidationErrors(form: FormState): { errors: FormErrors; parsed?: 
     errors.minQuantity = 'A quantidade minima nao pode ser negativa.';
   }
 
+  if (maxQuantityRaw.length > 0) {
+    if (maxQuantity === null) {
+      errors.maxQuantity = 'Informe um maximo valido.';
+    } else if (maxQuantity < 0) {
+      errors.maxQuantity = 'O maximo nao pode ser negativo.';
+    } else if (minQuantity !== null && maxQuantity < minQuantity) {
+      errors.maxQuantity = 'O maximo nao pode ser menor que o minimo.';
+    }
+  }
+
   if (Object.keys(errors).length > 0) {
     return { errors };
   }
@@ -137,6 +151,7 @@ function buildValidationErrors(form: FormState): { errors: FormErrors; parsed?: 
       name,
       unit,
       minQuantity: minQuantity as number,
+      maxQuantity,
       category: category as string,
     },
   };
@@ -582,6 +597,7 @@ export function ItemsScreen({ canImportData = false }: ItemsScreenProps) {
       unit: item.unit,
       category: item.category ?? '',
       minQuantity: String(item.minQuantity),
+      maxQuantity: item.maxQuantity === null ? '' : String(item.maxQuantity),
     });
     setIsEditCategoryOpen(false);
     setIsEditUnitOpen(false);
@@ -902,6 +918,18 @@ export function ItemsScreen({ canImportData = false }: ItemsScreenProps) {
                 {createErrors.minQuantity ? <Text style={styles.errorText}>{createErrors.minQuantity}</Text> : null}
               </View>
 
+              <View style={styles.fieldGroup}>
+                <Text style={styles.label}>Quantidade maxima (opcional)</Text>
+                <TextInput
+                  value={createForm.maxQuantity}
+                  onChangeText={(value) => setCreateField('maxQuantity', value)}
+                  placeholder="Quanto cabe no estoque (opcional)"
+                  keyboardType="decimal-pad"
+                  style={[styles.input, createErrors.maxQuantity ? styles.inputError : undefined]}
+                />
+                {createErrors.maxQuantity ? <Text style={styles.errorText}>{createErrors.maxQuantity}</Text> : null}
+              </View>
+
               <Pressable
                 style={[styles.submitButton, isCreating ? styles.submitButtonDisabled : undefined]}
                 disabled={isCreating}
@@ -1038,6 +1066,17 @@ export function ItemsScreen({ canImportData = false }: ItemsScreenProps) {
                     )}
                   </Text>
                   <Text style={styles.itemMeta}>
+                    Maximo:{' '}
+                    {item.maxQuantity === null
+                      ? '—'
+                      : formatOriginalAndBaseQuantity(
+                          item.maxQuantity,
+                          item.unit,
+                          item.conversionFactor,
+                          formatQuantity,
+                        )}
+                  </Text>
+                  <Text style={styles.itemMeta}>
                     Categoria: {item.category ? getCategoryLabel(item.category) : 'Categoria pendente'}
                   </Text>
                   {!item.category ? (
@@ -1114,6 +1153,18 @@ export function ItemsScreen({ canImportData = false }: ItemsScreenProps) {
                       style={[styles.input, editErrors.minQuantity ? styles.inputError : undefined]}
                     />
                     {editErrors.minQuantity ? <Text style={styles.errorText}>{editErrors.minQuantity}</Text> : null}
+                  </View>
+
+                  <View style={styles.fieldGroup}>
+                    <Text style={styles.label}>Quantidade maxima (opcional)</Text>
+                    <TextInput
+                      value={editForm.maxQuantity}
+                      onChangeText={(value) => setEditField('maxQuantity', value)}
+                      placeholder="Quanto cabe no estoque (opcional)"
+                      keyboardType="decimal-pad"
+                      style={[styles.input, editErrors.maxQuantity ? styles.inputError : undefined]}
+                    />
+                    {editErrors.maxQuantity ? <Text style={styles.errorText}>{editErrors.maxQuantity}</Text> : null}
                   </View>
 
                   <View style={styles.editActions}>
