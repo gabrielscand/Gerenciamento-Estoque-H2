@@ -338,10 +338,7 @@ function DailyMovementChart({
     entry: point.entryQuantityInBaseUnits,
     exit: point.exitQuantityInBaseUnits,
   }));
-  const tickStep = Math.max(1, Math.ceil(chartData.length / 8));
-  const tickValues = chartData
-    .filter((_, index) => index % tickStep === 0 || index === chartData.length - 1)
-    .map((point) => point.x);
+  const tickValues = chartData.map((point) => point.x);
   const barWidth = Math.max(5, Math.min(13, Math.round((width - 96) / Math.max(activeDays.length, 1) / 2.5)));
 
   return (
@@ -1205,8 +1202,11 @@ export function DashboardScreen() {
                                 )}`
                               : ''}
                           </Text>
-                          <View style={styles.abcProgressTrack}>
-                            <View style={[styles.abcProgressFill, { width: `${Math.min(point.cumulativePercent, 100)}%` }]} />
+                          <View style={styles.abcProgressRow}>
+                            <View style={styles.abcProgressTrack}>
+                              <View style={[styles.abcProgressFill, { width: `${Math.min(point.sharePercent, 100)}%` }]} />
+                            </View>
+                            <Text style={styles.abcSharePercent}>{formatQuantity(point.sharePercent)}%</Text>
                           </View>
                         </View>
                         <View
@@ -1736,7 +1736,13 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '700',
   },
+  abcProgressRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
   abcProgressTrack: {
+    flex: 1,
     height: 6,
     borderRadius: 999,
     backgroundColor: '#EDE0F9',
@@ -1746,6 +1752,13 @@ const styles = StyleSheet.create({
     height: '100%',
     borderRadius: 999,
     backgroundColor: '#77158E',
+  },
+  abcSharePercent: {
+    color: '#77158E',
+    fontSize: 11,
+    fontWeight: '900',
+    minWidth: 38,
+    textAlign: 'right',
   },
   abcBadge: {
     minWidth: 34,
