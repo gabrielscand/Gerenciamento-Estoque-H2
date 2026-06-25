@@ -59,12 +59,14 @@ function formatUnitLabel(item: InventoryReportItem): string {
   return item.unit;
 }
 
-// Estoque em fardos (so para itens de fardo). Nao-fardo: "-".
+// Estoque em fardos INTEIROS (so para itens de fardo). Nao-fardo: "-".
+// A coluna de unidades mostra o total; aqui nao ha fardo quebrado.
 function formatStockFardo(item: InventoryReportItem): string {
   if (!isFardoConversionFactor(item.conversionFactor) || item.currentStockQuantity === null) {
     return '-';
   }
-  return formatQuantity(item.currentStockQuantity);
+  const base = item.currentStockQuantityInBaseUnits ?? 0;
+  return formatQuantity(Math.floor(base / item.conversionFactor));
 }
 
 // Estoque em unidades (base).

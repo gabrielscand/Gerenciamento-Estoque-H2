@@ -6,7 +6,7 @@ import { listStockCurrentOverview } from '../database/items.repository';
 import { syncAppData } from '../database/sync.service';
 import type { StockCurrentOverviewRow } from '../types/inventory';
 import { getTodayLocalDateString } from './date';
-import { purchaseQuantityForBuy } from './unit-conversion';
+import { convertToBaseUnits, isFardoConversionFactor, purchaseQuantityForBuy } from './unit-conversion';
 
 type PurchaseReportItem = {
   id: number;
@@ -55,12 +55,22 @@ function formatQuantity(value: number): string {
   });
 }
 
-function formatOriginalAndBase(quantity: number, unit: string, _conversionFactor: number): string {
-  if (!unit || unit.trim().length === 0) {
+function formatOriginalAndBase(quantity: number, unit: string, conversionFactor: number): string {
+  const safeUnit = (unit ?? '').trim();
+  if (!safeUnit) {
     return formatQuantity(quantity);
   }
 
-  return `${formatQuantity(quantity)} ${unit}`;
+  // Itens de fardo: mostra os dois jeitos. Fardo conta so os inteiros
+  // (arredonda para baixo); a unidade segue o total exato.
+  // Ex.: 27 und, fardo de 6 -> "4 fardo de 6 / 27 und".
+  if (isFardoConversionFactor(conversionFactor)) {
+    const base = convertToBaseUnits(quantity, conversionFactor, safeUnit) ?? 0;
+    const fardos = Math.floor(base / conversionFactor);
+    return `${formatQuantity(fardos)} ${safeUnit} / ${formatQuantity(base)} und`;
+  }
+
+  return `${formatQuantity(quantity)} ${safeUnit}`;
 }
 
 function escapeHtml(value: string): string {
