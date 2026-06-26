@@ -23,6 +23,7 @@ import type { StockCurrentOverviewRow } from '../types/inventory';
 import { formatOriginalAndBaseQuantity } from '../utils/unit-conversion';
 import { generateInventoryReportPdf } from '../utils/inventory-report';
 import { StockAdjustmentModal } from './StockAdjustmentScreen';
+import { InventoryCategoryPickerModal } from '../components/InventoryCategoryPickerModal';
 import {
   gerarMensagemAlertaEstoqueAgrupada,
   verificarProximidadeEstoqueMinimo,
@@ -141,6 +142,7 @@ export function StockScreen() {
 
   const [isGeneratingInventory, setIsGeneratingInventory] = useState(false);
   const [isAdjustOpen, setIsAdjustOpen] = useState(false);
+  const [isInventoryPickerOpen, setIsInventoryPickerOpen] = useState(false);
 
   function notifyProximityAlerts(data: StockCurrentOverviewRow[]) {
     // O contexto cuida da deduplicação, do auto-remover (reabastecidos) e do
@@ -327,7 +329,7 @@ export function StockScreen() {
     setSearchQuery(value);
   }
 
-  async function handleGenerateInventory() {
+  async function handleGenerateInventory(allowedCategories: Array<string | null>) {
     if (isGeneratingInventory) {
       return;
     }
@@ -335,7 +337,7 @@ export function StockScreen() {
     setIsGeneratingInventory(true);
 
     try {
-      const result = await generateInventoryReportPdf();
+      const result = await generateInventoryReportPdf(allowedCategories);
 
       showTopPopup({
         type: 'success',
@@ -485,9 +487,7 @@ export function StockScreen() {
             <View style={styles.reportButtonWrap}>
               <AppButton
                 label={isGeneratingInventory ? 'Gerando inventario...' : 'Gerar Inventario'}
-                onPress={() => {
-                  void handleGenerateInventory();
-                }}
+                onPress={() => setIsInventoryPickerOpen(true)}
                 disabled={isGeneratingInventory}
               />
             </View>
@@ -610,6 +610,17 @@ export function StockScreen() {
         onClose={() => setIsAdjustOpen(false)}
         onSaved={() => {
           void loadStock();
+        }}
+      />
+
+      <InventoryCategoryPickerModal
+        visible={isInventoryPickerOpen}
+        categories={availableCategories}
+        hasUncategorized={items.some((item) => !item.category)}
+        onClose={() => setIsInventoryPickerOpen(false)}
+        onConfirm={(allowed) => {
+          setIsInventoryPickerOpen(false);
+          void handleGenerateInventory(allowed);
         }}
       />
     </ScreenShell>

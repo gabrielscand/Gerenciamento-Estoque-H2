@@ -86,9 +86,16 @@ function escapeHtml(value: string): string {
     .replaceAll("'", '&#39;');
 }
 
-function collectInventoryItems(items: StockCurrentOverviewRow[]): InventoryReportItem[] {
+function collectInventoryItems(
+  items: StockCurrentOverviewRow[],
+  allowedCategories?: Array<string | null>,
+): InventoryReportItem[] {
   return items
-    .filter((item) => item.currentStockQuantity !== null)
+    .filter(
+      (item) =>
+        item.currentStockQuantity !== null &&
+        (allowedCategories === undefined || allowedCategories.includes(item.category)),
+    )
     .sort((left, right) => {
       const catLeft = left.category ? getCategoryLabel(left.category) : 'Sem categoria';
       const catRight = right.category ? getCategoryLabel(right.category) : 'Sem categoria';
@@ -334,14 +341,16 @@ async function generateWebPdf(payload: InventoryReportPayload): Promise<void> {
   doc.save(buildPdfFileName(payload.generatedAt));
 }
 
-export async function generateInventoryReportPdf(): Promise<GenerateInventoryReportPdfResult> {
+export async function generateInventoryReportPdf(
+  allowedCategories?: Array<string | null>,
+): Promise<GenerateInventoryReportPdfResult> {
   const syncOk = await syncAppData();
 
   if (!syncOk) {
     throw new Error('Falha ao sincronizar com o Supabase. Nao foi possivel gerar o inventario.');
   }
 
-  const items = collectInventoryItems(await listStockCurrentOverview());
+  const items = collectInventoryItems(await listStockCurrentOverview(), allowedCategories);
   const payload: InventoryReportPayload = {
     generatedAt: new Date(),
     items,
