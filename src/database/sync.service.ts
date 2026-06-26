@@ -247,17 +247,41 @@ async function setSyncMeta(db: SQLiteDatabase, key: string, value: string): Prom
   );
 }
 
-async function fetchRemote<T>(path: string): Promise<T> {
-  const response = await fetch(`${SUPABASE_REST_URL}${path}`, {
-    method: 'GET',
-    headers: createHeaders(),
-  });
+// Tamanho do lote por requisicao. O Supabase/PostgREST limita o retorno a no
+// maximo 1000 linhas por chamada, entao buscamos em paginas com limit/offset e
+// concatenamos ate trazer tudo (essencial quando uma tabela passa de 1000
+// registros, como daily_stock_entries). Usamos query params (e nao o header
+// Range) para nao disparar CORS preflight no navegador.
+const REMOTE_PAGE_SIZE = 1000;
 
-  if (!response.ok) {
-    throw new Error(`Falha ao consultar Supabase (${response.status}).`);
+async function fetchRemote<T>(path: string): Promise<T> {
+  const all: unknown[] = [];
+  const separator = path.includes('?') ? '&' : '?';
+  let offset = 0;
+
+  // eslint-disable-next-line no-constant-condition
+  while (true) {
+    const pagedPath = `${path}${separator}limit=${REMOTE_PAGE_SIZE}&offset=${offset}`;
+    const response = await fetch(`${SUPABASE_REST_URL}${pagedPath}`, {
+      method: 'GET',
+      headers: createHeaders(),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Falha ao consultar Supabase (${response.status}).`);
+    }
+
+    const batch = (await response.json()) as unknown[];
+    all.push(...batch);
+
+    if (batch.length < REMOTE_PAGE_SIZE) {
+      break;
+    }
+
+    offset += REMOTE_PAGE_SIZE;
   }
 
-  return (await response.json()) as T;
+  return all as T;
 }
 
 async function upsertRemote(path: string, payload: unknown[]): Promise<void> {
