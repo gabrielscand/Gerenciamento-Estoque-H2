@@ -1,13 +1,20 @@
+import type { ReactElement } from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import { Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { SyncStatusCard } from '../components/SyncStatusCard';
 import { HeroHeader, MotionEntrance, ScreenShell, SectionSurface } from '../components/ui-kit';
 import { tokens } from '../theme/tokens';
 
+// Icone pode ser um nome do Ionicons ou um renderizador SVG proprio
+// (ver src/components/MenuIcons.tsx), ambos desenhados com size=24 e a cor do menu.
+export type MenuCardIcon =
+  | keyof typeof Ionicons.glyphMap
+  | ((props: { size: number; color: string }) => ReactElement);
+
 export type HomeMenuCard = {
   key: string;
   title: string;
-  icon: keyof typeof Ionicons.glyphMap;
+  icon: MenuCardIcon;
   onPress: () => void;
 };
 
@@ -103,7 +110,11 @@ export function HomeMenuScreen({ cards }: HomeMenuScreenProps) {
                         styles.iconWrapDefault,
                       ]}
                     >
-                      <Ionicons name={card.icon} size={24} color={tokens.colors.accent} />
+                      {typeof card.icon === 'string' ? (
+                        <Ionicons name={card.icon} size={24} color={tokens.colors.accent} />
+                      ) : (
+                        card.icon({ size: 24, color: tokens.colors.accent })
+                      )}
                     </View>
                     <Text
                       style={[

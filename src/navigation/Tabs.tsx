@@ -14,6 +14,13 @@ import { PurchaseListScreen } from '../screens/PurchaseListScreen';
 import { StockScreen } from '../screens/StockScreen';
 import { MotionEntrance, ScreenShell, SectionSurface } from '../components/ui-kit';
 import { NotificationBell } from '../components/NotificationBell';
+import {
+  AdminMenuIcon,
+  DashboardMenuIcon,
+  ItemsMenuIcon,
+  ShoppingListMenuIcon,
+  StockMenuIcon,
+} from '../components/MenuIcons';
 import { tokens } from '../theme/tokens';
 
 type RootTabParamList = {
@@ -174,7 +181,7 @@ export function Tabs({ currentUser, onLogout, onUsersChanged }: TabsProps) {
                 cards.push({
                   key: 'items',
                   title: 'Itens',
-                  icon: 'briefcase-outline',
+                  icon: ItemsMenuIcon,
                   onPress: () => navigation.navigate('Items'),
                 });
               }
@@ -183,7 +190,7 @@ export function Tabs({ currentUser, onLogout, onUsersChanged }: TabsProps) {
                 cards.push({
                   key: 'stock',
                   title: 'Estoque',
-                  icon: 'cube-outline',
+                  icon: StockMenuIcon,
                   onPress: () => navigation.navigate('Stock'),
                 });
               }
@@ -192,7 +199,7 @@ export function Tabs({ currentUser, onLogout, onUsersChanged }: TabsProps) {
                 cards.push({
                   key: 'dashboard',
                   title: 'Dashboard',
-                  icon: 'pricetag-outline',
+                  icon: DashboardMenuIcon,
                   onPress: () => navigation.navigate('Dashboard'),
                 });
               }
@@ -201,7 +208,7 @@ export function Tabs({ currentUser, onLogout, onUsersChanged }: TabsProps) {
                 cards.push({
                   key: 'admin',
                   title: 'Painel ADM',
-                  icon: 'book-outline',
+                  icon: AdminMenuIcon,
                   onPress: () => navigation.navigate('Admin'),
                 });
               }
@@ -210,7 +217,7 @@ export function Tabs({ currentUser, onLogout, onUsersChanged }: TabsProps) {
                 cards.push({
                   key: 'purchase-list',
                   title: 'Lista de compras',
-                  icon: 'cart-outline',
+                  icon: ShoppingListMenuIcon,
                   onPress: () => navigation.navigate('PurchaseList'),
                 });
               }
