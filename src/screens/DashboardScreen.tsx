@@ -74,10 +74,10 @@ function getMetricLabel(metric: DashboardAbcMetric): string {
   }
 
   if (metric === 'exit') {
-    return 'Saida';
+    return 'Saída';
   }
 
-  return 'Entrada + Saida';
+  return 'Entrada + Saída';
 }
 
 function getMetricValue(item: DashboardItemAnalyticsRow, metric: DashboardAbcMetric): number {
@@ -175,22 +175,22 @@ const DASHBOARD_CHART_INFO_CONTENT: Record<DashboardChartInfoKey, { title: strin
   abcCurve: {
     title: 'Curva ABC',
     description:
-      'Mostra a participacao acumulada dos itens no periodo. Classe A concentra os itens mais relevantes (ate 80%), B ate 95% e C os demais.',
+      'Mostra a participação acumulada dos itens no período. Classe A concentra os itens mais relevantes (até 80%), B até 95% e C os demais.',
   },
   topEntries: {
-    title: 'Itens mais comprados no mes',
+    title: 'Itens mais comprados no mês',
     description:
-      'Ranking dos itens com maior entrada no mes selecionado. As quantidades do grafico usam a base convertida em unidades.',
+      'Ranking dos itens com maior entrada no mês selecionado. As quantidades do gráfico usam a base convertida em unidades.',
   },
   topExits: {
-    title: 'Itens que mais sairam no mes',
+    title: 'Itens que mais sairam no mês',
     description:
-      'Ranking dos itens com maior saida no mes selecionado. Ajuda a identificar os produtos de maior giro.',
+      'Ranking dos itens com maior saída no mês selecionado. Ajuda a identificar os produtos de maior giro.',
   },
   dailySeries: {
-    title: 'Movimentacao diaria',
+    title: 'Movimentação diária',
     description:
-      'Mostra entradas e saidas por dia no mes selecionado, usando a quantidade convertida para unidades.',
+      'Mostra entradas e saídas por dia no mês selecionado, usando a quantidade convertida para unidades.',
   },
 };
 
@@ -202,7 +202,7 @@ const ACCENT_COLOR = tokens.colors.accent;
 const ACCENT_DARK = tokens.colors.accentDeep;
 const GRID_COLOR = '#E9D8F3';
 // Mesma fonte do sistema usada no restante do app (default do react-native-web),
-// para o texto SVG dos graficos victory nao destoar das demais telas.
+// para o texto SVG dos gráficos victory não destoar das demais telas.
 const CHART_FONT_FAMILY =
   Platform.OS === 'web'
     ? '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif'
@@ -307,7 +307,7 @@ function InsightCard({
 function EmptyChart({ message }: { message: string }) {
   return (
     <View style={styles.emptyChart}>
-      <Text style={styles.emptyChartTitle}>Sem dados para este grafico</Text>
+      <Text style={styles.emptyChartTitle}>Sem dados para este gráfico</Text>
       <Text style={styles.emptyChartText}>{message}</Text>
     </View>
   );
@@ -330,7 +330,7 @@ function DailyMovementChart({
   );
 
   if (activeDays.length === 0) {
-    return <EmptyChart message="Registre entradas ou saidas para visualizar o movimento diario." />;
+    return <EmptyChart message="Registre entradas ou saídas para visualizar o movimento diário." />;
   }
 
   const chartData = activeDays.map((point) => ({
@@ -350,7 +350,7 @@ function DailyMovementChart({
         </View>
         <View style={styles.legendItem}>
           <View style={[styles.legendDot, { backgroundColor: EXIT_COLOR }]} />
-          <Text style={styles.legendLabel}>Saida</Text>
+          <Text style={styles.legendLabel}>Saída</Text>
         </View>
       </View>
       <VictoryChart
@@ -486,7 +486,7 @@ function RankingChart({
                 <Text style={styles.rankingMeta} numberOfLines={1}>
                   {showOriginalUnitDetails
                     ? formatOriginalAndBaseQuantity(originalValue, item.unit, item.conversionFactor, formatQuantity)
-                    : `${formatQuantity(baseValue)} und no periodo`}
+                    : `${formatQuantity(baseValue)} und no período`}
                 </Text>
               </View>
               <Text style={styles.rankingValue}>{formatCompactQuantity(baseValue)} und</Text>
@@ -500,7 +500,7 @@ function RankingChart({
 
 function AbcVictoryChart({ points, width, chartKey }: { points: DashboardAbcPoint[]; width: number; chartKey: string }) {
   if (points.length === 0) {
-    return <EmptyChart message="Escolha uma metrica com movimentacao para montar a Curva ABC." />;
+    return <EmptyChart message="Escolha uma metrica com movimentação para montar a Curva ABC." />;
   }
 
   const maxRank = Math.max(points.length, 2);
@@ -519,11 +519,11 @@ function AbcVictoryChart({ points, width, chartKey }: { points: DashboardAbcPoin
       <View style={styles.legendRow}>
         <View style={styles.legendItem}>
           <View style={[styles.legendPill, { backgroundColor: '#2F8A5F' }]} />
-          <Text style={styles.legendLabel}>A ate 80%</Text>
+          <Text style={styles.legendLabel}>A até 80%</Text>
         </View>
         <View style={styles.legendItem}>
           <View style={[styles.legendPill, { backgroundColor: '#B87914' }]} />
-          <Text style={styles.legendLabel}>B ate 95%</Text>
+          <Text style={styles.legendLabel}>B até 95%</Text>
         </View>
         <View style={styles.legendItem}>
           <View style={[styles.legendPill, { backgroundColor: '#B73636' }]} />
@@ -659,7 +659,7 @@ export function DashboardScreen() {
         }
       })
       .catch(() => {
-        // catalogo indisponivel: mantem opcoes atuais (so "Todas as categorias")
+        // catalogo indisponível: mantem opções atuais (so "Todas as categorias")
       });
 
     return () => {
@@ -736,7 +736,7 @@ export function DashboardScreen() {
     return Array.from(map.values());
   }, [dashboardData]);
 
-  // Com uma categoria filtrada, agrupar "Por categoria" nao faz sentido (so 1 categoria) -> visao por item.
+  // Com uma categoria filtrada, agrupar "Por categoria" não faz sentido (so 1 categoria) -> visao por item.
   const effectiveViewMode = selectedCategory ? 'item' : viewMode;
   const activeDataList = effectiveViewMode === 'item' ? (dashboardData?.items ?? []) : groupedByCategory;
 
@@ -773,7 +773,7 @@ export function DashboardScreen() {
     if (abcPoints.length === 0) {
       showTopPopup({
         type: 'warning',
-        message: 'Sem itens na Curva ABC para gerar o relatorio.',
+        message: 'Sem itens na Curva ABC para gerar o relatório.',
         durationMs: 3200,
       });
       return;
@@ -792,14 +792,14 @@ export function DashboardScreen() {
         type: 'success',
         message:
           Platform.OS === 'web'
-            ? 'Relatorio da Curva ABC enviado para visualizacao/impressao.'
-            : 'Relatorio da Curva ABC gerado com sucesso.',
+            ? 'Relatório da Curva ABC enviado para visualização/impressão.'
+            : 'Relatório da Curva ABC gerado com sucesso.',
         durationMs: 3200,
       });
     } catch (error) {
       showTopPopup({
         type: 'error',
-        message: error instanceof Error ? error.message : 'Falha ao gerar relatorio da Curva ABC.',
+        message: error instanceof Error ? error.message : 'Falha ao gerar relatório da Curva ABC.',
         durationMs: 4200,
       });
     } finally {
@@ -845,7 +845,7 @@ export function DashboardScreen() {
       (point.entryQuantityInBaseUnits > 0 || point.exitQuantityInBaseUnits > 0),
   ).length ?? 0;
   const leadingEntryName = topEntryItems[0]?.name ?? 'Sem entrada';
-  const leadingExitName = topExitItems[0]?.name ?? 'Sem saida';
+  const leadingExitName = topExitItems[0]?.name ?? 'Sem saída';
   const dashboardChartKey = `${selectedMonth}-${selectedCategory ?? 'all'}-${effectiveViewMode}-${selectedMetric}`;
 
   return (
@@ -867,12 +867,12 @@ export function DashboardScreen() {
           <HeroHeader
             title="Dashboard"
             subtitle="Painel mensal de inteligencia do estoque"
-            description="Veja compras, saidas, itens de maior giro e Curva ABC em um unico lugar."
+            description="Veja compras, saídas, itens de maior giro e Curva ABC em um único lugar."
           >
             <View style={styles.heroKpis}>
               <KpiTile label="Entrada (und)" value={formatQuantity(totalEntry)} />
-              <KpiTile label="Saida (und)" value={formatQuantity(totalExit)} />
-              <KpiTile label="Movimentacao (und)" value={formatQuantity(totalMovement)} />
+              <KpiTile label="Saída (und)" value={formatQuantity(totalExit)} />
+              <KpiTile label="Movimentação (und)" value={formatQuantity(totalMovement)} />
               <KpiTile label="Itens ativos" value={String(totalItems)} />
             </View>
           </HeroHeader>
@@ -881,7 +881,7 @@ export function DashboardScreen() {
         <MotionEntrance delay={120}>
           <View style={[styles.commandPanel, isWide ? styles.commandPanelWide : undefined]}>
             <View style={styles.monthControl}>
-              <Text style={styles.controlLabel}>Mes analisado</Text>
+              <Text style={styles.controlLabel}>Mês analisado</Text>
               <View style={styles.monthSelectRoot}>
                 <Pressable
                   style={styles.monthSelectTrigger}
@@ -923,7 +923,7 @@ export function DashboardScreen() {
                 ) : null}
               </View>
               <Pressable style={styles.currentMonthButton} onPress={setCurrentMonth}>
-                <Text style={styles.currentMonthButtonText}>Mes atual</Text>
+                <Text style={styles.currentMonthButtonText}>Mês atual</Text>
               </Pressable>
             </View>
 
@@ -1008,9 +1008,9 @@ export function DashboardScreen() {
               onBeforeChange={() => setIsMonthMenuOpen(false)}
               onChange={setSelectedMetric}
               options={[
-                { label: 'Entrada + Saida', value: 'movement' },
+                { label: 'Entrada + Saída', value: 'movement' },
                 { label: 'Entrada', value: 'entry' },
-                { label: 'Saida', value: 'exit' },
+                { label: 'Saída', value: 'exit' },
               ]}
             />
           </View>
@@ -1019,7 +1019,7 @@ export function DashboardScreen() {
         {isLoading ? (
           <View style={styles.loadingCard}>
             <Text style={styles.loadingTitle}>Carregando dashboard...</Text>
-            <Text style={styles.loadingText}>Buscando dados do mes selecionado.</Text>
+            <Text style={styles.loadingText}>Buscando dados do mês selecionado.</Text>
           </View>
         ) : null}
 
@@ -1030,19 +1030,19 @@ export function DashboardScreen() {
                 <InsightCard
                   label="Dia(s) com movimento"
                   value={String(movementDays)}
-                  detail="Dias do mes com entrada ou saida registrada."
+                  detail="Dias do mês com entrada ou saída registrada."
                   tone="accent"
                 />
                 <InsightCard
                   label="Mais comprado"
                   value={leadingEntryName}
-                  detail="Item/categoria lider em entradas no periodo."
+                  detail="Item/categoria lider em entradas no período."
                   tone="entry"
                 />
                 <InsightCard
-                  label="Maior saida"
+                  label="Maior saída"
                   value={leadingExitName}
-                  detail="Item/categoria com maior consumo no periodo."
+                  detail="Item/categoria com maior consumo no período."
                   tone="exit"
                 />
               </View>
@@ -1051,12 +1051,12 @@ export function DashboardScreen() {
             <MotionEntrance delay={210}>
               <View style={styles.chartCardLarge}>
                 <ChartCardHeader
-                  title="Movimentacao diaria"
-                  eyebrow="Entrada x saida"
+                  title="Movimentação diária"
+                  eyebrow="Entrada x saída"
                   onPressInfo={() => setActiveChartInfo('dailySeries')}
                 />
                 <Text style={styles.cardSubtitle}>
-                  Barras lado a lado por dia (entrada e saida) em unidade base. Use para enxergar picos de compra e consumo.
+                  Barras lado a lado por dia (entrada e saída) em unidade base. Use para enxergar picos de compra e consumo.
                 </Text>
                 <DailyMovementChart
                   data={dashboardData.dailySeries}
@@ -1080,7 +1080,7 @@ export function DashboardScreen() {
                     color={ENTRY_COLOR}
                     softColor={ENTRY_SOFT}
                     width={splitChartWidth}
-                    emptyMessage="Sem compras registradas neste periodo."
+                    emptyMessage="Sem compras registradas neste período."
                     chartKey={`${dashboardChartKey}-entry`}
                     showOriginalUnitDetails={effectiveViewMode === 'item'}
                   />
@@ -1091,7 +1091,7 @@ export function DashboardScreen() {
                 <View style={styles.chartCardSplit}>
                   <ChartCardHeader
                     title={effectiveViewMode === 'item' ? 'Mais sairam' : 'Categorias que mais sairam'}
-                    eyebrow="Ranking de saida"
+                    eyebrow="Ranking de saída"
                     onPressInfo={() => setActiveChartInfo('topExits')}
                   />
                   <RankingChart
@@ -1100,7 +1100,7 @@ export function DashboardScreen() {
                     color={EXIT_COLOR}
                     softColor={EXIT_SOFT}
                     width={splitChartWidth}
-                    emptyMessage="Sem saidas registradas neste periodo."
+                    emptyMessage="Sem saídas registradas neste período."
                     chartKey={`${dashboardChartKey}-exit`}
                     showOriginalUnitDetails={effectiveViewMode === 'item'}
                   />
@@ -1164,7 +1164,7 @@ export function DashboardScreen() {
 
                 <View style={styles.abcReportButtonWrap}>
                   <AppButton
-                    label={isGeneratingAbcReport ? 'Gerando relatorio...' : 'Gerar Relatorio'}
+                    label={isGeneratingAbcReport ? 'Gerando relatório...' : 'Gerar Relatório'}
                     onPress={() => {
                       void handleGenerateAbcReport();
                     }}
@@ -1232,16 +1232,16 @@ export function DashboardScreen() {
 
         {!isLoading && dashboardData && !hasMovement ? (
           <View style={styles.emptyCard}>
-            <Text style={styles.emptyTitle}>Sem movimentacoes neste periodo</Text>
+            <Text style={styles.emptyTitle}>Sem movimentações neste período</Text>
             <Text style={styles.emptyText}>
-              Registre entradas ou saidas no mes selecionado para visualizar rankings, Curva ABC e movimento diario.
+              Registre entradas ou saídas no mês selecionado para visualizar rankings, Curva ABC e movimento diário.
             </Text>
           </View>
         ) : null}
 
         {!isLoading && !dashboardData && errorMessage ? (
           <View style={styles.emptyCard}>
-            <Text style={styles.emptyTitle}>Nao foi possivel carregar a Dashboard</Text>
+            <Text style={styles.emptyTitle}>Não foi possível carregar a Dashboard</Text>
             <Text style={styles.emptyText}>{errorMessage}</Text>
           </View>
         ) : null}

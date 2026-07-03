@@ -53,7 +53,7 @@ export function ItemsMenuIcon({ size, color }: MenuIconProps) {
   );
 }
 
-// Estoque -> tres caixas empilhadas sobre um palete.
+// Estoque -> três caixas empilhadas sobre um palete.
 export function StockMenuIcon({ size, color }: MenuIconProps) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
@@ -89,7 +89,7 @@ export function StockMenuIcon({ size, color }: MenuIconProps) {
   );
 }
 
-// Dashboards -> painel com grafico de pizza, barras e linha.
+// Dashboards -> painel com gráfico de pizza, barras e linha.
 export function DashboardMenuIcon({ size, color }: MenuIconProps) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">

@@ -41,7 +41,7 @@ import {
 import { generateHistoryReportPdf } from '../utils/history-report';
 import { formatOriginalAndBaseQuantity } from '../utils/unit-conversion';
 
-type HistoryMode = 'diario' | 'quinzenal' | 'mensal';
+type HistoryMode = 'diário' | 'quinzenal' | 'mensal';
 type DailyMovementFilter = 'entry' | 'exit' | 'adjustment';
 type PeriodDayMovementFilter = 'all' | DailyMovementFilter;
 
@@ -65,7 +65,7 @@ function formatQuantity(value: number): string {
   });
 }
 
-// Horario local (HH:MM) a partir do timestamp ISO da movimentacao.
+// Horário local (HH:MM) a partir do timestamp ISO da movimentação.
 function formatTime(value: string | null | undefined): string {
   if (!value) {
     return '';
@@ -80,8 +80,8 @@ function formatTime(value: string | null | undefined): string {
   return parsed.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
 }
 
-// Intervalo maximo entre itens da MESMA finalizacao (um lote grava todos em < 1s;
-// finalizacoes distintas ficam minutos/horas separadas).
+// Intervalo máximo entre itens da MESMA finalização (um lote grava todos em < 1s;
+// finalizações distintas ficam minutos/horas separadas).
 const MOVEMENT_GROUP_GAP_MS = 60_000;
 
 type DailyMovementGroup = { key: string; time: string | undefined; entries: DailyHistoryEntry[] };
@@ -94,8 +94,8 @@ function entryTimeValue(entry: DailyHistoryEntry): number | null {
   return Number.isNaN(parsed) ? null : parsed;
 }
 
-// Agrupa as movimentacoes do dia por proximidade de horario: itens gravados quase
-// juntos (mesma finalizacao de carrinho) viram um bloco; finalizacoes distintas, outro.
+// Agrupa as movimentações do dia por proximidade de horário: itens gravados quase
+// juntos (mesma finalização de carrinho) viram um bloco; finalizações distintas, outro.
 function groupEntriesByMovement(entries: DailyHistoryEntry[]): DailyMovementGroup[] {
   const sorted = [...entries].sort((left, right) => {
     const timeLeft = entryTimeValue(left) ?? 0;
@@ -150,7 +150,7 @@ function entriesHaveAllSelected(
   return selectedNormalized.every((selected) => present.has(selected));
 }
 
-// Mantém apenas as entries cujos itens estao selecionados (sem selecao = sem filtro).
+// Mantém apenas as entries cujos itens estao selecionados (sem seleção = sem filtro).
 function keepSelectedEntries<T extends { name: string }>(
   entries: T[],
   selectedNormalized: string[],
@@ -169,7 +169,7 @@ function getMovementTypeLabel(movementType: DailyHistoryEntry['movementType']): 
   }
 
   if (movementType === 'exit') {
-    return 'Saida';
+    return 'Saída';
   }
 
   if (movementType === 'adjustment') {
@@ -220,12 +220,12 @@ function getDailyMovementFilterLabel(filter: DailyMovementFilter): string {
     return 'Ajuste de estoque';
   }
 
-  return 'Saida';
+  return 'Saída';
 }
 
 function getHistoryReportPeriodLabel(period: HistoryReportPeriod): string {
-  if (period === 'diario') {
-    return 'Diario';
+  if (period === 'diário') {
+    return 'Diário';
   }
 
   if (period === 'quinzenal') {
@@ -269,7 +269,7 @@ function buildRecentMonthOptions(referenceDate: Date = new Date(), totalMonths: 
 export function HistoryScreen({ canManageHistoryActions = false }: HistoryScreenProps) {
   const initialMonth = getCurrentMonthString();
   const isFocused = useIsFocused();
-  const [mode, setMode] = useState<HistoryMode>('diario');
+  const [mode, setMode] = useState<HistoryMode>('diário');
   const [dailyMovementFilter, setDailyMovementFilter] = useState<DailyMovementFilter>('entry');
   const [selectedMonth, setSelectedMonth] = useState(initialMonth);
   const [isMonthMenuOpen, setIsMonthMenuOpen] = useState(false);
@@ -292,7 +292,7 @@ export function HistoryScreen({ canManageHistoryActions = false }: HistoryScreen
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedItems, setSelectedItems] = useState<string[]>([]);
 
-  const isDailyMode = mode === 'diario';
+  const isDailyMode = mode === 'diário';
   const monthOptions = useMemo(() => buildRecentMonthOptions(new Date(), 12), []);
 
   const normalizedSearchQuery = useMemo(() => normalizeSearchValue(searchQuery), [searchQuery]);
@@ -302,7 +302,7 @@ export function HistoryScreen({ canManageHistoryActions = false }: HistoryScreen
   );
   const hasItemFilter = selectedItems.length > 0;
 
-  // Nomes de item distintos presentes nos dados carregados (fonte das sugestoes).
+  // Nomes de item distintos presentes nos dados carregados (fonte das sugestões).
   const availableItemNames = useMemo(() => {
     const names = new Map<string, string>();
     const collect = (name: string) => {
@@ -328,7 +328,7 @@ export function HistoryScreen({ canManageHistoryActions = false }: HistoryScreen
     return Array.from(names.values());
   }, [dailyGroups, periodGroups]);
 
-  // Sugestoes so aparecem apos digitar (igual a Entrada/Saida/Itens/Estoque).
+  // Sugestões so aparecem após digitar (igual a Entrada/Saída/Itens/Estoque).
   const searchSuggestions = useMemo(() => {
     if (!normalizedSearchQuery) {
       return [];
@@ -414,12 +414,12 @@ export function HistoryScreen({ canManageHistoryActions = false }: HistoryScreen
           setDailyGroups([]);
           setPeriodGroups([]);
           throw new Error(
-            'Falha ao sincronizar com o Supabase. Conecte-se e tente novamente para carregar o historico.',
+            'Falha ao sincronizar com o Supabase. Conecte-se e tente novamente para carregar o histórico.',
           );
         }
       }
 
-      if (nextMode === 'diario') {
+      if (nextMode === 'diário') {
         const dailyData = await listDailyHistoryGrouped();
         setDailyGroups(dailyData);
         setPeriodGroups([]);
@@ -435,7 +435,7 @@ export function HistoryScreen({ canManageHistoryActions = false }: HistoryScreen
     } catch (error) {
       setDailyGroups([]);
       setPeriodGroups([]);
-      setErrorMessage(error instanceof Error ? error.message : 'Falha ao carregar historico.');
+      setErrorMessage(error instanceof Error ? error.message : 'Falha ao carregar histórico.');
     } finally {
       setIsLoading(false);
     }
@@ -604,7 +604,7 @@ export function HistoryScreen({ canManageHistoryActions = false }: HistoryScreen
   async function requestUpdatedQuantity(currentQuantity: number): Promise<number | null> {
     const value = await requestTextValue({
       title: 'Editar quantidade',
-      message: 'Informe a nova quantidade desta movimentacao.',
+      message: 'Informe a nova quantidade desta movimentação.',
       placeholder: 'Quantidade',
       secureTextEntry: false,
       keyboardType: 'decimal-pad',
@@ -618,7 +618,7 @@ export function HistoryScreen({ canManageHistoryActions = false }: HistoryScreen
     const parsed = parseDecimalInput(value);
 
     if (parsed === null || parsed < 0) {
-      setErrorMessage('Informe uma quantidade valida para editar a movimentacao.');
+      setErrorMessage('Informe uma quantidade válida para editar a movimentação.');
       return null;
     }
 
@@ -643,11 +643,11 @@ export function HistoryScreen({ canManageHistoryActions = false }: HistoryScreen
 
     try {
       await updateDailyHistoryEntry(entry.id, updatedQuantity);
-      setSuccessMessage(`Movimentacao de ${formatDateLabel(entry.date)} atualizada com sucesso.`);
-      await loadHistory('diario', selectedMonth, true);
+      setSuccessMessage(`Movimentação de ${formatDateLabel(entry.date)} atualizada com sucesso.`);
+      await loadHistory('diário', selectedMonth, true);
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Falha ao editar movimentacao.';
-      await loadHistory('diario', selectedMonth);
+      const message = error instanceof Error ? error.message : 'Falha ao editar movimentação.';
+      await loadHistory('diário', selectedMonth);
       setErrorMessage(message);
     } finally {
       setActiveActionKey(null);
@@ -663,8 +663,8 @@ export function HistoryScreen({ canManageHistoryActions = false }: HistoryScreen
     setSuccessMessage('');
 
     const confirmed = await confirmAction(
-      'Excluir movimentacao',
-      `Deseja excluir esta movimentacao de ${entry.name} em ${formatDateLabel(entry.date)}?`,
+      'Excluir movimentação',
+      `Deseja excluir esta movimentação de ${entry.name} em ${formatDateLabel(entry.date)}?`,
     );
 
     if (!confirmed) {
@@ -675,11 +675,11 @@ export function HistoryScreen({ canManageHistoryActions = false }: HistoryScreen
 
     try {
       await archiveDailyHistoryEntry(entry.id);
-      setSuccessMessage(`Movimentacao removida de ${formatDateLabel(entry.date)}.`);
-      await loadHistory('diario', selectedMonth, true);
+      setSuccessMessage(`Movimentação removida de ${formatDateLabel(entry.date)}.`);
+      await loadHistory('diário', selectedMonth, true);
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Falha ao excluir movimentacao.';
-      await loadHistory('diario', selectedMonth);
+      const message = error instanceof Error ? error.message : 'Falha ao excluir movimentação.';
+      await loadHistory('diário', selectedMonth);
       setErrorMessage(message);
     } finally {
       setActiveActionKey(null);
@@ -695,8 +695,8 @@ export function HistoryScreen({ canManageHistoryActions = false }: HistoryScreen
     setSuccessMessage('');
 
     const confirmed = await confirmAction(
-      'Excluir movimentacoes do dia',
-      `Deseja excluir todas as movimentacoes de ${formatDateLabel(date)}?`,
+      'Excluir movimentações do dia',
+      `Deseja excluir todas as movimentações de ${formatDateLabel(date)}?`,
     );
 
     if (!confirmed) {
@@ -707,11 +707,11 @@ export function HistoryScreen({ canManageHistoryActions = false }: HistoryScreen
 
     try {
       await archiveDailyHistoryDate(date);
-      setSuccessMessage(`Movimentacoes de ${formatDateLabel(date)} excluidas com sucesso.`);
-      await loadHistory('diario', selectedMonth, true);
+      setSuccessMessage(`Movimentações de ${formatDateLabel(date)} excluídas com sucesso.`);
+      await loadHistory('diário', selectedMonth, true);
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Falha ao excluir movimentacoes do dia.';
-      await loadHistory('diario', selectedMonth);
+      const message = error instanceof Error ? error.message : 'Falha ao excluir movimentações do dia.';
+      await loadHistory('diário', selectedMonth);
       setErrorMessage(message);
     } finally {
       setActiveActionKey(null);
@@ -728,8 +728,8 @@ export function HistoryScreen({ canManageHistoryActions = false }: HistoryScreen
 
     const movementLabel = getDailyMovementFilterLabel(movementFilter);
     const confirmed = await confirmAction(
-      `Excluir movimentacoes de ${movementLabel}`,
-      `Deseja excluir apenas as movimentacoes de ${movementLabel} em ${formatDateLabel(date)}?`,
+      `Excluir movimentações de ${movementLabel}`,
+      `Deseja excluir apenas as movimentações de ${movementLabel} em ${formatDateLabel(date)}?`,
     );
 
     if (!confirmed) {
@@ -740,12 +740,12 @@ export function HistoryScreen({ canManageHistoryActions = false }: HistoryScreen
 
     try {
       await archiveDailyHistoryDateByMovement(date, movementFilter);
-      setSuccessMessage(`Movimentacoes de ${movementLabel} excluidas de ${formatDateLabel(date)}.`);
-      await loadHistory('diario', selectedMonth, true);
+      setSuccessMessage(`Movimentações de ${movementLabel} excluídas de ${formatDateLabel(date)}.`);
+      await loadHistory('diário', selectedMonth, true);
     } catch (error) {
       const message =
-        error instanceof Error ? error.message : `Falha ao excluir movimentacoes de ${movementLabel}.`;
-      await loadHistory('diario', selectedMonth);
+        error instanceof Error ? error.message : `Falha ao excluir movimentações de ${movementLabel}.`;
+      await loadHistory('diário', selectedMonth);
       setErrorMessage(message);
     } finally {
       setActiveActionKey(null);
@@ -770,16 +770,16 @@ export function HistoryScreen({ canManageHistoryActions = false }: HistoryScreen
         type: 'success',
         message:
           Platform.OS === 'web'
-            ? `Relatorio ${periodLabel.toLowerCase()} enviado para visualizacao/impressao.`
+            ? `Relatório ${periodLabel.toLowerCase()} enviado para visualização/impressão.`
             : result.totalMovements === 0
-              ? `Relatorio ${periodLabel.toLowerCase()} gerado sem movimentacoes no periodo.`
+              ? `Relatório ${periodLabel.toLowerCase()} gerado sem movimentações no período.`
             : result.shared
-              ? `Relatorio ${periodLabel.toLowerCase()} gerado e pronto para compartilhar.`
-              : `Relatorio ${periodLabel.toLowerCase()} gerado com sucesso.`,
+              ? `Relatório ${periodLabel.toLowerCase()} gerado e pronto para compartilhar.`
+              : `Relatório ${periodLabel.toLowerCase()} gerado com sucesso.`,
         durationMs: 3600,
       });
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : 'Falha ao gerar relatorio.');
+      setErrorMessage(error instanceof Error ? error.message : 'Falha ao gerar relatório.');
     } finally {
       setIsGeneratingReport(false);
     }
@@ -798,22 +798,22 @@ export function HistoryScreen({ canManageHistoryActions = false }: HistoryScreen
     try {
       const [year, month, day] = date.split('-').map(Number);
       const referenceDate = new Date(year, month - 1, day, 12, 0, 0, 0);
-      const result = await generateHistoryReportPdf('diario', { selectedMonth, referenceDate });
+      const result = await generateHistoryReportPdf('diário', { selectedMonth, referenceDate });
 
       showTopPopup({
         type: 'success',
         message:
           Platform.OS === 'web'
-            ? `Relatorio diario de ${formatDateLabel(date)} enviado para visualizacao/impressao.`
+            ? `Relatório diário de ${formatDateLabel(date)} enviado para visualização/impressão.`
             : result.totalMovements === 0
-              ? `Relatorio diario de ${formatDateLabel(date)} gerado sem movimentacoes.`
+              ? `Relatório diário de ${formatDateLabel(date)} gerado sem movimentações.`
               : result.shared
-                ? `Relatorio diario de ${formatDateLabel(date)} gerado e pronto para compartilhar.`
-                : `Relatorio diario de ${formatDateLabel(date)} gerado com sucesso.`,
+                ? `Relatório diário de ${formatDateLabel(date)} gerado e pronto para compartilhar.`
+                : `Relatório diário de ${formatDateLabel(date)} gerado com sucesso.`,
         durationMs: 3600,
       });
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : 'Falha ao gerar relatorio diario.');
+      setErrorMessage(error instanceof Error ? error.message : 'Falha ao gerar relatório diário.');
     } finally {
       setIsGeneratingReport(false);
       setActiveDailyReportDate(null);
@@ -821,29 +821,29 @@ export function HistoryScreen({ canManageHistoryActions = false }: HistoryScreen
   }
 
   const heroText = useMemo(() => {
-    if (mode === 'diario') {
+    if (mode === 'diário') {
       return {
-        title: 'Historico Diario',
-        description: 'Veja cada movimentacao salva por dia, incluindo saldo apos cada lancamento.',
+        title: 'Histórico Diário',
+        description: 'Veja cada movimentação salva por dia, incluindo saldo após cada lancamento.',
       };
     }
 
     if (mode === 'quinzenal') {
       return {
-        title: 'Relatorio Quinzenal',
+        title: 'Relatório Quinzenal',
         description:
-          'Acompanhe os dias com movimentacao em cada quinzena e abra os lancamentos para ver detalhes.',
+          'Acompanhe os dias com movimentação em cada quinzena e abra os lancamentos para ver detalhes.',
       };
     }
 
     return {
-      title: 'Relatorio Mensal',
+      title: 'Relatório Mensal',
       description:
-        'Visualize os dias com entrada e saida no mes, com todos os itens movimentados e status de compra.',
+        'Visualize os dias com entrada e saída no mês, com todos os itens movimentados e status de compra.',
     };
   }, [mode]);
   const totalGroups = isDailyMode ? displayedDailyGroups.length : displayedPeriodGroups.length;
-  const periodLabel = isDailyMode ? 'Dia' : mode === 'quinzenal' ? 'Quinzena' : 'Mes';
+  const periodLabel = isDailyMode ? 'Dia' : mode === 'quinzenal' ? 'Quinzena' : 'Mês';
 
   return (
     <ScreenShell>
@@ -875,7 +875,7 @@ export function HistoryScreen({ canManageHistoryActions = false }: HistoryScreen
                     value={isDailyMode ? getDailyMovementFilterLabel(dailyMovementFilter) : 'Completo'}
                   />
                   <KpiTile
-                    label="Mes"
+                    label="Mês"
                     value={isDailyMode ? '--' : formatMonthLabel(selectedMonth)}
                   />
                 </View>
@@ -884,11 +884,11 @@ export function HistoryScreen({ canManageHistoryActions = false }: HistoryScreen
 
             <View style={styles.modeSwitcher}>
               <Pressable
-                style={[styles.modeButton, mode === 'diario' ? styles.modeButtonActive : undefined]}
-                onPress={() => selectMode('diario')}
+                style={[styles.modeButton, mode === 'diário' ? styles.modeButtonActive : undefined]}
+                onPress={() => selectMode('diário')}
               >
-                <Text style={[styles.modeText, mode === 'diario' ? styles.modeTextActive : undefined]}>
-                  Diario
+                <Text style={[styles.modeText, mode === 'diário' ? styles.modeTextActive : undefined]}>
+                  Diário
                 </Text>
               </Pressable>
               <Pressable
@@ -989,7 +989,7 @@ export function HistoryScreen({ canManageHistoryActions = false }: HistoryScreen
                       dailyMovementFilter === 'exit' ? styles.dailyFilterTextActive : undefined,
                     ]}
                   >
-                    Saida
+                    Saída
                   </Text>
                 </Pressable>
                 <Pressable
@@ -1013,7 +1013,7 @@ export function HistoryScreen({ canManageHistoryActions = false }: HistoryScreen
 
             {!isDailyMode ? (
               <View style={styles.monthCard}>
-                <Text style={styles.monthLabel}>Mes do relatorio</Text>
+                <Text style={styles.monthLabel}>Mês do relatório</Text>
                 <View style={styles.monthSelectRoot}>
                   <Pressable
                     style={styles.monthSelectTrigger}
@@ -1048,7 +1048,7 @@ export function HistoryScreen({ canManageHistoryActions = false }: HistoryScreen
                   ) : null}
                 </View>
                 <Pressable style={styles.monthButton} onPress={setCurrentMonth}>
-                  <Text style={styles.monthButtonText}>Mes atual</Text>
+                  <Text style={styles.monthButtonText}>Mês atual</Text>
                 </Pressable>
               </View>
             ) : null}
@@ -1056,7 +1056,7 @@ export function HistoryScreen({ canManageHistoryActions = false }: HistoryScreen
             {!isDailyMode ? (
               <View style={styles.reportButtonWrap}>
                 <AppButton
-                  label={isGeneratingReport ? 'Gerando relatorio...' : 'Gerar Relatorio'}
+                  label={isGeneratingReport ? 'Gerando relatório...' : 'Gerar Relatório'}
                   onPress={() => {
                     setIsReportPickerOpen(true);
                   }}
@@ -1069,16 +1069,16 @@ export function HistoryScreen({ canManageHistoryActions = false }: HistoryScreen
         }
         ListEmptyComponent={
           isLoading ? (
-            <Text style={styles.emptyText}>Carregando historico...</Text>
+            <Text style={styles.emptyText}>Carregando histórico...</Text>
           ) : hasItemFilter ? (
             <Text style={styles.emptyText}>
-              Nenhuma movimentacao encontrada para os itens selecionados.
+              Nenhuma movimentação encontrada para os itens selecionados.
             </Text>
           ) : (
             <Text style={styles.emptyText}>
               {isDailyMode
-                ? `Nenhuma movimentacao de ${getDailyMovementFilterLabel(dailyMovementFilter)} registrada para este filtro.`
-                : 'Nenhuma movimentacao registrada para este filtro.'}
+                ? `Nenhuma movimentação de ${getDailyMovementFilterLabel(dailyMovementFilter)} registrada para este filtro.`
+                : 'Nenhuma movimentação registrada para este filtro.'}
             </Text>
           )
         }
@@ -1116,7 +1116,7 @@ export function HistoryScreen({ canManageHistoryActions = false }: HistoryScreen
                       disabled={isGeneratingReport}
                     >
                       <Text style={styles.generateDayReportButtonText}>
-                        {activeDailyReportDate === dailyItem.date ? 'Gerando relatorio...' : 'Gerar relatorio'}
+                        {activeDailyReportDate === dailyItem.date ? 'Gerando relatório...' : 'Gerar relatório'}
                       </Text>
                     </Pressable>
                     {canManageHistoryActions ? (
@@ -1134,7 +1134,7 @@ export function HistoryScreen({ canManageHistoryActions = false }: HistoryScreen
                         }}
                         disabled={activeActionKey !== null || filteredEntries.length === 0}
                       >
-                        <Text style={styles.deleteMovementButtonText}>Excluir movimentacao</Text>
+                        <Text style={styles.deleteMovementButtonText}>Excluir movimentação</Text>
                       </Pressable>
                     ) : null}
                     {canManageHistoryActions ? (
@@ -1158,20 +1158,20 @@ export function HistoryScreen({ canManageHistoryActions = false }: HistoryScreen
                 </View>
 
                 <Text style={styles.groupSummary}>
-                  Total itens: {dailyItem.totalItems} | Movimentacoes: {filteredCountedItems} | OK:{' '}
+                  Total itens: {dailyItem.totalItems} | Movimentações: {filteredCountedItems} | OK:{' '}
                   {filteredOkItems} | Comprar: {filteredNeedPurchaseItems} | Faltante total:{' '}
                   {formatQuantity(filteredTotalMissingQuantity)} und
                 </Text>
 
                 {filteredEntries.length === 0 ? (
                   <Text style={styles.entryMeta}>
-                    Sem movimentacoes de {getDailyMovementFilterLabel(dailyMovementFilter)} neste dia.
+                    Sem movimentações de {getDailyMovementFilterLabel(dailyMovementFilter)} neste dia.
                   </Text>
                 ) : (
                   movementGroups.map((group, groupIndex) => (
                     <View key={group.key} style={styles.movementGroup}>
                       <Text style={styles.movementGroupHeader}>
-                        Movimentacao {groupIndex + 1}o · {formatDateLabel(dailyItem.date)}
+                        Movimentação {groupIndex + 1}o · {formatDateLabel(dailyItem.date)}
                         {group.time ? ` ${formatTime(group.time)}` : ''}
                       </Text>
                       {group.entries.map((entry) => (
@@ -1222,7 +1222,7 @@ export function HistoryScreen({ canManageHistoryActions = false }: HistoryScreen
                           <Text style={styles.entryMeta}>Obs.: {entry.observation}</Text>
                         ) : null}
                         <Text style={styles.entryMeta}>
-                          Saldo apos:{' '}
+                          Saldo após:{' '}
                           {entry.stockAfterQuantity === null
                             ? '-'
                             : formatOriginalAndBaseQuantity(
@@ -1240,7 +1240,7 @@ export function HistoryScreen({ canManageHistoryActions = false }: HistoryScreen
                           )}
                         </Text>
                         <Text style={styles.entryMeta}>
-                          Feito por: {entry.createdByUsername?.trim() ? entry.createdByUsername : 'Nao informado'}
+                          Feito por: {entry.createdByUsername?.trim() ? entry.createdByUsername : 'Não informado'}
                         </Text>
                         {canManageHistoryActions ? (
                           <View style={styles.entryActions}>
@@ -1290,7 +1290,7 @@ export function HistoryScreen({ canManageHistoryActions = false }: HistoryScreen
                                   entry.conversionFactor,
                                   formatQuantity,
                                 )}`
-                              : 'No minimo (comprar)'
+                              : 'No mínimo (comprar)'
                             : 'OK'}
                         </Text>
                       </View>
@@ -1323,7 +1323,7 @@ export function HistoryScreen({ canManageHistoryActions = false }: HistoryScreen
                     (sum, day) => sum + keepSelectedEntries(day.entries, selectedNormalized).length,
                     0,
                   )}{' '}
-                  movimentacao(oes)
+                  movimentação(oes)
                 </Text>
               ) : (
                 <Text style={styles.groupSummary}>
@@ -1334,7 +1334,7 @@ export function HistoryScreen({ canManageHistoryActions = false }: HistoryScreen
               )}
 
               {periodItem.days.length === 0 ? (
-                <Text style={styles.entryMeta}>Sem movimentacoes neste periodo.</Text>
+                <Text style={styles.entryMeta}>Sem movimentações neste período.</Text>
               ) : (
                 <View style={styles.periodDaysContainer}>
                   {periodItem.days.map((day) => {
@@ -1442,7 +1442,7 @@ export function HistoryScreen({ canManageHistoryActions = false }: HistoryScreen
                                     : styles.periodMovementExitTextInactive,
                                 ]}
                               >
-                                Saida
+                                Saída
                               </Text>
                             </Pressable>
                           ) : null}
@@ -1452,10 +1452,10 @@ export function HistoryScreen({ canManageHistoryActions = false }: HistoryScreen
                           filteredDayEntries.length === 0 ? (
                             <Text style={styles.entryMeta}>
                               {selectedDayFilter === 'entry'
-                                ? 'Sem movimentacoes de Entrada neste dia.'
+                                ? 'Sem movimentações de Entrada neste dia.'
                                 : selectedDayFilter === 'exit'
-                                  ? 'Sem movimentacoes de Saida neste dia.'
-                                  : 'Sem movimentacoes neste dia.'}
+                                  ? 'Sem movimentações de Saída neste dia.'
+                                  : 'Sem movimentações neste dia.'}
                             </Text>
                           ) : (
                             filteredDayEntries.map((entry) => (
@@ -1480,7 +1480,7 @@ export function HistoryScreen({ canManageHistoryActions = false }: HistoryScreen
                                     tone="normal"
                                   />
                                   <Text style={styles.entryMeta}>
-                                    Saldo apos:{' '}
+                                    Saldo após:{' '}
                                     {entry.stockAfterQuantity === null
                                       ? '-'
                                       : formatOriginalAndBaseQuantity(
@@ -1498,7 +1498,7 @@ export function HistoryScreen({ canManageHistoryActions = false }: HistoryScreen
                                     )}
                                   </Text>
                                   <Text style={styles.entryMeta}>
-                                    Feito por: {entry.createdByUsername?.trim() ? entry.createdByUsername : 'Nao informado'}
+                                    Feito por: {entry.createdByUsername?.trim() ? entry.createdByUsername : 'Não informado'}
                                   </Text>
                                 </View>
                                 <View
@@ -1516,7 +1516,7 @@ export function HistoryScreen({ canManageHistoryActions = false }: HistoryScreen
                                             entry.conversionFactor,
                                             formatQuantity,
                                           )}`
-                                        : 'No minimo (comprar)'
+                                        : 'No mínimo (comprar)'
                                       : 'OK'}
                                   </Text>
                                 </View>
@@ -1548,8 +1548,8 @@ export function HistoryScreen({ canManageHistoryActions = false }: HistoryScreen
         >
           <View style={styles.modalBackdrop}>
             <View style={styles.modalCard}>
-              <Text style={styles.modalTitle}>Gerar Relatorio</Text>
-              <Text style={styles.modalMessage}>Escolha o periodo para montar o PDF.</Text>
+              <Text style={styles.modalTitle}>Gerar Relatório</Text>
+              <Text style={styles.modalMessage}>Escolha o período para montar o PDF.</Text>
               <View style={styles.reportPeriodActions}>
                 <Pressable
                   style={[
@@ -1557,11 +1557,11 @@ export function HistoryScreen({ canManageHistoryActions = false }: HistoryScreen
                     isGeneratingReport ? styles.actionDisabled : undefined,
                   ]}
                   onPress={() => {
-                    void handleGenerateReport('diario');
+                    void handleGenerateReport('diário');
                   }}
                   disabled={isGeneratingReport}
                 >
-                  <Text style={styles.reportPeriodButtonText}>Diario</Text>
+                  <Text style={styles.reportPeriodButtonText}>Diário</Text>
                 </Pressable>
                 <Pressable
                   style={[

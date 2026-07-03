@@ -374,7 +374,7 @@ export interface DailyStockEntry {
   updatedAt: string;
 }
 
-export type HistoryReportPeriod = 'diario' | 'quinzenal' | 'mensal';
+export type HistoryReportPeriod = 'diário' | 'quinzenal' | 'mensal';
 export type HistoryReportMovementType = 'entry' | 'exit';
 
 export interface HistoryReportEntry {

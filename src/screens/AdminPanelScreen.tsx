@@ -62,8 +62,8 @@ const TAB_PERMISSION_OPTIONS: Array<{ key: AppTabPermissionKey; label: string }>
   { key: 'stock', label: 'Estoque' },
   { key: 'items', label: 'Itens' },
   { key: 'entry', label: 'Entrada' },
-  { key: 'exit', label: 'Saida' },
-  { key: 'history', label: 'Historico' },
+  { key: 'exit', label: 'Saída' },
+  { key: 'history', label: 'Histórico' },
 ];
 
 const INITIAL_CREATE_FORM: UserFormState = {
@@ -111,11 +111,11 @@ function buildCreateValidation(form: UserFormState): FormErrors {
   const errors: FormErrors = {};
 
   if (form.username.trim().length === 0) {
-    errors.username = 'Informe o usuario.';
+    errors.username = 'Informe o usuário.';
   }
 
   if (form.functionName.trim().length === 0) {
-    errors.functionName = 'Informe a funcao.';
+    errors.functionName = 'Informe a função.';
   }
 
   if (form.password.length === 0) {
@@ -123,7 +123,7 @@ function buildCreateValidation(form: UserFormState): FormErrors {
   }
 
   if (!hasAtLeastOnePermission(form.permissions)) {
-    errors.permissions = 'Marque pelo menos uma aba para este usuario.';
+    errors.permissions = 'Marque pelo menos uma aba para este usuário.';
   }
 
   return errors;
@@ -133,15 +133,15 @@ function buildUpdateValidation(form: UserFormState): FormErrors {
   const errors: FormErrors = {};
 
   if (form.username.trim().length === 0) {
-    errors.username = 'Informe o usuario.';
+    errors.username = 'Informe o usuário.';
   }
 
   if (form.functionName.trim().length === 0) {
-    errors.functionName = 'Informe a funcao.';
+    errors.functionName = 'Informe a função.';
   }
 
   if (!hasAtLeastOnePermission(form.permissions)) {
-    errors.permissions = 'Marque pelo menos uma aba para este usuario.';
+    errors.permissions = 'Marque pelo menos uma aba para este usuário.';
   }
 
   return errors;
@@ -253,7 +253,7 @@ export function AdminPanelScreen({ currentUser, onUsersChanged }: AdminPanelScre
     } catch (error) {
       setCreateErrors((prev) => ({
         ...prev,
-        submit: error instanceof Error ? error.message : 'Falha ao carregar usuarios.',
+        submit: error instanceof Error ? error.message : 'Falha ao carregar usuários.',
       }));
     } finally {
       setIsLoading(false);
@@ -412,13 +412,13 @@ export function AdminPanelScreen({ currentUser, onUsersChanged }: AdminPanelScre
       });
 
       setCreateForm(INITIAL_CREATE_FORM);
-      setFeedbackMessage('Usuario criado com sucesso.');
+      setFeedbackMessage('Usuário criado com sucesso.');
       await loadUsers();
       await notifyUsersChanged();
     } catch (error) {
       setCreateErrors((prev) => ({
         ...prev,
-        submit: error instanceof Error ? error.message : 'Falha ao criar usuario.',
+        submit: error instanceof Error ? error.message : 'Falha ao criar usuário.',
       }));
     } finally {
       setIsSubmitting(false);
@@ -443,14 +443,14 @@ export function AdminPanelScreen({ currentUser, onUsersChanged }: AdminPanelScre
         isAdmin: editForm.isAdmin,
         permissions: editForm.permissions,
       });
-      setFeedbackMessage('Usuario atualizado com sucesso.');
+      setFeedbackMessage('Usuário atualizado com sucesso.');
       cancelEditing();
       await loadUsers();
       await notifyUsersChanged();
     } catch (error) {
       setEditErrors((prev) => ({
         ...prev,
-        submit: error instanceof Error ? error.message : 'Falha ao atualizar usuario.',
+        submit: error instanceof Error ? error.message : 'Falha ao atualizar usuário.',
       }));
     } finally {
       setIsSubmitting(false);
@@ -458,7 +458,7 @@ export function AdminPanelScreen({ currentUser, onUsersChanged }: AdminPanelScre
   }
 
   async function handleArchiveUser(user: AppUser) {
-    const confirmed = await confirmAction(`Deseja excluir o usuario ${user.username}?`);
+    const confirmed = await confirmAction(`Deseja excluir o usuário ${user.username}?`);
     if (!confirmed) {
       return;
     }
@@ -468,7 +468,7 @@ export function AdminPanelScreen({ currentUser, onUsersChanged }: AdminPanelScre
 
     try {
       await archiveUser(user.id);
-      setFeedbackMessage('Usuario excluido com sucesso.');
+      setFeedbackMessage('Usuário excluído com sucesso.');
       if (editingUserId === user.id) {
         cancelEditing();
       }
@@ -477,7 +477,7 @@ export function AdminPanelScreen({ currentUser, onUsersChanged }: AdminPanelScre
     } catch (error) {
       setEditErrors((prev) => ({
         ...prev,
-        submit: error instanceof Error ? error.message : 'Falha ao excluir usuario.',
+        submit: error instanceof Error ? error.message : 'Falha ao excluir usuário.',
       }));
     } finally {
       setIsSubmitting(false);
@@ -516,7 +516,7 @@ export function AdminPanelScreen({ currentUser, onUsersChanged }: AdminPanelScre
 
     const conversionFactor = parsePositiveDecimal(newUnitFactor);
     if (conversionFactor === null) {
-      setCatalogError('Informe uma equivalencia valida em und (numero maior que zero).');
+      setCatalogError('Informe uma equivalencia válida em und (número maior que zero).');
       return;
     }
 
@@ -619,7 +619,7 @@ export function AdminPanelScreen({ currentUser, onUsersChanged }: AdminPanelScre
 
     const conversionFactor = parsePositiveDecimal(editingUnitFactor);
     if (conversionFactor === null) {
-      setCatalogError('Informe uma equivalencia valida em und (numero maior que zero).');
+      setCatalogError('Informe uma equivalencia válida em und (número maior que zero).');
       return;
     }
 
@@ -655,7 +655,7 @@ export function AdminPanelScreen({ currentUser, onUsersChanged }: AdminPanelScre
       if (editingCategoryId === option.id) {
         cancelEditingCategory();
       }
-      setCatalogSuccess('Categoria excluida com sucesso.');
+      setCatalogSuccess('Categoria excluída com sucesso.');
       await loadCatalog();
     } catch (error) {
       setCatalogError(
@@ -680,7 +680,7 @@ export function AdminPanelScreen({ currentUser, onUsersChanged }: AdminPanelScre
       if (editingUnitId === option.id) {
         cancelEditingUnit();
       }
-      setCatalogSuccess('Unidade excluida com sucesso.');
+      setCatalogSuccess('Unidade excluída com sucesso.');
       await loadCatalog();
     } catch (error) {
       setCatalogError(
@@ -737,10 +737,10 @@ export function AdminPanelScreen({ currentUser, onUsersChanged }: AdminPanelScre
               <HeroHeader
                 title="Painel ADM"
                 subtitle="Gestao de acessos e catalogo"
-                description="Controle usuarios, permissoes, categorias e unidades em um unico fluxo."
+                description="Controle usuários, permissões, categorias e unidades em um único fluxo."
               >
                 <View style={styles.heroKpis}>
-                  <KpiTile label="Usuarios ativos" value={String(users.length)} />
+                  <KpiTile label="Usuários ativos" value={String(users.length)} />
                   <KpiTile label="Admins" value={String(adminCount)} />
                   <KpiTile label="Categorias" value={String(categories.length)} />
                   <KpiTile label="Unidades" value={String(units.length)} />
@@ -749,10 +749,10 @@ export function AdminPanelScreen({ currentUser, onUsersChanged }: AdminPanelScre
             </MotionEntrance>
 
             <View style={styles.formCard}>
-              <Text style={styles.formTitle}>Novo usuario</Text>
+              <Text style={styles.formTitle}>Novo usuário</Text>
 
               <View style={styles.fieldGroup}>
-                <Text style={styles.label}>Usuario</Text>
+                <Text style={styles.label}>Usuário</Text>
                 <TextInput
                   value={createForm.username}
                   onChangeText={(value) => setCreateField('username', value)}
@@ -765,7 +765,7 @@ export function AdminPanelScreen({ currentUser, onUsersChanged }: AdminPanelScre
               </View>
 
               <View style={styles.fieldGroup}>
-                <Text style={styles.label}>Funcao</Text>
+                <Text style={styles.label}>Função</Text>
                 <TextInput
                   value={createForm.functionName}
                   onChangeText={(value) => setCreateField('functionName', value)}
@@ -790,7 +790,7 @@ export function AdminPanelScreen({ currentUser, onUsersChanged }: AdminPanelScre
               </View>
 
               <View style={styles.fieldGroup}>
-                <Text style={styles.label}>Permissoes de abas</Text>
+                <Text style={styles.label}>Permissões de abas</Text>
                 <PermissionSelector
                   value={createForm.permissions}
                   onToggle={(tabKey) => {
@@ -808,7 +808,7 @@ export function AdminPanelScreen({ currentUser, onUsersChanged }: AdminPanelScre
                 onPress={() => setCreateField('isAdmin', !createForm.isAdmin)}
               >
                 <Text style={[styles.toggleButtonText, createForm.isAdmin ? styles.toggleButtonTextActive : undefined]}>
-                  {createForm.isAdmin ? 'Administrador: Sim' : 'Administrador: Nao'}
+                  {createForm.isAdmin ? 'Administrador: Sim' : 'Administrador: Não'}
                 </Text>
               </Pressable>
 
@@ -822,7 +822,7 @@ export function AdminPanelScreen({ currentUser, onUsersChanged }: AdminPanelScre
                 {isSubmitting ? (
                   <ActivityIndicator color="#FFFFFF" />
                 ) : (
-                  <Text style={styles.submitButtonText}>Criar usuario</Text>
+                  <Text style={styles.submitButtonText}>Criar usuário</Text>
                 )}
               </Pressable>
             </View>
@@ -1051,14 +1051,14 @@ export function AdminPanelScreen({ currentUser, onUsersChanged }: AdminPanelScre
               </View>
             </View>
 
-            <Text style={styles.listTitle}>Usuarios cadastrados</Text>
+            <Text style={styles.listTitle}>Usuários cadastrados</Text>
           </View>
         }
         ListEmptyComponent={
           isLoading ? (
-            <Text style={styles.emptyText}>Carregando usuarios...</Text>
+            <Text style={styles.emptyText}>Carregando usuários...</Text>
           ) : (
-            <Text style={styles.emptyText}>Nenhum usuario ativo.</Text>
+            <Text style={styles.emptyText}>Nenhum usuário ativo.</Text>
           )
         }
         renderItem={({ item }) => {
@@ -1077,7 +1077,7 @@ export function AdminPanelScreen({ currentUser, onUsersChanged }: AdminPanelScre
                   ) : null}
                   {isCurrentUser ? (
                     <View style={[styles.badge, styles.selfBadge]}>
-                      <Text style={styles.selfBadgeText}>Voce</Text>
+                      <Text style={styles.selfBadgeText}>Você</Text>
                     </View>
                   ) : null}
                 </View>
@@ -1085,7 +1085,7 @@ export function AdminPanelScreen({ currentUser, onUsersChanged }: AdminPanelScre
 
               {!isEditing ? (
                 <>
-                  <Text style={styles.userMeta}>Funcao: {item.functionName}</Text>
+                  <Text style={styles.userMeta}>Função: {item.functionName}</Text>
                   <Text style={styles.userMeta}>
                     Abas: {formatPermissions(item.permissions) || 'Nenhuma'}
                   </Text>
@@ -1094,13 +1094,13 @@ export function AdminPanelScreen({ currentUser, onUsersChanged }: AdminPanelScre
                       <Text style={styles.editButtonText}>Editar</Text>
                     </Pressable>
                   ) : (
-                    <Text style={styles.selfHint}>Seu proprio usuario nao pode ser editado/excluido aqui.</Text>
+                    <Text style={styles.selfHint}>Seu próprio usuário não pode ser editado/excluído aqui.</Text>
                   )}
                 </>
               ) : (
                 <View style={styles.editCard}>
                   <View style={styles.fieldGroup}>
-                    <Text style={styles.label}>Usuario</Text>
+                    <Text style={styles.label}>Usuário</Text>
                     <TextInput
                       value={editForm.username}
                       onChangeText={(value) => setEditField('username', value)}
@@ -1112,7 +1112,7 @@ export function AdminPanelScreen({ currentUser, onUsersChanged }: AdminPanelScre
                   </View>
 
                   <View style={styles.fieldGroup}>
-                    <Text style={styles.label}>Funcao</Text>
+                    <Text style={styles.label}>Função</Text>
                     <TextInput
                       value={editForm.functionName}
                       onChangeText={(value) => setEditField('functionName', value)}
@@ -1122,7 +1122,7 @@ export function AdminPanelScreen({ currentUser, onUsersChanged }: AdminPanelScre
                   </View>
 
                   <View style={styles.fieldGroup}>
-                    <Text style={styles.label}>Permissoes de abas</Text>
+                    <Text style={styles.label}>Permissões de abas</Text>
                     <PermissionSelector
                       value={editForm.permissions}
                       onToggle={(tabKey) => {
@@ -1140,7 +1140,7 @@ export function AdminPanelScreen({ currentUser, onUsersChanged }: AdminPanelScre
                     onPress={() => setEditField('isAdmin', !editForm.isAdmin)}
                   >
                     <Text style={[styles.toggleButtonText, editForm.isAdmin ? styles.toggleButtonTextActive : undefined]}>
-                      {editForm.isAdmin ? 'Administrador: Sim' : 'Administrador: Nao'}
+                      {editForm.isAdmin ? 'Administrador: Sim' : 'Administrador: Não'}
                     </Text>
                   </Pressable>
 

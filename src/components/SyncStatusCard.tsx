@@ -48,7 +48,7 @@ export function SyncStatusCard() {
   }
 
   let toneStyle = styles.infoCard;
-  let title = 'Supabase nao configurado';
+  let title = 'Supabase não configurado';
   let description = 'Os dados estao sendo salvos apenas neste aparelho.';
   let buttonLabel = '';
 
@@ -57,24 +57,24 @@ export function SyncStatusCard() {
   } else if (syncState.isSyncing) {
     title = 'Sincronizando com a nuvem';
     description = syncState.lastSyncStartedAt
-      ? `Inicio: ${formatSyncDateTime(syncState.lastSyncStartedAt)}`
+      ? `Início: ${formatSyncDateTime(syncState.lastSyncStartedAt)}`
       : 'Atualizando itens e vistorias no Supabase.';
     buttonLabel = 'Sincronizando...';
   } else if (syncState.lastSyncError) {
     toneStyle = styles.errorCard;
-    title = 'Falha na sincronizacao';
+    title = 'Falha na sincronização';
     description = syncState.lastSyncCompletedAt
-      ? `${syncState.lastSyncError} Ultimo sync OK: ${formatSyncDateTime(syncState.lastSyncCompletedAt)}`
+      ? `${syncState.lastSyncError} Último sync OK: ${formatSyncDateTime(syncState.lastSyncCompletedAt)}`
       : syncState.lastSyncError;
     buttonLabel = 'Tentar novamente';
   } else if (syncState.lastSyncCompletedAt) {
     toneStyle = styles.successCard;
     title = 'Sincronizado com sucesso';
-    description = `Ultima sincronizacao: ${formatSyncDateTime(syncState.lastSyncCompletedAt)}`;
+    description = `Última sincronização: ${formatSyncDateTime(syncState.lastSyncCompletedAt)}`;
     buttonLabel = 'Sincronizar agora';
   } else {
     title = 'Supabase conectado';
-    description = 'O aparelho ainda nao concluiu a primeira sincronizacao.';
+    description = 'O aparelho ainda não concluiu a primeira sincronização.';
     buttonLabel = 'Sincronizar agora';
   }
 

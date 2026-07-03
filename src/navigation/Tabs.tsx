@@ -53,7 +53,7 @@ function NoAccessScreen() {
             <View style={styles.noAccessContent}>
               <Text style={styles.noAccessTitle}>Sem abas liberadas</Text>
               <Text style={styles.noAccessText}>
-                Sua conta ainda nao tem permissao para visualizar abas do sistema.
+                Sua conta ainda não tem permissão para visualizar abas do sistema.
               </Text>
             </View>
           </SectionSurface>

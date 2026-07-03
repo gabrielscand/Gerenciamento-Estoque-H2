@@ -64,7 +64,7 @@ function buildRemoteUserId(): string {
 function ensureAnyPermissionSelected(permissions: AppUserPermissions): void {
   const hasPermission = Object.values(permissions).some((value) => value);
   if (!hasPermission) {
-    throw new Error('Selecione pelo menos uma aba para o usuario.');
+    throw new Error('Selecione pelo menos uma aba para o usuário.');
   }
 }
 
@@ -73,7 +73,7 @@ function mapUserRow(row: AppUserRow): AppUser {
     id: row.id,
     remoteId: row.remote_id,
     username: row.username,
-    functionName: row.function_name?.trim() || 'Sem funcao',
+    functionName: row.function_name?.trim() || 'Sem função',
     isAdmin: row.is_admin === 1,
     permissions: {
       dashboard: row.can_access_dashboard === 1,
@@ -104,7 +104,7 @@ function createSalt(): string {
 
 async function createPasswordPayload(password: string): Promise<{ salt: string; hash: string }> {
   if (password.length === 0) {
-    throw new Error('Informe uma senha valida.');
+    throw new Error('Informe uma senha válida.');
   }
 
   const salt = createSalt();
@@ -254,7 +254,7 @@ export async function login(username: string, password: string): Promise<AppUser
   const normalizedUsername = normalizeUsername(username);
 
   if (normalizedUsername.length === 0 || password.length === 0) {
-    throw new Error('Informe usuario e senha.');
+    throw new Error('Informe usuário e senha.');
   }
 
   const db = await getDatabase();
@@ -285,13 +285,13 @@ export async function login(username: string, password: string): Promise<AppUser
   );
 
   if (!row) {
-    throw new Error('Usuario ou senha invalidos.');
+    throw new Error('Usuário ou senha inválidos.');
   }
 
   const incomingHash = await hashPassword(password, row.password_salt);
 
   if (incomingHash !== row.password_hash) {
-    throw new Error('Usuario ou senha invalidos.');
+    throw new Error('Usuário ou senha inválidos.');
   }
 
   await upsertLocalSession(row.remote_id);
@@ -343,11 +343,11 @@ export async function createUser(input: CreateUserInput): Promise<void> {
   const normalizedUsername = normalizeUsername(username);
 
   if (normalizedUsername.length === 0) {
-    throw new Error('Informe um usuario valido.');
+    throw new Error('Informe um usuário válido.');
   }
 
   if (input.password.length === 0) {
-    throw new Error('Informe uma senha valida.');
+    throw new Error('Informe uma senha válida.');
   }
 
   ensureAnyPermissionSelected(input.permissions);
@@ -365,7 +365,7 @@ export async function createUser(input: CreateUserInput): Promise<void> {
   );
 
   if (duplicate) {
-    throw new Error('Ja existe um usuario com esse nome.');
+    throw new Error('Ja existe um usuário com esse nome.');
   }
 
   const password = await createPasswordPayload(input.password);
@@ -398,7 +398,7 @@ export async function createUser(input: CreateUserInput): Promise<void> {
     buildRemoteUserId(),
     username,
     normalizedUsername,
-    functionName.length > 0 ? functionName : 'Sem funcao',
+    functionName.length > 0 ? functionName : 'Sem função',
     password.hash,
     password.salt,
     input.isAdmin ? 1 : 0,
@@ -424,7 +424,7 @@ export async function updateUser(userId: number, input: UpdateUserInput): Promis
   const normalizedUsername = normalizeUsername(username);
 
   if (normalizedUsername.length === 0) {
-    throw new Error('Informe um usuario valido.');
+    throw new Error('Informe um usuário válido.');
   }
 
   ensureAnyPermissionSelected(input.permissions);
@@ -442,7 +442,7 @@ export async function updateUser(userId: number, input: UpdateUserInput): Promis
   );
 
   if (!current) {
-    throw new Error('Usuario nao encontrado para edicao.');
+    throw new Error('Usuário não encontrado para edição.');
   }
 
   const duplicate = await db.getFirstAsync<{ id: number }>(
@@ -459,7 +459,7 @@ export async function updateUser(userId: number, input: UpdateUserInput): Promis
   );
 
   if (duplicate) {
-    throw new Error('Ja existe um usuario com esse nome.');
+    throw new Error('Ja existe um usuário com esse nome.');
   }
 
   if (current.is_admin === 1 && !input.isAdmin) {
@@ -475,7 +475,7 @@ export async function updateUser(userId: number, input: UpdateUserInput): Promis
     );
 
     if ((otherAdmins?.total ?? 0) === 0) {
-      throw new Error('Nao e possivel remover permissao do ultimo administrador.');
+      throw new Error('Não e possível remover permissão do último administrador.');
     }
   }
 
@@ -510,7 +510,7 @@ export async function updateUser(userId: number, input: UpdateUserInput): Promis
       `,
       username,
       normalizedUsername,
-      functionName.length > 0 ? functionName : 'Sem funcao',
+      functionName.length > 0 ? functionName : 'Sem função',
       passwordPayload.hash,
       passwordPayload.salt,
       input.isAdmin ? 1 : 0,
@@ -545,7 +545,7 @@ export async function updateUser(userId: number, input: UpdateUserInput): Promis
       `,
       username,
       normalizedUsername,
-      functionName.length > 0 ? functionName : 'Sem funcao',
+      functionName.length > 0 ? functionName : 'Sem função',
       input.isAdmin ? 1 : 0,
       input.permissions.dashboard ? 1 : 0,
       input.permissions.stock ? 1 : 0,
@@ -577,12 +577,12 @@ export async function archiveUser(userId: number): Promise<void> {
   );
 
   if (!target) {
-    throw new Error('Usuario nao encontrado para exclusao.');
+    throw new Error('Usuário não encontrado para exclusão.');
   }
 
   const sessionRemoteUserId = await getCurrentSessionRemoteUserId();
   if (sessionRemoteUserId && sessionRemoteUserId === target.remote_id) {
-    throw new Error('Nao e permitido excluir o proprio usuario logado.');
+    throw new Error('Não e permitido excluir o próprio usuário logado.');
   }
 
   if (target.is_admin === 1) {
@@ -598,7 +598,7 @@ export async function archiveUser(userId: number): Promise<void> {
     );
 
     if ((otherAdmins?.total ?? 0) === 0) {
-      throw new Error('Nao e permitido excluir o ultimo administrador ativo.');
+      throw new Error('Não e permitido excluir o último administrador ativo.');
     }
   }
 

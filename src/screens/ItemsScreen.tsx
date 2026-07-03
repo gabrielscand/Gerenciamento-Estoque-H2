@@ -126,18 +126,18 @@ function buildValidationErrors(form: FormState): { errors: FormErrors; parsed?: 
   }
 
   if (minQuantity === null) {
-    errors.minQuantity = 'Informe uma quantidade minima valida.';
+    errors.minQuantity = 'Informe uma quantidade mínima válida.';
   } else if (minQuantity < 0) {
-    errors.minQuantity = 'A quantidade minima nao pode ser negativa.';
+    errors.minQuantity = 'A quantidade mínima não pode ser negativa.';
   }
 
   if (maxQuantityRaw.length > 0) {
     if (maxQuantity === null) {
-      errors.maxQuantity = 'Informe um maximo valido.';
+      errors.maxQuantity = 'Informe um máximo válido.';
     } else if (maxQuantity < 0) {
-      errors.maxQuantity = 'O maximo nao pode ser negativo.';
+      errors.maxQuantity = 'O máximo não pode ser negativo.';
     } else if (minQuantity !== null && maxQuantity < minQuantity) {
-      errors.maxQuantity = 'O maximo nao pode ser menor que o minimo.';
+      errors.maxQuantity = 'O máximo não pode ser menor que o mínimo.';
     }
   }
 
@@ -229,7 +229,7 @@ function CatalogSelect({
           {options.length === 0 ? (
             <View style={[styles.selectEmptyState, compact ? styles.selectEmptyStateCompact : undefined]}>
               <Text style={[styles.selectEmptyStateText, compact ? styles.selectEmptyStateTextCompact : undefined]}>
-                Nenhuma opcao cadastrada.
+                Nenhuma opção cadastrada.
               </Text>
             </View>
           ) : (
@@ -432,7 +432,7 @@ export function ItemsScreen({ canImportData = false }: ItemsScreenProps) {
       const asset = result.assets[0];
       const pickedFile: SelectedImportFile = {
         uri: asset.uri,
-        name: asset.name ?? 'importacao.xlsx',
+        name: asset.name ?? 'importação.xlsx',
         mimeType: asset.mimeType ?? null,
         size: asset.size ?? null,
       };
@@ -460,14 +460,14 @@ export function ItemsScreen({ canImportData = false }: ItemsScreenProps) {
     }
 
     if (!importDefaults.category) {
-      setImportError('Selecione a categoria padrao para campos ausentes.');
+      setImportError('Selecione a categoria padrão para campos ausentes.');
       return;
     }
 
     const parsedDefaultMin = parseDecimalInput(importDefaults.minQuantity);
 
     if (parsedDefaultMin === null || parsedDefaultMin < 0) {
-      setImportError('Informe uma quantidade minima padrao valida.');
+      setImportError('Informe uma quantidade mínima padrão válida.');
       return;
     }
 
@@ -489,7 +489,7 @@ export function ItemsScreen({ canImportData = false }: ItemsScreenProps) {
         }, {}),
       );
     } catch (error) {
-      setImportError(error instanceof Error ? error.message : 'Falha no preview da importacao.');
+      setImportError(error instanceof Error ? error.message : 'Falha no preview da importação.');
     } finally {
       setIsRunningImportPreview(false);
     }
@@ -504,7 +504,7 @@ export function ItemsScreen({ canImportData = false }: ItemsScreenProps) {
 
   async function handleImportCommit() {
     if (!importPreview) {
-      setImportError('Execute o preview antes de confirmar a importacao.');
+      setImportError('Execute o preview antes de confirmar a importação.');
       return;
     }
 
@@ -525,7 +525,7 @@ export function ItemsScreen({ canImportData = false }: ItemsScreenProps) {
       const syncOk = await syncAppData();
 
       if (!syncOk) {
-        throw new Error('Importacao aplicada, mas nao foi possivel sincronizar agora. Tente sincronizar novamente.');
+        throw new Error('Importação aplicada, mas não foi possível sincronizar agora. Tente sincronizar novamente.');
       }
 
       await loadItems();
@@ -536,12 +536,12 @@ export function ItemsScreen({ canImportData = false }: ItemsScreenProps) {
         type: commitResult.summaryCommit.errors > 0 ? 'error' : 'success',
         message:
           commitResult.summaryCommit.errors > 0
-            ? `Importacao concluida com ${commitResult.summaryCommit.errors} erro(s).`
-            : `Importacao concluida. ${commitResult.summaryCommit.imported} importado(s), ${commitResult.summaryCommit.updated} atualizado(s), ${commitResult.summaryCommit.ignored} ignorado(s).`,
+            ? `Importação concluída com ${commitResult.summaryCommit.errors} erro(s).`
+            : `Importação concluída. ${commitResult.summaryCommit.imported} importado(s), ${commitResult.summaryCommit.updated} atualizado(s), ${commitResult.summaryCommit.ignored} ignorado(s).`,
         durationMs: 4200,
       });
     } catch (error) {
-      setImportError(error instanceof Error ? error.message : 'Falha ao confirmar importacao.');
+      setImportError(error instanceof Error ? error.message : 'Falha ao confirmar importação.');
     } finally {
       setIsRunningImportCommit(false);
     }
@@ -666,7 +666,7 @@ export function ItemsScreen({ canImportData = false }: ItemsScreenProps) {
     } catch (error) {
       showTopPopup({
         type: 'error',
-        message: error instanceof Error ? error.message : 'Nao foi possivel salvar o item.',
+        message: error instanceof Error ? error.message : 'Não foi possível salvar o item.',
         durationMs: 4200,
       });
     } finally {
@@ -708,7 +708,7 @@ export function ItemsScreen({ canImportData = false }: ItemsScreenProps) {
     } catch (error) {
       showTopPopup({
         type: 'error',
-        message: error instanceof Error ? error.message : 'Nao foi possivel atualizar o item.',
+        message: error instanceof Error ? error.message : 'Não foi possível atualizar o item.',
         durationMs: 4200,
       });
     } finally {
@@ -755,7 +755,7 @@ export function ItemsScreen({ canImportData = false }: ItemsScreenProps) {
     } catch (error) {
       showTopPopup({
         type: 'error',
-        message: error instanceof Error ? error.message : 'Nao foi possivel excluir o item.',
+        message: error instanceof Error ? error.message : 'Não foi possível excluir o item.',
         durationMs: 4200,
       });
     } finally {
@@ -836,7 +836,7 @@ export function ItemsScreen({ canImportData = false }: ItemsScreenProps) {
               <HeroHeader
                 title="Cadastro de Itens"
                 subtitle="Base de produtos e insumos"
-                description="Configure nome, unidade, categoria e minimo para abastecer a operacao."
+                description="Configure nome, unidade, categoria e mínimo para abastecer a operação."
               >
                 <View style={styles.heroKpis}>
                   <KpiTile label="Itens" value={String(totalItems)} />
@@ -907,7 +907,7 @@ export function ItemsScreen({ canImportData = false }: ItemsScreenProps) {
               </View>
 
               <View style={styles.fieldGroup}>
-                <Text style={styles.label}>Quantidade minima</Text>
+                <Text style={styles.label}>Quantidade mínima</Text>
                 <TextInput
                   value={createForm.minQuantity}
                   onChangeText={(value) => setCreateField('minQuantity', value)}
@@ -919,7 +919,7 @@ export function ItemsScreen({ canImportData = false }: ItemsScreenProps) {
               </View>
 
               <View style={styles.fieldGroup}>
-                <Text style={styles.label}>Quantidade maxima (opcional)</Text>
+                <Text style={styles.label}>Quantidade máxima (opcional)</Text>
                 <TextInput
                   value={createForm.maxQuantity}
                   onChangeText={(value) => setCreateField('maxQuantity', value)}
@@ -947,9 +947,9 @@ export function ItemsScreen({ canImportData = false }: ItemsScreenProps) {
 
             {canImportData ? (
               <View style={styles.importCard}>
-                <Text style={styles.importCardTitle}>Importacao em lote (.xlsx)</Text>
+                <Text style={styles.importCardTitle}>Importação em lote (.xlsx)</Text>
                 <Text style={styles.importCardDescription}>
-                  Envie uma planilha para criar/atualizar itens com preview e validacao antes de confirmar.
+                  Envie uma planilha para criar/atualizar itens com preview e válidação antes de confirmar.
                 </Text>
                 <Pressable style={styles.importButton} onPress={openImportModal}>
                   <Text style={styles.importButtonText}>Importar Dados</Text>
@@ -1051,13 +1051,13 @@ export function ItemsScreen({ canImportData = false }: ItemsScreenProps) {
                       !hasStock
                         ? 'Sem estoque inicial'
                         : needsPurchaseByCurrentStock
-                          ? 'No minimo ou abaixo do minimo'
+                          ? 'No mínimo ou abaixo do mínimo'
                           : undefined
                     }
                   />
                   <Text style={styles.itemMeta}>Unidade: {item.unit}</Text>
                   <Text style={styles.itemMeta}>
-                    Minimo:{' '}
+                    Mínimo:{' '}
                     {formatOriginalAndBaseQuantity(
                       item.minQuantity,
                       item.unit,
@@ -1066,7 +1066,7 @@ export function ItemsScreen({ canImportData = false }: ItemsScreenProps) {
                     )}
                   </Text>
                   <Text style={styles.itemMeta}>
-                    Maximo:{' '}
+                    Máximo:{' '}
                     {item.maxQuantity === null
                       ? '—'
                       : formatOriginalAndBaseQuantity(
@@ -1144,7 +1144,7 @@ export function ItemsScreen({ canImportData = false }: ItemsScreenProps) {
                   </View>
 
                   <View style={styles.fieldGroup}>
-                    <Text style={styles.label}>Quantidade minima</Text>
+                    <Text style={styles.label}>Quantidade mínima</Text>
                     <TextInput
                       value={editForm.minQuantity}
                       onChangeText={(value) => setEditField('minQuantity', value)}
@@ -1156,7 +1156,7 @@ export function ItemsScreen({ canImportData = false }: ItemsScreenProps) {
                   </View>
 
                   <View style={styles.fieldGroup}>
-                    <Text style={styles.label}>Quantidade maxima (opcional)</Text>
+                    <Text style={styles.label}>Quantidade máxima (opcional)</Text>
                     <TextInput
                       value={editForm.maxQuantity}
                       onChangeText={(value) => setEditField('maxQuantity', value)}
@@ -1226,11 +1226,11 @@ export function ItemsScreen({ canImportData = false }: ItemsScreenProps) {
             </View>
 
             <Text style={styles.modalDescription}>
-              Fase 1: enviar arquivo para preview. Fase 2: revisar conflitos e confirmar importacao.
+              Fase 1: enviar arquivo para preview. Fase 2: revisar conflitos e confirmar importação.
             </Text>
 
             <View style={styles.fieldGroup}>
-              <Text style={styles.label}>Categoria padrao (quando ausente na planilha)</Text>
+              <Text style={styles.label}>Categoria padrão (quando ausente na planilha)</Text>
               <CatalogSelect
                 value={importDefaults.category}
                 options={categoryOptions}
@@ -1248,7 +1248,7 @@ export function ItemsScreen({ canImportData = false }: ItemsScreenProps) {
             </View>
 
             <View style={styles.fieldGroup}>
-              <Text style={styles.label}>Quantidade minima padrao (quando ausente)</Text>
+              <Text style={styles.label}>Quantidade mínima padrão (quando ausente)</Text>
               <TextInput
                 value={importDefaults.minQuantity}
                 onChangeText={(value) => setImportDefaultField('minQuantity', value)}
@@ -1305,7 +1305,7 @@ export function ItemsScreen({ canImportData = false }: ItemsScreenProps) {
 
                 {importPreview.invalidRows.length > 0 ? (
                   <View style={styles.importInvalidList}>
-                    <Text style={styles.importSectionTitle}>Linhas invalidas</Text>
+                    <Text style={styles.importSectionTitle}>Linhas inválidas</Text>
                     {importPreview.invalidRows.slice(0, 6).map((invalidRow) => (
                       <Text key={`invalid-${invalidRow.rowNumber}-${invalidRow.reason}`} style={styles.importInvalidItem}>
                         Linha {invalidRow.rowNumber}: {invalidRow.reason}
@@ -1395,7 +1395,7 @@ export function ItemsScreen({ canImportData = false }: ItemsScreenProps) {
                 {isRunningImportCommit ? (
                   <ActivityIndicator color="#FFFFFF" />
                 ) : (
-                  <Text style={styles.submitButtonText}>Confirmar importacao</Text>
+                  <Text style={styles.submitButtonText}>Confirmar importação</Text>
                 )}
               </Pressable>
             </View>
@@ -1413,7 +1413,7 @@ export function ItemsScreen({ canImportData = false }: ItemsScreenProps) {
           <View style={styles.modalCard}>
             <Text style={styles.modalTitle}>Arquivar item</Text>
             <Text style={styles.modalDescription}>
-              Deseja arquivar este item? Ele sera removido de Itens, Entrada e Saida, mas continuara no Historico e no banco com is_deleted = 1.
+              Deseja arquivar este item? Ele será removido de Itens, Entrada e Saída, mas continuara no Histórico e no banco com is_deleted = 1.
             </Text>
             {archiveTarget ? <Text style={styles.modalItemName}>{archiveTarget.name}</Text> : null}
             <View style={styles.modalActions}>

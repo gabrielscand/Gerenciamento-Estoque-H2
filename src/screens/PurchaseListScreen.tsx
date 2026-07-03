@@ -25,7 +25,7 @@ function formatQuantity(value: number): string {
 }
 
 // "Faltante para compra": para itens de fardo, arredonda os fardos para cima
-// (nao se compra fracao de fardo), mantendo as unidades como o faltante real.
+// (não se compra fração de fardo), mantendo as unidades como o faltante real.
 function formatPurchaseQuantity(item: StockCurrentOverviewRow): string {
   if (!isFardoConversionFactor(item.conversionFactor)) {
     return formatOriginalAndBaseQuantity(
@@ -125,18 +125,18 @@ export function PurchaseListScreen() {
         type: 'success',
         message:
           Platform.OS === 'web'
-            ? 'Relatorio de compras enviado para visualizacao/impressao.'
+            ? 'Relatório de compras enviado para visualização/impressão.'
             : result.totalItems === 0
-              ? 'Relatorio de compras gerado sem itens para compra.'
+              ? 'Relatório de compras gerado sem itens para compra.'
               : result.shared
-                ? 'Relatorio de compras gerado e pronto para compartilhar.'
-                : 'Relatorio de compras gerado com sucesso.',
+                ? 'Relatório de compras gerado e pronto para compartilhar.'
+                : 'Relatório de compras gerado com sucesso.',
         durationMs: 3600,
       });
     } catch (error) {
       showTopPopup({
         type: 'error',
-        message: error instanceof Error ? error.message : 'Falha ao gerar relatorio de compras.',
+        message: error instanceof Error ? error.message : 'Falha ao gerar relatório de compras.',
         durationMs: 4200,
       });
     } finally {
@@ -164,13 +164,13 @@ export function PurchaseListScreen() {
             <MotionEntrance delay={80}>
               <HeroHeader
                 title="Lista de Compras"
-                subtitle="Reposicao de estoque"
-                description="Itens abaixo ou no limite minimo para reposicao priorizada."
+                subtitle="Reposição de estoque"
+                description="Itens abaixo ou no limite mínimo para reposição priorizada."
               >
                 <View style={styles.heroKpis}>
                   <KpiTile label="Comprar" value={String(summary.totalItemsToBuy)} />
                   <KpiTile label="Abaixo" value={String(summary.belowMinimumItems)} />
-                  <KpiTile label="No minimo" value={String(summary.atMinimumItems)} />
+                  <KpiTile label="No mínimo" value={String(summary.atMinimumItems)} />
                   <KpiTile
                     label="Faltante (und)"
                     value={formatQuantity(summary.totalMissingQuantityInBaseUnits)}
@@ -181,7 +181,7 @@ export function PurchaseListScreen() {
 
             <View style={styles.reportButtonWrap}>
               <AppButton
-                label={isGeneratingReport ? 'Gerando relatorio...' : 'Gerar Relatorio'}
+                label={isGeneratingReport ? 'Gerando relatório...' : 'Gerar Relatório'}
                 onPress={() => {
                   void handleGenerateReport();
                 }}
@@ -194,7 +194,7 @@ export function PurchaseListScreen() {
           isLoading ? (
             <Text style={styles.emptyText}>Carregando lista de compras...</Text>
           ) : (
-            <Text style={styles.emptyText}>Nenhum item abaixo ou no limite minimo.</Text>
+            <Text style={styles.emptyText}>Nenhum item abaixo ou no limite mínimo.</Text>
           )
         }
         renderItem={({ item }) => {
@@ -212,7 +212,7 @@ export function PurchaseListScreen() {
                   ]}
                 >
                   <Text style={styles.statusText}>
-                    {isBelowMinimum ? 'Abaixo do minimo' : 'No minimo'}
+                    {isBelowMinimum ? 'Abaixo do mínimo' : 'No mínimo'}
                   </Text>
                 </View>
               </View>
@@ -221,7 +221,7 @@ export function PurchaseListScreen() {
                 label="Faltante para compra"
                 value={formatPurchaseQuantity(item)}
                 tone={isBelowMinimum ? 'warning' : 'normal'}
-                helperText={isBelowMinimum ? 'Priorize reposicao deste item' : 'Reposicao preventiva sugerida'}
+                helperText={isBelowMinimum ? 'Priorize reposição deste item' : 'Reposição preventiva sugerida'}
               />
 
               <Text style={styles.itemMeta}>
@@ -240,7 +240,7 @@ export function PurchaseListScreen() {
                   : '-'}
               </Text>
               <Text style={styles.itemMeta}>
-                Minimo:{' '}
+                Mínimo:{' '}
                 {formatOriginalAndBaseQuantity(
                   item.minQuantity,
                   item.unit,
@@ -249,7 +249,7 @@ export function PurchaseListScreen() {
                 )}
               </Text>
               <Text style={styles.itemMeta}>
-                Maximo:{' '}
+                Máximo:{' '}
                 {item.maxQuantity === null
                   ? '—'
                   : formatOriginalAndBaseQuantity(

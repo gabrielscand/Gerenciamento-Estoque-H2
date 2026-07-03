@@ -343,18 +343,18 @@ export function StockScreen() {
         type: 'success',
         message:
           Platform.OS === 'web'
-            ? 'Inventario enviado para visualizacao/impressao.'
+            ? 'Inventário enviado para visualização/impressão.'
             : result.totalItems === 0
-              ? 'Inventario gerado sem itens cadastrados.'
+              ? 'Inventário gerado sem itens cadastrados.'
               : result.shared
-                ? 'Inventario gerado e pronto para compartilhar.'
-                : 'Inventario gerado com sucesso.',
+                ? 'Inventário gerado e pronto para compartilhar.'
+                : 'Inventário gerado com sucesso.',
         durationMs: 3600,
       });
     } catch (error) {
       showTopPopup({
         type: 'error',
-        message: error instanceof Error ? error.message : 'Falha ao gerar inventario.',
+        message: error instanceof Error ? error.message : 'Falha ao gerar inventário.',
         durationMs: 4200,
       });
     } finally {
@@ -383,7 +383,7 @@ export function StockScreen() {
               <HeroHeader
                 title="Estoque Atual"
                 subtitle="Saldo consolidado"
-                description="Acompanhe rapidamente os itens no limite minimo e o faltante para compra."
+                description="Acompanhe rapidamente os itens no limite mínimo e o faltante para compra."
               >
                 <View style={styles.heroKpis}>
                   <KpiTile label="Itens" value={String(summary.totalItems)} />
@@ -486,7 +486,7 @@ export function StockScreen() {
 
             <View style={styles.reportButtonWrap}>
               <AppButton
-                label={isGeneratingInventory ? 'Gerando inventario...' : 'Gerar Inventario'}
+                label={isGeneratingInventory ? 'Gerando inventário...' : 'Gerar Inventário'}
                 onPress={() => setIsInventoryPickerOpen(true)}
                 disabled={isGeneratingInventory}
               />
@@ -558,16 +558,16 @@ export function StockScreen() {
                   !hasStock
                     ? 'Sem estoque inicial'
                     : item.needsPurchase
-                      ? 'No minimo ou abaixo do minimo'
+                      ? 'No mínimo ou abaixo do mínimo'
                       : isNearMin
-                        ? 'Perto do estoque minimo'
+                        ? 'Perto do estoque mínimo'
                         : undefined
                 }
               />
               <Text style={styles.itemMeta}>Categoria: {item.category ? getCategoryLabel(item.category) : 'Sem categoria'}</Text>
               <Text style={styles.itemMeta}>Unidade: {item.unit}</Text>
               <Text style={styles.itemMeta}>
-                Minimo:{' '}
+                Mínimo:{' '}
                 {formatOriginalAndBaseQuantity(
                   item.minQuantity,
                   item.unit,
@@ -576,7 +576,7 @@ export function StockScreen() {
                 )}
               </Text>
               <Text style={styles.itemMeta}>
-                Maximo:{' '}
+                Máximo:{' '}
                 {item.maxQuantity === null
                   ? '—'
                   : formatOriginalAndBaseQuantity(

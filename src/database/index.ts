@@ -17,10 +17,10 @@ export async function getDatabase(): Promise<SQLiteDatabase> {
 }
 
 export async function runMigrations(): Promise<void> {
-  console.log('[SQLite] iniciando migracoes...');
+  console.log('[SQLite] iniciando migrações...');
   const database = await getDatabase();
   await applyMigrations(database);
-  console.log('[SQLite] migracoes concluidas.');
+  console.log('[SQLite] migrações concluídas.');
 }
 
 export async function initDatabase(): Promise<void> {

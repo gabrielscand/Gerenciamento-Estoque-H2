@@ -59,8 +59,8 @@ function formatUnitLabel(item: InventoryReportItem): string {
   return item.unit;
 }
 
-// Estoque em fardos INTEIROS (so para itens de fardo). Nao-fardo: "-".
-// A coluna de unidades mostra o total; aqui nao ha fardo quebrado.
+// Estoque em fardos INTEIROS (so para itens de fardo). Não-fardo: "-".
+// A coluna de unidades mostra o total; aqui não ha fardo quebrado.
 function formatStockFardo(item: InventoryReportItem): string {
   if (!isFardoConversionFactor(item.conversionFactor) || item.currentStockQuantity === null) {
     return '-';
@@ -265,8 +265,8 @@ function buildPdfHtml(payload: InventoryReportPayload): string {
               <th>Unidade</th>
               <th>Estoque atual (fd)</th>
               <th>Estoque atual (und)</th>
-              <th>Minimo</th>
-              <th>Maximo</th>
+              <th>Mínimo</th>
+              <th>Máximo</th>
             </tr>
           </thead>
           <tbody>
@@ -330,7 +330,7 @@ async function generateWebPdf(payload: InventoryReportPayload): Promise<void> {
   autoTable(doc, {
     startY: currentY,
     theme: 'striped',
-    head: [['#', 'Item', 'Categoria', 'Unidade', 'Estoque atual (fd)', 'Estoque atual (und)', 'Minimo', 'Maximo']],
+    head: [['#', 'Item', 'Categoria', 'Unidade', 'Estoque atual (fd)', 'Estoque atual (und)', 'Mínimo', 'Máximo']],
     body: rows,
     headStyles: { fillColor: [95, 17, 117], textColor: 255, fontStyle: 'bold' },
     styles: { fontSize: 9, cellPadding: 6 },
@@ -347,7 +347,7 @@ export async function generateInventoryReportPdf(
   const syncOk = await syncAppData();
 
   if (!syncOk) {
-    throw new Error('Falha ao sincronizar com o Supabase. Nao foi possivel gerar o inventario.');
+    throw new Error('Falha ao sincronizar com o Supabase. Não foi possível gerar o inventário.');
   }
 
   const items = collectInventoryItems(await listStockCurrentOverview(), allowedCategories);
@@ -379,7 +379,7 @@ export async function generateInventoryReportPdf(
     await Sharing.shareAsync(pdfFile.uri, {
       mimeType: 'application/pdf',
       UTI: 'com.adobe.pdf',
-      dialogTitle: 'Compartilhar inventario de estoque',
+      dialogTitle: 'Compartilhar inventário de estoque',
     });
     shared = true;
   } else {

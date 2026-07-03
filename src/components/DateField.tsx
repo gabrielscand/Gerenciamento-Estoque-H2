@@ -65,7 +65,7 @@ export function DateField({ value, onChange, label = 'Data', error }: DateFieldP
     }
 
     if (trimmed.length >= 10) {
-      setWebInputError('Use uma data valida em DD/MM/AAAA.');
+      setWebInputError('Use uma data válida em DD/MM/AAAA.');
       onChange(trimmed);
     } else {
       setWebInputError('');

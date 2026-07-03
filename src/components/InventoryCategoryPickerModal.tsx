@@ -32,7 +32,7 @@ export function InventoryCategoryPickerModal({
 
   const [selected, setSelected] = useState<Set<CategoryOption>>(new Set());
 
-  // Ao abrir (ou quando as opcoes mudam), marca todas por padrao.
+  // Ao abrir (ou quando as opções mudam), marca todas por padrão.
   useEffect(() => {
     if (visible) {
       setSelected(new Set(options));
@@ -69,13 +69,13 @@ export function InventoryCategoryPickerModal({
       <View style={styles.backdrop}>
         <View style={styles.card}>
           <View style={styles.header}>
-            <Text style={styles.title}>Gerar Inventario</Text>
+            <Text style={styles.title}>Gerar Inventário</Text>
             <Pressable style={styles.closeButton} onPress={onClose}>
               <Text style={styles.closeButtonText}>Fechar</Text>
             </Pressable>
           </View>
           <Text style={styles.subtitle}>
-            Selecione as categorias que entram na contagem. O PDF tera somente as marcadas.
+            Selecione as categorias que entram na contagem. O PDF terá somente as marcadas.
           </Text>
 
           <Pressable style={[styles.row, styles.allRow]} onPress={toggleAll}>
@@ -87,7 +87,7 @@ export function InventoryCategoryPickerModal({
 
           <ScrollView style={styles.list} contentContainerStyle={styles.listContent}>
             {options.length === 0 ? (
-              <Text style={styles.emptyText}>Nenhuma categoria disponivel.</Text>
+              <Text style={styles.emptyText}>Nenhuma categoria disponível.</Text>
             ) : (
               options.map((option) => {
                 const key = option ?? '__uncategorized__';
@@ -113,7 +113,7 @@ export function InventoryCategoryPickerModal({
               disabled={selected.size === 0}
               onPress={handleConfirm}
             >
-              <Text style={styles.primaryButtonText}>Gerar inventario</Text>
+              <Text style={styles.primaryButtonText}>Gerar inventário</Text>
             </Pressable>
           </View>
         </View>

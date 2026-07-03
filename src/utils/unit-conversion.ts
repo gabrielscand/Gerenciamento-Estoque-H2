@@ -51,8 +51,8 @@ export function convertToBaseUnits(
 
   const factor = normalizeConversionFactor(conversionFactor, unitName);
   const raw = quantity * factor;
-  // Itens de fardo sao pacotes discretos: a quantidade em unidades (base) e
-  // sempre inteira. Arredonda para inteiro para nao exibir casas decimais.
+  // Itens de fardo são pacotes discretos: a quantidade em unidades (base) e
+  // sempre inteira. Arredonda para inteiro para não exibir casas decimais.
   return isFardoConversionFactor(factor) ? Math.round(raw) : roundQuantity(raw);
 }
 
@@ -66,8 +66,8 @@ export function isFardoConversionFactor(conversionFactor: number | null | undefi
   return typeof conversionFactor === 'number' && FARDO_CONVERSION_FACTORS.has(conversionFactor);
 }
 
-// Quantidade de fardos a comprar, arredondada para cima (nao se compra fracao de fardo).
-// Itens nao-fardo retornam a quantidade original.
+// Quantidade de fardos a comprar, arredondada para cima (não se compra fração de fardo).
+// Itens não-fardo retornam a quantidade original.
 export function purchaseQuantityForBuy(
   missingQuantity: number,
   conversionFactor: number | null | undefined,

@@ -115,7 +115,7 @@ function resolveDateRange(
   const selectedMonthRange = options.selectedMonth ? getMonthDateRange(options.selectedMonth) : null;
   const selectedMonth = selectedMonthRange ? options.selectedMonth ?? null : null;
 
-  if (period === 'diario') {
+  if (period === 'diário') {
     return {
       startDate: today,
       endDate: today,
@@ -155,42 +155,42 @@ function resolveDateRange(
 }
 
 function getPeriodMeta(period: HistoryReportPeriod, selectedMonth: string | null): ReportPeriodMeta {
-  if (period === 'diario') {
+  if (period === 'diário') {
     return {
-      reportTitle: 'Relatorio Diario de Movimentacoes',
-      periodLabel: 'Diario',
+      reportTitle: 'Relatório Diário de Movimentações',
+      periodLabel: 'Diário',
     };
   }
 
   if (period === 'quinzenal') {
     if (selectedMonth) {
       return {
-        reportTitle: 'Relatorio Quinzenal de Movimentacoes',
+        reportTitle: 'Relatório Quinzenal de Movimentações',
         periodLabel: `Quinzenal de ${formatMonthLabel(selectedMonth)} (01-15 e 16-fim)`,
       };
     }
 
     return {
-      reportTitle: 'Relatorio Quinzenal de Movimentacoes',
-      periodLabel: 'Quinzenal (ultimos 15 dias)',
+      reportTitle: 'Relatório Quinzenal de Movimentações',
+      periodLabel: 'Quinzenal (últimos 15 dias)',
     };
   }
 
   if (selectedMonth) {
     return {
-      reportTitle: 'Relatorio Mensal de Movimentacoes',
+      reportTitle: 'Relatório Mensal de Movimentações',
       periodLabel: `Mensal de ${formatMonthLabel(selectedMonth)}`,
     };
   }
 
   return {
-    reportTitle: 'Relatorio Mensal de Movimentacoes',
-    periodLabel: 'Mensal (ultimos 30 dias)',
+    reportTitle: 'Relatório Mensal de Movimentações',
+    periodLabel: 'Mensal (últimos 30 dias)',
   };
 }
 
 function getMovementLabel(movementType: HistoryReportEntry['movementType']): string {
-  return movementType === 'entry' ? 'Entrada' : 'Saida';
+  return movementType === 'entry' ? 'Entrada' : 'Saída';
 }
 
 function getTopItems(
@@ -307,7 +307,7 @@ function buildPdfHtml(payload: ReportSummaryPayload): string {
               )}</li>`,
           )
           .join('')
-      : '<li>Sem entradas no periodo.</li>';
+      : '<li>Sem entradas no período.</li>';
 
   const topExitListHtml =
     payload.topExitItems.length > 0
@@ -319,7 +319,7 @@ function buildPdfHtml(payload: ReportSummaryPayload): string {
               )}</li>`,
           )
           .join('')
-      : '<li>Sem saidas no periodo.</li>';
+      : '<li>Sem saídas no período.</li>';
 
   const movementRowsHtml =
     payload.entries.length > 0
@@ -339,7 +339,7 @@ function buildPdfHtml(payload: ReportSummaryPayload): string {
           .join('')
       : `
         <tr>
-          <td colspan="4" class="empty-cell">Sem movimentacoes no periodo selecionado.</td>
+          <td colspan="4" class="empty-cell">Sem movimentações no período selecionado.</td>
         </tr>
       `;
 
@@ -350,7 +350,7 @@ function buildPdfHtml(payload: ReportSummaryPayload): string {
             const highlightLabels: string[] = [];
 
             if (item.isTopEntry) highlightLabels.push('Maior entrada');
-            if (item.isTopExit) highlightLabels.push('Maior saida');
+            if (item.isTopExit) highlightLabels.push('Maior saída');
 
             return `
               <tr>
@@ -377,7 +377,7 @@ function buildPdfHtml(payload: ReportSummaryPayload): string {
           .join('')
       : `
         <tr>
-          <td colspan="5" class="empty-cell">Nenhum item movimentado neste periodo.</td>
+          <td colspan="5" class="empty-cell">Nenhum item movimentado neste período.</td>
         </tr>
       `;
 
@@ -535,14 +535,14 @@ function buildPdfHtml(payload: ReportSummaryPayload): string {
         <div class="header">
           <div class="logo">H2 Campinas</div>
           <div class="title">${escapeHtml(periodMeta.reportTitle)}</div>
-          <div class="subtitle">Relatorio de transacoes de estoque</div>
+          <div class="subtitle">Relatório de transações de estoque</div>
         </div>
 
         <section class="section">
-          <h2>1. Informacoes Gerais</h2>
+          <h2>1. Informações Gerais</h2>
           <div class="meta-grid">
             <div class="meta-item">
-              <div class="meta-label">Periodo Selecionado</div>
+              <div class="meta-label">Período Selecionado</div>
               <div class="meta-value">${escapeHtml(periodMeta.periodLabel)}</div>
             </div>
             <div class="meta-item">
@@ -554,7 +554,7 @@ function buildPdfHtml(payload: ReportSummaryPayload): string {
               <div class="meta-value">${escapeHtml(formatDateTime(payload.generatedAt))}</div>
             </div>
             <div class="meta-item">
-              <div class="meta-label">Operacoes Registradas</div>
+              <div class="meta-label">Operações Registradas</div>
               <div class="meta-value">${escapeHtml(String(payload.entries.length))}</div>
             </div>
           </div>
@@ -568,14 +568,14 @@ function buildPdfHtml(payload: ReportSummaryPayload): string {
               <ul>${topEntryListHtml}</ul>
             </div>
             <div class="highlight-card">
-              <strong>Top Itens: Maior Saida</strong>
+              <strong>Top Itens: Maior Saída</strong>
               <ul>${topExitListHtml}</ul>
             </div>
           </div>
         </section>
 
         <section class="section">
-          <h2>3. Movimentacoes Detalhadas</h2>
+          <h2>3. Movimentações Detalhadas</h2>
           <table>
             <thead>
               <tr>
@@ -598,8 +598,8 @@ function buildPdfHtml(payload: ReportSummaryPayload): string {
               <tr>
                 <th>Item</th>
                 <th>Total Entradas</th>
-                <th>Total Saidas</th>
-                <th>Datas com movimentacao</th>
+                <th>Total Saídas</th>
+                <th>Datas com movimentação</th>
                 <th>Destaques</th>
               </tr>
             </thead>
@@ -613,7 +613,7 @@ function buildPdfHtml(payload: ReportSummaryPayload): string {
   `;
 }
 function buildPdfFileName(period: HistoryReportPeriod, startDate: string, endDate: string): string {
-  return `relatorio-${period}-${startDate}-${endDate}.pdf`;
+  return `relatório-${period}-${startDate}-${endDate}.pdf`;
 }
 
 async function generateWebPdf(payload: ReportSummaryPayload): Promise<void> {
@@ -641,7 +641,7 @@ async function generateWebPdf(payload: ReportSummaryPayload): Promise<void> {
 
   let currentY = 120;
 
-  // 1. Informacoes Gerais 
+  // 1. Informações Gerais 
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(14);
   doc.setTextColor(95, 17, 117);
@@ -682,14 +682,14 @@ async function generateWebPdf(payload: ReportSummaryPayload): Promise<void> {
           payload.topEntryItems[i].unit,
           payload.topEntryItems[i].quantityInBaseUnits,
         )})`
-      : (i === 0 && payload.topEntryItems.length === 0 ? 'Sem entradas no periodo.' : '');
+      : (i === 0 && payload.topEntryItems.length === 0 ? 'Sem entradas no período.' : '');
     const exit = payload.topExitItems[i]
       ? `${i + 1}. ${payload.topExitItems[i].name} (${formatOriginalAndBase(
           payload.topExitItems[i].quantity,
           payload.topExitItems[i].unit,
           payload.topExitItems[i].quantityInBaseUnits,
         )})`
-      : (i === 0 && payload.topExitItems.length === 0 ? 'Sem saidas no periodo.' : '');
+      : (i === 0 && payload.topExitItems.length === 0 ? 'Sem saídas no período.' : '');
     destaquesBody.push([entry, exit]);
   }
 
@@ -705,7 +705,7 @@ async function generateWebPdf(payload: ReportSummaryPayload): Promise<void> {
 
   currentY = (doc as any).lastAutoTable.finalY + 30;
 
-  // 3. Movimentacoes Detalhadas
+  // 3. Movimentações Detalhadas
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(14);
   doc.setTextColor(95, 17, 117);
@@ -719,7 +719,7 @@ async function generateWebPdf(payload: ReportSummaryPayload): Promise<void> {
         getMovementLabel(e.movementType),
         formatOriginalAndBase(e.quantity, e.unit, e.quantityInBaseUnits)
       ])
-    : [['-', 'Sem movimentacoes no periodo selecionado.', '-', '-']];
+    : [['-', 'Sem movimentações no período selecionado.', '-', '-']];
 
   autoTable(doc, {
     startY: currentY,
@@ -735,7 +735,7 @@ async function generateWebPdf(payload: ReportSummaryPayload): Promise<void> {
         if (data.cell.raw === 'Entrada') {
           data.cell.styles.textColor = [46, 125, 50]; // Green
           data.cell.styles.fontStyle = 'bold';
-        } else if (data.cell.raw === 'Saida') {
+        } else if (data.cell.raw === 'Saída') {
           data.cell.styles.textColor = [198, 40, 40]; // Red
           data.cell.styles.fontStyle = 'bold';
         }
@@ -765,7 +765,7 @@ async function generateWebPdf(payload: ReportSummaryPayload): Promise<void> {
           highlights.join(' / ') || '-'
         ];
       })
-    : [['-', 'Nenhum item movimentado neste periodo.', '-', '-', '-']];
+    : [['-', 'Nenhum item movimentado neste período.', '-', '-', '-']];
 
   autoTable(doc, {
     startY: currentY,
@@ -794,7 +794,7 @@ export async function generateHistoryReportPdf(
   const syncOk = await syncAppData();
 
   if (!syncOk) {
-    throw new Error('Falha ao sincronizar com o Supabase. Nao foi possivel gerar o relatorio.');
+    throw new Error('Falha ao sincronizar com o Supabase. Não foi possível gerar o relatório.');
   }
 
   const { startDate, endDate, selectedMonth } = resolveDateRange(period, options);
@@ -841,7 +841,7 @@ export async function generateHistoryReportPdf(
     await Sharing.shareAsync(pdfFile.uri, {
       mimeType: 'application/pdf',
       UTI: 'com.adobe.pdf',
-      dialogTitle: 'Compartilhar relatorio de estoque',
+      dialogTitle: 'Compartilhar relatório de estoque',
     });
     shared = true;
   } else {

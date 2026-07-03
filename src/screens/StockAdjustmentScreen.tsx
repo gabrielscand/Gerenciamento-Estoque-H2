@@ -191,7 +191,7 @@ export function StockAdjustmentModal({ visible, onClose, onSaved }: StockAdjustm
     } catch (error) {
       showTopPopup({
         type: 'error',
-        message: error instanceof Error ? error.message : 'Nao foi possivel salvar o ajuste.',
+        message: error instanceof Error ? error.message : 'Não foi possível salvar o ajuste.',
         durationMs: 4200,
       });
     } finally {
@@ -215,7 +215,7 @@ export function StockAdjustmentModal({ visible, onClose, onSaved }: StockAdjustm
             </Pressable>
           </View>
           <Text style={styles.subtitle}>
-            Defina o novo valor do estoque de cada item (sem registrar entrada/saida).
+            Defina o novo valor do estoque de cada item (sem registrar entrada/saída).
           </Text>
 
           <TextInput
@@ -319,7 +319,7 @@ export function StockAdjustmentModal({ visible, onClose, onSaved }: StockAdjustm
             </ScrollView>
           )}
 
-          <Text style={styles.inputLabel}>Observacao (opcional)</Text>
+          <Text style={styles.inputLabel}>Observação (opcional)</Text>
           <TextInput
             value={observation}
             onChangeText={setObservation}

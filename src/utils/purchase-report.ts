@@ -91,7 +91,7 @@ function getStatusLabel(item: PurchaseReportItem): string {
     return `Faltam ${formatOriginalAndBase(getPurchaseQuantity(item), item.unit, item.conversionFactor)}`;
   }
 
-  return 'No minimo (comprar)';
+  return 'No mínimo (comprar)';
 }
 
 function collectPurchaseItems(items: StockCurrentOverviewRow[]): PurchaseReportItem[] {
@@ -253,7 +253,7 @@ function buildPdfHtml(payload: PurchaseReportPayload): string {
       <body>
         <div class="header">
           <h1 class="title">Lista de Compras</h1>
-          <p class="subtitle">Itens abaixo ou no limite minimo para reposicao</p>
+          <p class="subtitle">Itens abaixo ou no limite mínimo para reposição</p>
         </div>
 
         <section class="meta">
@@ -280,8 +280,8 @@ function buildPdfHtml(payload: PurchaseReportPayload): string {
               <th>Item</th>
               <th>Categoria</th>
               <th>Estoque atual</th>
-              <th>Minimo</th>
-              <th>Maximo</th>
+              <th>Mínimo</th>
+              <th>Máximo</th>
               <th>Faltante</th>
               <th>Status</th>
             </tr>
@@ -352,7 +352,7 @@ async function generateWebPdf(payload: PurchaseReportPayload): Promise<void> {
   autoTable(doc, {
     startY: currentY,
     theme: 'striped',
-    head: [['#', 'Item', 'Categoria', 'Estoque atual', 'Minimo', 'Maximo', 'Faltante', 'Status']],
+    head: [['#', 'Item', 'Categoria', 'Estoque atual', 'Mínimo', 'Máximo', 'Faltante', 'Status']],
     body: rows,
     headStyles: { fillColor: [95, 17, 117], textColor: 255, fontStyle: 'bold' },
     styles: { fontSize: 9, cellPadding: 6 },
@@ -363,7 +363,7 @@ async function generateWebPdf(payload: PurchaseReportPayload): Promise<void> {
         if (String(data.cell.raw).includes('Faltam')) {
           data.cell.styles.textColor = [176, 35, 35];
           data.cell.styles.fontStyle = 'bold';
-        } else if (String(data.cell.raw).includes('No minimo')) {
+        } else if (String(data.cell.raw).includes('No mínimo')) {
           data.cell.styles.textColor = [122, 66, 12];
           data.cell.styles.fontStyle = 'bold';
         }
@@ -378,7 +378,7 @@ export async function generatePurchaseReportPdf(): Promise<GeneratePurchaseRepor
   const syncOk = await syncAppData();
 
   if (!syncOk) {
-    throw new Error('Falha ao sincronizar com o Supabase. Nao foi possivel gerar a lista de compras.');
+    throw new Error('Falha ao sincronizar com o Supabase. Não foi possível gerar a lista de compras.');
   }
 
   const items = collectPurchaseItems(await listStockCurrentOverview());

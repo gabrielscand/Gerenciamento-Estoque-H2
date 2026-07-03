@@ -99,7 +99,7 @@ type QuantityFieldMode = 'fardo' | 'unidade';
 
 // Converte o que foi digitado para a unidade do item (fardos).
 // Item de fardo + campo "unidade": unidades digitadas / fator.
-// Item de fardo + campo "fardo" (ou nao-fardo): valor como esta.
+// Item de fardo + campo "fardo" (ou não-fardo): valor como esta.
 function toItemUnitQuantity(
   item: { conversionFactor: number },
   typed: number,
@@ -193,15 +193,15 @@ function getHeroText(mode: MovementMode): { title: string; description: string; 
   if (mode === 'entry') {
     return {
       title: 'Entrada',
-      description: 'Registre o estoque inicial e as reposicoes. Toda entrada soma no saldo atual.',
+      description: 'Registre o estoque inicial e as reposições. Toda entrada soma no saldo atual.',
       button: 'Salvar entradas',
     };
   }
 
   return {
-    title: 'Saida',
-    description: 'Registre as saidas do dia. Toda saida reduz o saldo atual e nunca pode ultrapassar o saldo.',
-    button: 'Salvar saidas',
+    title: 'Saída',
+    description: 'Registre as saídas do dia. Toda saída reduz o saldo atual e nunca pode ultrapassar o saldo.',
+    button: 'Salvar saídas',
   };
 }
 
@@ -246,7 +246,7 @@ function StockMovementScreen({ mode }: { mode: MovementMode }) {
       setQuantities({});
       setQuantityModes({});
       setFieldErrors({});
-      setSelectedDateError('Informe uma data valida no formato DD/MM/AAAA.');
+      setSelectedDateError('Informe uma data válida no formato DD/MM/AAAA.');
       setIsLoading(false);
       return;
     }
@@ -271,7 +271,7 @@ function StockMovementScreen({ mode }: { mode: MovementMode }) {
     } catch (error) {
       showTopPopup({
         type: 'error',
-        message: error instanceof Error ? error.message : 'Falha ao carregar movimentacoes.',
+        message: error instanceof Error ? error.message : 'Falha ao carregar movimentações.',
         durationMs: 4200,
       });
     } finally {
@@ -448,11 +448,11 @@ function StockMovementScreen({ mode }: { mode: MovementMode }) {
 
   function getQuantityValidationError(item: StockMovementItem, quantity: number): string | null {
     if (!Number.isFinite(quantity)) {
-      return 'Informe uma quantidade valida.';
+      return 'Informe uma quantidade válida.';
     }
 
     if (quantity < 0) {
-      return 'A quantidade nao pode ser negativa.';
+      return 'A quantidade não pode ser negativa.';
     }
 
     if (mode === 'exit') {
@@ -461,7 +461,7 @@ function StockMovementScreen({ mode }: { mode: MovementMode }) {
       }
 
       if (quantity > item.currentStockQuantity) {
-        return 'Saida maior que o saldo atual.';
+        return 'Saída maior que o saldo atual.';
       }
     }
 
@@ -598,7 +598,7 @@ function StockMovementScreen({ mode }: { mode: MovementMode }) {
     const typed = parseDecimalInput(rawValue);
 
     if (typed === null) {
-      setFieldErrors((prev) => ({ ...prev, [String(item.id)]: 'Informe uma quantidade valida.' }));
+      setFieldErrors((prev) => ({ ...prev, [String(item.id)]: 'Informe uma quantidade válida.' }));
       return;
     }
 
@@ -641,8 +641,8 @@ function StockMovementScreen({ mode }: { mode: MovementMode }) {
     setCartItems((prev) => prev.filter((entry) => entry.itemId !== itemId));
   }
 
-  // Alterna a marca (perda/ajuste) do item no carrinho. Clicar na mesma opcao
-  // desmarca (volta a movimentacao normal, sem rotulo).
+  // Alterna a marca (perda/ajuste) do item no carrinho. Clicar na mesma opção
+  // desmarca (volta a movimentação normal, sem rotulo).
   function setCartItemReason(itemId: number, reason: MovementReason) {
     setCartItems((prev) =>
       prev.map((entry) =>
@@ -664,7 +664,7 @@ function StockMovementScreen({ mode }: { mode: MovementMode }) {
 
   async function confirmFutureDateSave(): Promise<boolean> {
     const message =
-      'A data escolhida esta no futuro. Deseja salvar a movimentacao mesmo assim?';
+      'A data escolhida esta no futuro. Deseja salvar a movimentação mesmo assim?';
 
     if (Platform.OS === 'web') {
       if (typeof globalThis.confirm === 'function') {
@@ -697,7 +697,7 @@ function StockMovementScreen({ mode }: { mode: MovementMode }) {
 
   async function handleFinalizeCart() {
     if (!isValidDateString(selectedDate)) {
-      setSelectedDateError('Informe uma data valida no formato DD/MM/AAAA.');
+      setSelectedDateError('Informe uma data válida no formato DD/MM/AAAA.');
       return;
     }
 
@@ -720,7 +720,7 @@ function StockMovementScreen({ mode }: { mode: MovementMode }) {
 
       if (!item) {
         if (!firstErrorMessage) {
-          firstErrorMessage = `Item ${cartItem.name} nao esta disponivel para esta data.`;
+          firstErrorMessage = `Item ${cartItem.name} não esta disponível para esta data.`;
         }
         continue;
       }
@@ -741,7 +741,7 @@ function StockMovementScreen({ mode }: { mode: MovementMode }) {
       setFieldErrors((prev) => ({ ...prev, ...nextErrors }));
       showTopPopup({
         type: 'error',
-        message: firstErrorMessage || 'Existem itens invalidos no carrinho.',
+        message: firstErrorMessage || 'Existem itens inválidos no carrinho.',
         durationMs: 4200,
       });
       return;
@@ -750,7 +750,7 @@ function StockMovementScreen({ mode }: { mode: MovementMode }) {
     if (updates.length === 0) {
       showTopPopup({
         type: 'warning',
-        message: 'Nenhum item valido no carrinho para finalizar.',
+        message: 'Nenhum item válido no carrinho para finalizar.',
         durationMs: 3800,
       });
       return;
@@ -784,7 +784,7 @@ function StockMovementScreen({ mode }: { mode: MovementMode }) {
     } catch (error) {
       showTopPopup({
         type: 'error',
-        message: error instanceof Error ? error.message : 'Nao foi possivel salvar movimentacao.',
+        message: error instanceof Error ? error.message : 'Não foi possível salvar movimentação.',
         durationMs: 4200,
       });
     } finally {
@@ -829,7 +829,7 @@ function StockMovementScreen({ mode }: { mode: MovementMode }) {
 
             <View style={styles.dateCard}>
               <DateField
-                label="Dia da movimentacao"
+                label="Dia da movimentação"
                 value={selectedDate}
                 onChange={setMovementDate}
                 error={selectedDateError}
@@ -926,11 +926,11 @@ function StockMovementScreen({ mode }: { mode: MovementMode }) {
             <Text style={styles.emptyText}>Carregando itens...</Text>
           ) : items.length === 0 ? (
             <Text style={styles.emptyText}>
-              Nenhum item cadastrado. Cadastre itens na aba Itens para iniciar a movimentacao.
+              Nenhum item cadastrado. Cadastre itens na aba Itens para iniciar a movimentação.
             </Text>
           ) : mode === 'exit' && modeVisibleItems.length === 0 ? (
             <Text style={styles.emptyText}>
-              Nenhum item com estoque disponivel para registrar saida.
+              Nenhum item com estoque disponível para registrar saída.
             </Text>
           ) : (
             <Text style={styles.emptyText}>Nenhum item encontrado para a categoria/busca selecionada.</Text>
@@ -977,7 +977,7 @@ function StockMovementScreen({ mode }: { mode: MovementMode }) {
                   <Text style={styles.statusText}>
                     {!hasProjectedStock
                       ? invalidOverMovement
-                        ? 'Saida acima do saldo'
+                        ? 'Saída acima do saldo'
                         : 'Sem estoque inicial'
                       : needsPurchase
                         ? missingQuantity > 0
@@ -987,7 +987,7 @@ function StockMovementScreen({ mode }: { mode: MovementMode }) {
                               item.conversionFactor,
                               formatQuantity,
                             )}`
-                          : 'No minimo (comprar)'
+                          : 'No mínimo (comprar)'
                         : 'OK'}
                   </Text>
                 </View>
@@ -995,7 +995,7 @@ function StockMovementScreen({ mode }: { mode: MovementMode }) {
 
               <Text style={styles.itemMeta}>Unidade: {item.unit}</Text>
               <Text style={styles.itemMeta}>
-                Minimo necessario:{' '}
+                Mínimo necessário:{' '}
                 {formatOriginalAndBaseQuantity(
                   item.minQuantity,
                   item.unit,
@@ -1004,7 +1004,7 @@ function StockMovementScreen({ mode }: { mode: MovementMode }) {
                 )}
               </Text>
               <Text style={styles.itemMeta}>
-                Maximo:{' '}
+                Máximo:{' '}
                 {item.maxQuantity === null
                   ? '—'
                   : formatOriginalAndBaseQuantity(
@@ -1031,7 +1031,7 @@ function StockMovementScreen({ mode }: { mode: MovementMode }) {
                   currentStock === null
                     ? 'Sem estoque inicial'
                     : needsPurchaseByCurrentStock
-                      ? 'No minimo ou abaixo do minimo'
+                      ? 'No mínimo ou abaixo do mínimo'
                       : undefined
                 }
               />
@@ -1039,7 +1039,7 @@ function StockMovementScreen({ mode }: { mode: MovementMode }) {
                 Categoria: {item.category ? getCategoryLabel(item.category) : 'Sem categoria'}
               </Text>
               <Text style={styles.itemMeta}>
-                Total de {mode === 'entry' ? 'entradas' : 'saidas'} no dia:{' '}
+                Total de {mode === 'entry' ? 'entradas' : 'saídas'} no dia:{' '}
                 {item.currentQuantity === null
                   ? '-'
                   : formatOriginalAndBaseQuantity(
@@ -1051,7 +1051,7 @@ function StockMovementScreen({ mode }: { mode: MovementMode }) {
               </Text>
               {hasProjectedStock && parsed !== null ? (
                 <Text style={styles.itemMeta}>
-                  Saldo apos {mode === 'entry' ? 'entrada' : 'saida'}:{' '}
+                  Saldo após {mode === 'entry' ? 'entrada' : 'saída'}:{' '}
                   {formatOriginalAndBaseQuantity(
                     projectedStock as number,
                     item.unit,
@@ -1066,7 +1066,7 @@ function StockMovementScreen({ mode }: { mode: MovementMode }) {
                   ? currentStock === null
                     ? 'Estoque inicial'
                     : 'Entrada do dia'
-                  : 'Saida do dia'}
+                  : 'Saída do dia'}
               </Text>
 
               {isUnitInput ? (
@@ -1177,7 +1177,7 @@ function StockMovementScreen({ mode }: { mode: MovementMode }) {
           <Pressable style={StyleSheet.absoluteFill} onPress={() => setIsCartModalOpen(false)} />
           <View style={styles.modalCard}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Carrinho de {mode === 'entry' ? 'Entrada' : 'Saida'}</Text>
+              <Text style={styles.modalTitle}>Carrinho de {mode === 'entry' ? 'Entrada' : 'Saída'}</Text>
               <Text style={styles.modalSubtitle}>Data: {formatDateLabel(selectedDate)}</Text>
             </View>
 
@@ -1277,7 +1277,7 @@ function StockMovementScreen({ mode }: { mode: MovementMode }) {
                   <ActivityIndicator color="#FFFFFF" />
                 ) : (
                   <Text style={styles.modalPrimaryButtonText}>
-                    Finalizar {mode === 'entry' ? 'entrada' : 'saida'}
+                    Finalizar {mode === 'entry' ? 'entrada' : 'saída'}
                   </Text>
                 )}
               </Pressable>
@@ -1295,7 +1295,7 @@ function StockMovementScreen({ mode }: { mode: MovementMode }) {
         <View style={styles.modalBackdrop}>
           <Pressable style={StyleSheet.absoluteFill} onPress={() => setPendingDuplicateAdd(null)} />
           <View style={styles.modalCard}>
-            <Text style={styles.modalTitle}>Item ja esta no carrinho</Text>
+            <Text style={styles.modalTitle}>Item já esta no carrinho</Text>
             <Text style={styles.modalMessage}>
               Escolha como deseja atualizar "{pendingDuplicateAdd?.item.name ?? ''}".
             </Text>

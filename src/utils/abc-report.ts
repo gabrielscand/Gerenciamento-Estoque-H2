@@ -81,7 +81,7 @@ function buildPdfHtml(payload: AbcReportPayload): string {
           .join('')
       : `
           <tr>
-            <td colspan="6" class="empty-cell">Nenhum item com movimentacao para a Curva ABC.</td>
+            <td colspan="6" class="empty-cell">Nenhum item com movimentação para a Curva ABC.</td>
           </tr>
         `;
 
@@ -178,7 +178,7 @@ function buildPdfHtml(payload: AbcReportPayload): string {
       <body>
         <div class="header">
           <h1 class="title">Curva ABC</h1>
-          <p class="subtitle">Itens priorizados pela Curva ABC (classe A ate C)</p>
+          <p class="subtitle">Itens priorizados pela Curva ABC (classe A até C)</p>
         </div>
 
         <section class="meta">
@@ -187,7 +187,7 @@ function buildPdfHtml(payload: AbcReportPayload): string {
             <div class="meta-value">${escapeHtml(formatDateTime(payload.generatedAt))}</div>
           </div>
           <div class="meta-item">
-            <div class="meta-label">Mes</div>
+            <div class="meta-label">Mês</div>
             <div class="meta-value">${escapeHtml(payload.options.monthLabel)}</div>
           </div>
           <div class="meta-item">
@@ -217,7 +217,7 @@ function buildPdfHtml(payload: AbcReportPayload): string {
               <th>${escapeHtml(itemHeader)}</th>
               <th>Classe</th>
               <th>${escapeHtml(payload.options.metricLabel)}</th>
-              <th>Participacao</th>
+              <th>Participação</th>
               <th>Acumulado</th>
             </tr>
           </thead>
@@ -256,7 +256,7 @@ async function generateWebPdf(payload: AbcReportPayload): Promise<void> {
     head: [['Campo', 'Valor']],
     body: [
       ['Gerado em', formatDateTime(payload.generatedAt)],
-      ['Mes', payload.options.monthLabel],
+      ['Mês', payload.options.monthLabel],
       ['Metrica', payload.options.metricLabel],
       ['Visao', payload.options.viewLabel],
       ['Total de itens', String(payload.points.length)],
@@ -280,12 +280,12 @@ async function generateWebPdf(payload: AbcReportPayload): Promise<void> {
           formatPercent(point.sharePercent),
           formatPercent(point.cumulativePercent),
         ])
-      : [['-', 'Nenhum item com movimentacao para a Curva ABC.', '-', '-', '-', '-']];
+      : [['-', 'Nenhum item com movimentação para a Curva ABC.', '-', '-', '-', '-']];
 
   autoTable(doc, {
     startY: currentY,
     theme: 'striped',
-    head: [['#', itemHeader, 'Classe', payload.options.metricLabel, 'Participacao', 'Acumulado']],
+    head: [['#', itemHeader, 'Classe', payload.options.metricLabel, 'Participação', 'Acumulado']],
     body: rows,
     headStyles: { fillColor: [95, 17, 117], textColor: 255, fontStyle: 'bold' },
     styles: { fontSize: 9, cellPadding: 6 },

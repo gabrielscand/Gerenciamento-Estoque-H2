@@ -26,7 +26,7 @@ const ACCEPTED_XLSX_MIME_TYPES = new Set<string>([
 
 function ensureApiUrl(): string {
   if (!IMPORT_API_URL) {
-    throw new Error('EXPO_PUBLIC_IMPORT_API_URL nao configurada. Atualize o .env para usar a importacao.');
+    throw new Error('EXPO_PUBLIC_IMPORT_API_URL não configurada. Atualize o .env para usar a importação.');
   }
 
   return IMPORT_API_URL;
@@ -40,11 +40,11 @@ export function validateImportFile(file: ImportFileInput): string | null {
   const mimeType = file.mimeType?.trim().toLocaleLowerCase() ?? '';
 
   if (!hasXlsxExtension(file.name)) {
-    return 'Selecione um arquivo .xlsx valido.';
+    return 'Selecione um arquivo .xlsx válido.';
   }
 
   if (mimeType.length > 0 && !ACCEPTED_XLSX_MIME_TYPES.has(mimeType)) {
-    return 'Tipo de arquivo invalido. Envie um arquivo .xlsx.';
+    return 'Tipo de arquivo inválido. Envie um arquivo .xlsx.';
   }
 
   return null;
@@ -61,7 +61,7 @@ async function parseErrorResponse(response: Response): Promise<string> {
     // Fallback below.
   }
 
-  return `Falha na importacao (${response.status}).`;
+  return `Falha na importação (${response.status}).`;
 }
 
 async function appendFileToFormData(formData: FormData, file: ImportFileInput): Promise<void> {
@@ -69,7 +69,7 @@ async function appendFileToFormData(formData: FormData, file: ImportFileInput): 
     const blobResponse = await fetch(file.uri);
 
     if (!blobResponse.ok) {
-      throw new Error('Nao foi possivel ler o arquivo selecionado.');
+      throw new Error('Não foi possível ler o arquivo selecionado.');
     }
 
     const blob = await blobResponse.blob();
@@ -95,7 +95,7 @@ export async function previewImportItems(
   }
 
   if (!Number.isFinite(defaults.defaultMinQuantity) || defaults.defaultMinQuantity < 0) {
-    throw new Error('Quantidade minima padrao invalida.');
+    throw new Error('Quantidade mínima padrão inválida.');
   }
 
   const formData = new FormData();

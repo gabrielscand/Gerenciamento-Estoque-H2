@@ -149,7 +149,7 @@ export function InteractiveAbcChart({ points, metricLabel }: InteractiveAbcChart
 
   return (
     <View style={styles.container}>
-      {/* Tooltip Area */}
+      {/* Tooltip Área */}
       {selectedPoint && classInfo ? (
         <Animated.View
           style={[
@@ -297,7 +297,7 @@ export function InteractiveAbcChart({ points, metricLabel }: InteractiveAbcChart
             B 95%
           </SvgText>
 
-          {/* Area fill */}
+          {/* Área fill */}
           <Path d={areaPath} fill="url(#abcAreaGrad)" />
 
           {/* The line */}

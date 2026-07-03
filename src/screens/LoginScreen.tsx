@@ -74,7 +74,7 @@ export function LoginScreen({ onLoginSuccess }: LoginScreenProps) {
               <HeroHeader
                 title="Login"
                 subtitle="Acesso seguro"
-                description="Informe usuario e senha para continuar no sistema."
+                description="Informe usuário e senha para continuar no sistema."
               />
             </MotionEntrance>
 
@@ -82,7 +82,7 @@ export function LoginScreen({ onLoginSuccess }: LoginScreenProps) {
               <SectionSurface>
                 <View style={styles.formContent}>
                   <View style={styles.inputGroup}>
-                    <Text style={styles.label}>Usuario</Text>
+                    <Text style={styles.label}>Usuário</Text>
                     <View
                       style={[
                         styles.inputPill,
@@ -97,7 +97,7 @@ export function LoginScreen({ onLoginSuccess }: LoginScreenProps) {
                         onChangeText={setUsername}
                         autoCapitalize="none"
                         autoCorrect={false}
-                        placeholder="Digite seu usuario"
+                        placeholder="Digite seu usuário"
                         placeholderTextColor={tokens.colors.textMuted}
                         style={styles.pillInput}
                         onFocus={() => setFocusedField('username')}
@@ -172,7 +172,7 @@ export function LoginScreen({ onLoginSuccess }: LoginScreenProps) {
             </MotionEntrance>
 
             <View style={styles.footerHintWrap}>
-              <Text style={styles.footerHint}>Use as mesmas credenciais ja cadastradas no sistema.</Text>
+              <Text style={styles.footerHint}>Use as mesmas credenciais já cadastradas no sistema.</Text>
             </View>
           </View>
         </ScrollView>

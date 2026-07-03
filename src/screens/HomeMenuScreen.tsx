@@ -5,7 +5,7 @@ import { SyncStatusCard } from '../components/SyncStatusCard';
 import { HeroHeader, MotionEntrance, ScreenShell, SectionSurface } from '../components/ui-kit';
 import { tokens } from '../theme/tokens';
 
-// Icone pode ser um nome do Ionicons ou um renderizador SVG proprio
+// Icone pode ser um nome do Ionicons ou um renderizador SVG próprio
 // (ver src/components/MenuIcons.tsx), ambos desenhados com size=24 e a cor do menu.
 export type MenuCardIcon =
   | keyof typeof Ionicons.glyphMap
@@ -46,8 +46,8 @@ export function HomeMenuScreen({ cards }: HomeMenuScreenProps) {
               <MotionEntrance delay={80}>
                 <HeroHeader
                   title="Menu Principal"
-                  subtitle="Escolha sua area"
-                  description="Acesse rapidamente os modulos operacionais do sistema."
+                  subtitle="Escolha sua área"
+                  description="Acesse rapidamente os módulos operacionais do sistema."
                 />
               </MotionEntrance>
             </View>
@@ -63,8 +63,8 @@ export function HomeMenuScreen({ cards }: HomeMenuScreenProps) {
             <MotionEntrance delay={80}>
               <HeroHeader
                 title="Menu Principal"
-                subtitle="Escolha sua area"
-                description="Acesse rapidamente os modulos operacionais do sistema."
+                subtitle="Escolha sua área"
+                description="Acesse rapidamente os módulos operacionais do sistema."
               />
             </MotionEntrance>
           </>
@@ -73,7 +73,7 @@ export function HomeMenuScreen({ cards }: HomeMenuScreenProps) {
         <MotionEntrance delay={130}>
           <SectionSurface>
             <Text style={styles.sectionTitle}>Atalhos</Text>
-            <Text style={styles.sectionDescription}>Toque em um card para abrir o modulo.</Text>
+            <Text style={styles.sectionDescription}>Toque em um card para abrir o módulo.</Text>
 
             <View
               style={[

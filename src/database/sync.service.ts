@@ -247,11 +247,11 @@ async function setSyncMeta(db: SQLiteDatabase, key: string, value: string): Prom
   );
 }
 
-// Tamanho do lote por requisicao. O Supabase/PostgREST limita o retorno a no
-// maximo 1000 linhas por chamada, entao buscamos em paginas com limit/offset e
-// concatenamos ate trazer tudo (essencial quando uma tabela passa de 1000
-// registros, como daily_stock_entries). Usamos query params (e nao o header
-// Range) para nao disparar CORS preflight no navegador.
+// Tamanho do lote por requisição. O Supabase/PostgREST limita o retorno a no
+// máximo 1000 linhas por chamada, então buscamos em páginas com limit/offset e
+// concatenamos até trazer tudo (essencial quando uma tabela passa de 1000
+// registros, como daily_stock_entries). Usamos query params (e não o header
+// Range) para não disparar CORS preflight no navegador.
 const REMOTE_PAGE_SIZE = 1000;
 
 async function fetchRemote<T>(path: string): Promise<T> {
@@ -1046,9 +1046,9 @@ async function mergeRemoteAppUsers(db: SQLiteDatabase, remoteUsers: RemoteAppUse
         remoteUser.id,
       );
 
-      // Fallback: se nao encontrou pelo remote_id, busca pelo username_normalized.
-      // Isso resolve o caso em que o banco local criou o usuario padrao (ex.: admh2)
-      // com um UUID diferente do que ja existe no Supabase. Adotamos o UUID remoto
+      // Fallback: se não encontrou pelo remote_id, busca pelo username_normalized.
+      // Isso resolve o caso em que o banco local criou o usuário padrão (ex.: admh2)
+      // com um UUID diferente do que já existe no Supabase. Adotamos o UUID remoto
       // atualizando o remote_id local, o que impede o 409 no push subsequente.
       if (!local) {
         const localByUsername = await db.getFirstAsync<LocalSyncLookupRow & { localRemoteId: string }>(
@@ -1458,7 +1458,7 @@ async function performSync(): Promise<boolean> {
   });
 
   try {
-    // Puxa usuarios do Supabase PRIMEIRO para resolver conflitos de username
+    // Puxa usuários do Supabase PRIMEIRO para resolver conflitos de username
     // (ex.: admh2 local com UUID diferente do admh2 remoto) antes de tentar
     // enviar registros pendentes, evitando erro 409 de chave duplicada.
     const remoteUsers = await fetchRemote<RemoteAppUser[]>(
@@ -1492,8 +1492,8 @@ async function performSync(): Promise<boolean> {
     );
     await mergeRemoteDailyEntries(db, remoteEntries);
 
-    // Recalcula o estoque de todos os itens a partir do historico completo recem-sincronizado
-    // e propaga as correcoes, evitando que valores sobrescritos por sessoes fora de sincronia
+    // Recalcula o estoque de todos os itens a partir do histórico completo recem-sincronizado
+    // e propaga as correções, evitando que valores sobrescritos por sessões fora de sincronia
     // permanecam errados.
     await repairAllStockTimelines(db);
     await pushPendingStockItems(db);

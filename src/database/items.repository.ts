@@ -465,7 +465,7 @@ async function createCatalogOption(
   const normalizedName = normalizeCatalogName(rawName);
 
   if (normalizedName.length === 0) {
-    throw new Error('Informe um nome valido.');
+    throw new Error('Informe um nome válido.');
   }
 
   const existing = await database.getFirstAsync<CatalogExistingRow>(
@@ -544,7 +544,7 @@ async function updateCatalogOption(
   const usageColumn = tableName === 'item_categories' ? 'category' : 'unit';
 
   if (normalizedName.length === 0) {
-    throw new Error('Informe um nome valido.');
+    throw new Error('Informe um nome válido.');
   }
 
   const current =
@@ -800,8 +800,8 @@ export async function listItemCategories(): Promise<string[]> {
   return rows.map((row) => row.name).filter((row) => row.length > 0);
 }
 
-// Categorias realmente atribuidas a itens (para filtros). Evita opcoes do
-// catalogo sem itens e variacoes que nao casam com stock_items.category.
+// Categorias realmente atribuidas a itens (para filtros). Evita opções do
+// catalogo sem itens e variações que não casam com stock_items.category.
 export async function listUsedItemCategories(): Promise<string[]> {
   const database = await getDatabase();
   const rows = await database.getAllAsync<{ category: string | null }>(
@@ -833,7 +833,7 @@ export async function listMeasurementUnitOptions(): Promise<CatalogOption[]> {
 }
 
 export async function createItemCategory(name: string): Promise<void> {
-  await createCatalogOption('item_categories', name, 'Categoria ja existe.');
+  await createCatalogOption('item_categories', name, 'Categoria já existe.');
 }
 
 export async function createMeasurementUnit(
@@ -843,7 +843,7 @@ export async function createMeasurementUnit(
   await createCatalogOption(
     'measurement_units',
     name,
-    'Unidade de medida ja existe.',
+    'Unidade de medida já existe.',
     conversionFactor,
   );
 }
@@ -853,8 +853,8 @@ export async function updateItemCategory(optionId: number, name: string): Promis
     'item_categories',
     optionId,
     name,
-    'Categoria ja existe.',
-    'Categoria nao encontrada.',
+    'Categoria já existe.',
+    'Categoria não encontrada.',
   );
 }
 
@@ -867,8 +867,8 @@ export async function updateMeasurementUnit(
     'measurement_units',
     optionId,
     name,
-    'Unidade de medida ja existe.',
-    'Unidade de medida nao encontrada.',
+    'Unidade de medida já existe.',
+    'Unidade de medida não encontrada.',
     conversionFactor,
   );
 }
@@ -878,8 +878,8 @@ export async function archiveItemCategory(optionId: number): Promise<void> {
     'item_categories',
     optionId,
     'category',
-    'Nao e possivel excluir: existem itens ativos usando essa categoria.',
-    'Categoria nao encontrada.',
+    'Não e possível excluir: existem itens ativos usando essa categoria.',
+    'Categoria não encontrada.',
   );
 }
 
@@ -888,8 +888,8 @@ export async function archiveMeasurementUnit(optionId: number): Promise<void> {
     'measurement_units',
     optionId,
     'unit',
-    'Nao e possivel excluir: existem itens ativos usando essa unidade.',
-    'Unidade de medida nao encontrada.',
+    'Não e possível excluir: existem itens ativos usando essa unidade.',
+    'Unidade de medida não encontrada.',
   );
 }
 
@@ -924,7 +924,7 @@ function isGreaterThan(a: number, b: number): boolean {
 }
 
 const DELETE_CHAIN_BLOCKED_ERROR =
-  'Nao e possivel excluir: existe saida posterior sem saldo suficiente.';
+  'Não e possível excluir: existe saída posterior sem saldo suficiente.';
 
 type RecalculateReason = 'generic' | 'delete';
 
@@ -933,7 +933,7 @@ function createMissingBaseError(reason: RecalculateReason): Error {
     return new Error(DELETE_CHAIN_BLOCKED_ERROR);
   }
 
-  return new Error('Saida sem saldo base para calculo.');
+  return new Error('Saída sem saldo base para calculo.');
 }
 
 function createInsufficientStockError(
@@ -946,7 +946,7 @@ function createInsufficientStockError(
   }
 
   return new Error(
-    `Saida de ${itemName} em ${formatDateLabel(date)} maior que o saldo disponivel.`,
+    `Saída de ${itemName} em ${formatDateLabel(date)} maior que o saldo disponível.`,
   );
 }
 
@@ -959,7 +959,7 @@ async function syncAfterDailyHistoryMutation(): Promise<void> {
 
   if (!syncOk) {
     throw new Error(
-      'Alteracao salva localmente, mas falhou a sincronizacao com Supabase. Tente sincronizar novamente.',
+      'Alteração salva localmente, mas falhou a sincronização com Supabase. Tente sincronizar novamente.',
     );
   }
 }
@@ -1006,7 +1006,7 @@ async function recalculateItemStockTimeline(
     itemId,
   );
 
-  // Sem movimentos ativos: nao mexe no estoque atual (evita zerar itens sem historico).
+  // Sem movimentos ativos: não mexe no estoque atual (evita zerar itens sem histórico).
   if (timeline.length === 0) {
     return;
   }
@@ -1096,9 +1096,9 @@ async function recalculateItemStockTimeline(
   }
 }
 
-// Recalcula o estoque de TODOS os itens a partir do historico completo (modo tolerante).
-// Usado apos o sync puxar todos os movimentos, garantindo que o estoque atual seja
-// sempre derivado do historico e nao um valor sobrescrito por sessoes fora de sincronia.
+// Recalcula o estoque de TODOS os itens a partir do histórico completo (modo tolerante).
+// Usado após o sync puxar todos os movimentos, garantindo que o estoque atual seja
+// sempre derivado do histórico e não um valor sobrescrito por sessões fora de sincronia.
 export async function repairAllStockTimelines(
   database: Awaited<ReturnType<typeof getDatabase>>,
 ): Promise<void> {
@@ -1230,7 +1230,7 @@ export async function listStockMovementItems(
   date: string = getTodayLocalDateString(),
 ): Promise<StockMovementItem[]> {
   if (!isValidDateString(date)) {
-    throw new Error('Data de vistoria invalida.');
+    throw new Error('Data de vistoria inválida.');
   }
 
   const database = await getDatabase();
@@ -1479,7 +1479,7 @@ export async function updateStockItem(itemId: number, input: UpdateStockItemInpu
   );
 
   if ((result.changes ?? 0) === 0) {
-    throw new Error('Item nao encontrado para edicao.');
+    throw new Error('Item não encontrado para edição.');
   }
 
   syncAppDataInBackground();
@@ -1504,7 +1504,7 @@ export async function archiveStockItem(itemId: number): Promise<void> {
   );
 
   if (!localItem || localItem.is_deleted === 1) {
-    throw new Error('Item nao encontrado para exclusao.');
+    throw new Error('Item não encontrado para exclusão.');
   }
 
   await database.runAsync(
@@ -1536,7 +1536,7 @@ async function saveStockMovements(
   date: string = getTodayLocalDateString(),
 ): Promise<void> {
   if (!isValidDateString(date)) {
-    throw new Error('Data de movimentacao invalida.');
+    throw new Error('Data de movimentação inválida.');
   }
 
   if (updates.length === 0) {
@@ -1561,17 +1561,17 @@ async function saveStockMovements(
   await database.withTransactionAsync(async () => {
     for (const update of updates) {
       if (!Number.isFinite(update.quantity) || update.quantity < 0) {
-        throw new Error('Quantidade invalida para vistoria diaria.');
+        throw new Error('Quantidade inválida para vistoria diária.');
       }
 
       const item = itemById.get(update.itemId);
 
       if (!item) {
-        throw new Error('Item nao encontrado para sincronizacao da vistoria.');
+        throw new Error('Item não encontrado para sincronização da vistoria.');
       }
 
       if (!item.remote_id) {
-        throw new Error('Item nao encontrado para sincronizacao da vistoria.');
+        throw new Error('Item não encontrado para sincronização da vistoria.');
       }
 
       if (movementType === 'exit') {
@@ -1579,7 +1579,7 @@ async function saveStockMovements(
 
         if (currentStock === null) {
           throw new Error(
-            `Nao e possivel registrar saida de ${item.name}: item sem estoque inicial.`,
+            `Não e possível registrar saída de ${item.name}: item sem estoque inicial.`,
           );
         }
 
@@ -1654,7 +1654,7 @@ export async function saveStockAdjustments(
   date: string = getTodayLocalDateString(),
 ): Promise<void> {
   if (!isValidDateString(date)) {
-    throw new Error('Data de ajuste invalida.');
+    throw new Error('Data de ajuste inválida.');
   }
 
   if (adjustments.length === 0) {
@@ -1680,13 +1680,13 @@ export async function saveStockAdjustments(
   await database.withTransactionAsync(async () => {
     for (const adjustment of adjustments) {
       if (!Number.isFinite(adjustment.targetQuantity) || adjustment.targetQuantity < 0) {
-        throw new Error('Quantidade invalida para ajuste de estoque.');
+        throw new Error('Quantidade inválida para ajuste de estoque.');
       }
 
       const item = itemById.get(adjustment.itemId);
 
       if (!item || !item.remote_id) {
-        throw new Error('Item nao encontrado para sincronizacao do ajuste.');
+        throw new Error('Item não encontrado para sincronização do ajuste.');
       }
 
       const entryRemoteId = createMovementRemoteId(item.remote_id, date, 'adjustment');
@@ -1740,7 +1740,7 @@ export async function updateDailyHistoryEntry(
   quantity: number,
 ): Promise<void> {
   if (!Number.isFinite(quantity) || quantity < 0) {
-    throw new Error('Quantidade invalida para editar movimentacao.');
+    throw new Error('Quantidade inválida para editar movimentação.');
   }
 
   const database = await getDatabase();
@@ -1757,7 +1757,7 @@ export async function updateDailyHistoryEntry(
     );
 
     if (!entry) {
-      throw new Error('Movimentacao nao encontrada para edicao.');
+      throw new Error('Movimentação não encontrada para edição.');
     }
 
     const result = await database.runAsync(
@@ -1779,7 +1779,7 @@ export async function updateDailyHistoryEntry(
     );
 
     if ((result.changes ?? 0) === 0) {
-      throw new Error('Movimentacao nao encontrada para edicao.');
+      throw new Error('Movimentação não encontrada para edição.');
     }
 
     await recalculateItemStockTimeline(database, entry.item_id);
@@ -1803,7 +1803,7 @@ export async function archiveDailyHistoryEntry(entryId: number): Promise<void> {
     );
 
     if (!currentEntry) {
-      throw new Error('Movimentacao nao encontrada para exclusao.');
+      throw new Error('Movimentação não encontrada para exclusão.');
     }
 
     const timestamp = nowIsoString();
@@ -1824,7 +1824,7 @@ export async function archiveDailyHistoryEntry(entryId: number): Promise<void> {
     );
 
     if ((result.changes ?? 0) === 0) {
-      throw new Error('Movimentacao nao encontrada para exclusao.');
+      throw new Error('Movimentação não encontrada para exclusão.');
     }
 
     await recalculateItemStockTimeline(database, currentEntry.item_id, 'delete');
@@ -1835,7 +1835,7 @@ export async function archiveDailyHistoryEntry(entryId: number): Promise<void> {
 
 export async function archiveDailyHistoryDate(date: string): Promise<void> {
   if (!isValidDateString(date)) {
-    throw new Error('Data de vistoria invalida.');
+    throw new Error('Data de vistoria inválida.');
   }
 
   const database = await getDatabase();
@@ -1850,7 +1850,7 @@ export async function archiveDailyHistoryDate(date: string): Promise<void> {
       date,
     );
     if (affectedRows.length === 0) {
-      throw new Error('Vistoria diaria nao encontrada para exclusao.');
+      throw new Error('Vistoria diária não encontrada para exclusão.');
     }
 
     const affectedItemIds = Array.from(new Set(affectedRows.map((row) => row.item_id)));
@@ -1873,7 +1873,7 @@ export async function archiveDailyHistoryDate(date: string): Promise<void> {
     );
 
     if ((result.changes ?? 0) === 0) {
-      throw new Error('Vistoria diaria nao encontrada para exclusao.');
+      throw new Error('Vistoria diária não encontrada para exclusão.');
     }
 
     for (const itemId of affectedItemIds) {
@@ -1889,7 +1889,7 @@ export async function archiveDailyHistoryDateByMovement(
   movementFilter: 'entry' | 'exit' | 'adjustment',
 ): Promise<void> {
   if (!isValidDateString(date)) {
-    throw new Error('Data de vistoria invalida.');
+    throw new Error('Data de vistoria inválida.');
   }
 
   const movementTypes =
@@ -1903,7 +1903,7 @@ export async function archiveDailyHistoryDateByMovement(
       ? 'Entrada'
       : movementFilter === 'adjustment'
         ? 'Ajuste de estoque'
-        : 'Saida';
+        : 'Saída';
   const placeholders = movementTypes.map(() => '?').join(', ');
 
   const database = await getDatabase();
@@ -1921,7 +1921,7 @@ export async function archiveDailyHistoryDateByMovement(
     );
 
     if (affectedRows.length === 0) {
-      throw new Error(`Nenhuma movimentacao de ${movementLabel} encontrada para exclusao neste dia.`);
+      throw new Error(`Nenhuma movimentação de ${movementLabel} encontrada para exclusão neste dia.`);
     }
 
     const affectedItemIds = Array.from(new Set(affectedRows.map((row) => row.item_id)));
@@ -1946,7 +1946,7 @@ export async function archiveDailyHistoryDateByMovement(
     );
 
     if ((result.changes ?? 0) === 0) {
-      throw new Error(`Nenhuma movimentacao de ${movementLabel} encontrada para exclusao neste dia.`);
+      throw new Error(`Nenhuma movimentação de ${movementLabel} encontrada para exclusão neste dia.`);
     }
 
     for (const itemId of affectedItemIds) {
@@ -2105,7 +2105,7 @@ export async function listHistoryEntriesByDateRange(
   endDate: string,
 ): Promise<HistoryReportEntry[]> {
   if (!isValidDateString(startDate) || !isValidDateString(endDate) || startDate > endDate) {
-    throw new Error('Periodo invalido para gerar relatorio.');
+    throw new Error('Período inválido para gerar relatório.');
   }
 
   const database = await getDatabase();
@@ -2337,13 +2337,13 @@ async function loadPeriodEntries(
 
 export async function listFortnightlyHistoryGrouped(month: string): Promise<PeriodHistoryGroup[]> {
   if (!isValidMonthString(month)) {
-    throw new Error('Mes invalido para relatorio quinzenal.');
+    throw new Error('Mês inválido para relatório quinzenal.');
   }
 
   const monthRange = getMonthDateRange(month);
 
   if (!monthRange) {
-    throw new Error('Mes invalido para relatorio quinzenal.');
+    throw new Error('Mês inválido para relatório quinzenal.');
   }
 
   const firstHalfStart = `${month}-01`;
@@ -2392,13 +2392,13 @@ export async function listFortnightlyHistoryGrouped(month: string): Promise<Peri
 
 export async function listMonthlyHistoryGrouped(month: string): Promise<PeriodHistoryGroup[]> {
   if (!isValidMonthString(month)) {
-    throw new Error('Mes invalido para relatorio mensal.');
+    throw new Error('Mês inválido para relatório mensal.');
   }
 
   const monthRange = getMonthDateRange(month);
 
   if (!monthRange) {
-    throw new Error('Mes invalido para relatorio mensal.');
+    throw new Error('Mês inválido para relatório mensal.');
   }
 
   const monthlyData = await loadPeriodEntries(monthRange.startDate, monthRange.endDate);
@@ -2428,18 +2428,18 @@ export async function getDashboardAnalytics(
   category?: string | null,
 ): Promise<DashboardAnalyticsData> {
   if (!isValidMonthString(month)) {
-    throw new Error('Mes invalido para dashboard.');
+    throw new Error('Mês inválido para dashboard.');
   }
 
   const monthRange = getMonthDateRange(month);
 
   if (!monthRange) {
-    throw new Error('Mes invalido para dashboard.');
+    throw new Error('Mês inválido para dashboard.');
   }
 
   const { startDate, endDate } = monthRange;
   // Filtro opcional por categoria: quando definido, todo o dashboard (KPIs,
-  // itens da Curva ABC/rankings e serie diaria) considera so essa categoria.
+  // itens da Curva ABC/rankings e serie diária) considera so essa categoria.
   const categoryFilter = category && category.trim().length > 0 ? category.trim() : null;
   const categoryClause = categoryFilter ? ' AND TRIM(stock_items.category) = TRIM(?)' : '';
   const categoryParams = categoryFilter ? [categoryFilter] : [];
