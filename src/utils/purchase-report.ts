@@ -94,14 +94,27 @@ function getStatusLabel(item: PurchaseReportItem): string {
   return 'No mínimo (comprar)';
 }
 
-function collectPurchaseItems(items: StockCurrentOverviewRow[]): PurchaseReportItem[] {
+function collectPurchaseItems(
+  items: StockCurrentOverviewRow[],
+  allowedCategories?: Array<string | null>,
+): PurchaseReportItem[] {
   return items
-    .filter((item) => item.needsPurchase)
-    .sort(
-      (left, right) =>
-        right.missingQuantityInBaseUnits - left.missingQuantityInBaseUnits ||
-        left.name.localeCompare(right.name, 'pt-BR', { sensitivity: 'base' }),
+    .filter(
+      (item) =>
+        item.needsPurchase &&
+        (allowedCategories === undefined || allowedCategories.includes(item.category)),
     )
+    // Agrupa por categoria e, dentro dela, ordem alfabetica pelo nome.
+    // Com uma unica categoria selecionada, vira apenas ordem alfabetica.
+    .sort((left, right) => {
+      const catLeft = left.category ? getCategoryLabel(left.category) : 'Sem categoria';
+      const catRight = right.category ? getCategoryLabel(right.category) : 'Sem categoria';
+      const byCategory = catLeft.localeCompare(catRight, 'pt-BR', { sensitivity: 'base' });
+      if (byCategory !== 0) {
+        return byCategory;
+      }
+      return left.name.localeCompare(right.name, 'pt-BR', { sensitivity: 'base' });
+    })
     .map((item) => ({
       id: item.id,
       name: item.name,
@@ -374,14 +387,16 @@ async function generateWebPdf(payload: PurchaseReportPayload): Promise<void> {
   doc.save(buildPdfFileName(payload.generatedAt));
 }
 
-export async function generatePurchaseReportPdf(): Promise<GeneratePurchaseReportPdfResult> {
+export async function generatePurchaseReportPdf(
+  allowedCategories?: Array<string | null>,
+): Promise<GeneratePurchaseReportPdfResult> {
   const syncOk = await syncAppData();
 
   if (!syncOk) {
     throw new Error('Falha ao sincronizar com o Supabase. Não foi possível gerar a lista de compras.');
   }
 
-  const items = collectPurchaseItems(await listStockCurrentOverview());
+  const items = collectPurchaseItems(await listStockCurrentOverview(), allowedCategories);
   const payload: PurchaseReportPayload = {
     generatedAt: new Date(),
     items,

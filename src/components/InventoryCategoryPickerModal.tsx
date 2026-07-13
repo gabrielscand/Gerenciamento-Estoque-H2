@@ -9,6 +9,10 @@ type InventoryCategoryPickerModalProps = {
   hasUncategorized: boolean;
   onClose: () => void;
   onConfirm: (allowed: Array<string | null>) => void;
+  // Textos opcionais (padrao = inventario, usado na aba Estoque).
+  title?: string;
+  subtitle?: string;
+  confirmLabel?: string;
 };
 
 // `null` representa os itens "Sem categoria".
@@ -24,6 +28,9 @@ export function InventoryCategoryPickerModal({
   hasUncategorized,
   onClose,
   onConfirm,
+  title = 'Gerar Inventário',
+  subtitle = 'Selecione as categorias que entram na contagem. O PDF terá somente as marcadas.',
+  confirmLabel = 'Gerar inventário',
 }: InventoryCategoryPickerModalProps) {
   const options = useMemo<CategoryOption[]>(
     () => [...categories, ...(hasUncategorized ? [null] : [])],
@@ -69,14 +76,12 @@ export function InventoryCategoryPickerModal({
       <View style={styles.backdrop}>
         <View style={styles.card}>
           <View style={styles.header}>
-            <Text style={styles.title}>Gerar Inventário</Text>
+            <Text style={styles.title}>{title}</Text>
             <Pressable style={styles.closeButton} onPress={onClose}>
               <Text style={styles.closeButtonText}>Fechar</Text>
             </Pressable>
           </View>
-          <Text style={styles.subtitle}>
-            Selecione as categorias que entram na contagem. O PDF terá somente as marcadas.
-          </Text>
+          <Text style={styles.subtitle}>{subtitle}</Text>
 
           <Pressable style={[styles.row, styles.allRow]} onPress={toggleAll}>
             <View style={[styles.checkbox, allSelected ? styles.checkboxChecked : undefined]}>
@@ -113,7 +118,7 @@ export function InventoryCategoryPickerModal({
               disabled={selected.size === 0}
               onPress={handleConfirm}
             >
-              <Text style={styles.primaryButtonText}>Gerar inventário</Text>
+              <Text style={styles.primaryButtonText}>{confirmLabel}</Text>
             </Pressable>
           </View>
         </View>

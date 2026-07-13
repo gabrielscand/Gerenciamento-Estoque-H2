@@ -6,6 +6,7 @@ import { listStockCurrentOverview } from '../database/items.repository';
 import { syncAppData } from '../database/sync.service';
 import { SyncStatusCard } from '../components/SyncStatusCard';
 import { StockEmphasis } from '../components/StockEmphasis';
+import { InventoryCategoryPickerModal } from '../components/InventoryCategoryPickerModal';
 import { useTopPopup } from '../components/TopPopupProvider';
 import { AppButton, HeroHeader, KpiTile, MotionEntrance, ScreenShell } from '../components/ui-kit';
 import { tokens } from '../theme/tokens';
@@ -49,6 +50,7 @@ export function PurchaseListScreen() {
   const [items, setItems] = useState<StockCurrentOverviewRow[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isGeneratingReport, setIsGeneratingReport] = useState(false);
+  const [isCategoryPickerOpen, setIsCategoryPickerOpen] = useState(false);
   const isFocused = useIsFocused();
   const { showTopPopup } = useTopPopup();
 
@@ -111,7 +113,20 @@ export function PurchaseListScreen() {
     };
   }, [items]);
 
-  async function handleGenerateReport() {
+  // Categorias presentes entre os itens que precisam de compra.
+  const availableCategories = useMemo(() => {
+    const unique = new Set<string>();
+    for (const item of items) {
+      if (item.category) {
+        unique.add(item.category);
+      }
+    }
+    return Array.from(unique).sort((left, right) =>
+      left.localeCompare(right, 'pt-BR', { sensitivity: 'base' }),
+    );
+  }, [items]);
+
+  async function handleGenerateReport(allowedCategories: Array<string | null>) {
     if (isGeneratingReport) {
       return;
     }
@@ -119,7 +134,7 @@ export function PurchaseListScreen() {
     setIsGeneratingReport(true);
 
     try {
-      const result = await generatePurchaseReportPdf();
+      const result = await generatePurchaseReportPdf(allowedCategories);
 
       showTopPopup({
         type: 'success',
@@ -182,9 +197,7 @@ export function PurchaseListScreen() {
             <View style={styles.reportButtonWrap}>
               <AppButton
                 label={isGeneratingReport ? 'Gerando relatório...' : 'Gerar Relatório'}
-                onPress={() => {
-                  void handleGenerateReport();
-                }}
+                onPress={() => setIsCategoryPickerOpen(true)}
                 disabled={isGeneratingReport}
               />
             </View>
@@ -263,6 +276,20 @@ export function PurchaseListScreen() {
           );
         }}
         contentContainerStyle={styles.listContent}
+      />
+
+      <InventoryCategoryPickerModal
+        visible={isCategoryPickerOpen}
+        categories={availableCategories}
+        hasUncategorized={items.some((item) => !item.category)}
+        title="Gerar Relatório"
+        subtitle="Selecione as categorias. O PDF terá somente as marcadas."
+        confirmLabel="Gerar relatório"
+        onClose={() => setIsCategoryPickerOpen(false)}
+        onConfirm={(allowed) => {
+          setIsCategoryPickerOpen(false);
+          void handleGenerateReport(allowed);
+        }}
       />
     </ScreenShell>
   );
