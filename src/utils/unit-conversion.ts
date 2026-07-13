@@ -91,22 +91,21 @@ export function formatOriginalAndBaseQuantity(
 
   const safeUnit = (unit ?? '').trim();
   const factor = normalizeConversionFactor(conversionFactor, safeUnit);
-  const baseQuantity = convertToBaseUnits(quantity, conversionFactor, safeUnit) ?? 0;
 
-  // Itens de fardo: mostra os dois jeitos lado a lado. O fardo conta so os
+  // Itens de fardo: mostra os dois jeitos lado a lado. O fardo conta só os
   // inteiros (arredonda para baixo); a unidade segue o total exato.
   // Ex.: 27 und, fardo de 6 -> "4 fardo de 6 / 27 und".
   if (safeUnit && isFardoConversionFactor(factor)) {
+    const baseQuantity = convertToBaseUnits(quantity, conversionFactor, safeUnit) ?? 0;
     const fardos = Math.floor(baseQuantity / factor);
     return `${formatter(fardos)} ${safeUnit} / ${formatter(baseQuantity)} und`;
   }
 
-  const baseText = `${formatter(baseQuantity)} und`;
-
+  // Demais itens: apenas a quantidade real, sem conversão (evita "3 und (3 und)").
   if (!safeUnit) {
-    return `${formatter(quantity)} (${baseText})`;
+    return formatter(quantity);
   }
 
-  return `${formatter(quantity)} ${safeUnit} (${baseText})`;
+  return `${formatter(quantity)} ${safeUnit}`;
 }
 
