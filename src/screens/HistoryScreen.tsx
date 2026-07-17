@@ -6,6 +6,7 @@ import {
   Modal,
   Platform,
   Pressable,
+  ScrollView,
   RefreshControl,
   StyleSheet,
   Text,
@@ -1023,7 +1024,11 @@ export function HistoryScreen({ canManageHistoryActions = false }: HistoryScreen
                     <Text style={styles.monthSelectArrow}>{isMonthMenuOpen ? '^' : 'v'}</Text>
                   </Pressable>
                   {isMonthMenuOpen ? (
-                    <View style={styles.monthSelectMenu}>
+                    <ScrollView
+                      style={styles.monthSelectMenu}
+                      nestedScrollEnabled
+                      keyboardShouldPersistTaps="handled"
+                    >
                       {monthOptions.map((monthValue) => {
                         const isSelected = selectedMonth === monthValue;
 
@@ -1044,7 +1049,7 @@ export function HistoryScreen({ canManageHistoryActions = false }: HistoryScreen
                           </Pressable>
                         );
                       })}
-                    </View>
+                    </ScrollView>
                   ) : null}
                 </View>
                 <Pressable style={styles.monthButton} onPress={setCurrentMonth}>
@@ -1760,7 +1765,8 @@ const styles = StyleSheet.create({
     borderColor: '#C6A8DD',
     borderRadius: 12,
     backgroundColor: '#FCF9FF',
-    overflow: 'hidden',
+    // Rola quando ha muitos itens (sem overflow:hidden para nao anular o scroll).
+    maxHeight: 320,
   },
   monthSelectOption: {
     paddingHorizontal: 12,

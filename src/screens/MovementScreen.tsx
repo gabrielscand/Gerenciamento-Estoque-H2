@@ -159,7 +159,11 @@ function CategoryFilterSelect({
       </Pressable>
 
       {isOpen ? (
-        <View style={styles.filterSelectMenu}>
+        <ScrollView
+          style={styles.filterSelectMenu}
+          nestedScrollEnabled
+          keyboardShouldPersistTaps="handled"
+        >
           {filterOptions.map((option) => {
             const isSelected = value === option;
 
@@ -183,7 +187,7 @@ function CategoryFilterSelect({
               </Pressable>
             );
           })}
-        </View>
+        </ScrollView>
       ) : null}
     </View>
   );
@@ -1477,7 +1481,8 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#B690D2',
     backgroundColor: '#FFFFFF',
-    overflow: 'hidden',
+    // Rola quando ha muitos itens (sem overflow:hidden para nao anular o scroll).
+    maxHeight: 320,
   },
   filterSelectOption: {
     paddingHorizontal: 12,

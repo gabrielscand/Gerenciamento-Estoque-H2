@@ -323,8 +323,12 @@ export interface DashboardAnalyticsTotals {
 
 export interface DashboardAnalyticsData {
   month: string;
+  // Dia selecionado dentro do mes (null = mes inteiro).
+  selectedDay: string | null;
   startDate: string;
   endDate: string;
+  // Dias do mes que tem movimentacao (para o seletor de dia).
+  availableDays: string[];
   totals: DashboardAnalyticsTotals;
   items: DashboardItemAnalyticsRow[];
   dailySeries: DashboardDailySeriesPoint[];

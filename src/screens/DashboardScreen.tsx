@@ -68,6 +68,15 @@ function buildRecentMonthOptions(referenceDate: Date = new Date(), totalMonths: 
   return months;
 }
 
+// Rotulo curto para um dia (YYYY-MM-DD) -> "DD/MM".
+function formatDayLabel(date: string): string {
+  const parts = date.split('-');
+  if (parts.length !== 3) {
+    return date;
+  }
+  return `${parts[2]}/${parts[1]}`;
+}
+
 function getMetricLabel(metric: DashboardAbcMetric): string {
   if (metric === 'entry') {
     return 'Entrada';
@@ -600,6 +609,8 @@ export function DashboardScreen() {
   const initialMonth = getCurrentMonthString();
   const [selectedMonth, setSelectedMonth] = useState(initialMonth);
   const [isMonthMenuOpen, setIsMonthMenuOpen] = useState(false);
+  const [selectedDay, setSelectedDay] = useState<string | null>(null);
+  const [isDayMenuOpen, setIsDayMenuOpen] = useState(false);
   const [selectedMetric, setSelectedMetric] = useState<DashboardAbcMetric>('movement');
   const [viewMode, setViewMode] = useState<'item' | 'category'>('item');
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
@@ -619,7 +630,11 @@ export function DashboardScreen() {
   const fullChartWidth = Math.max(320, Math.min(contentWidth - 34, 1040));
   const splitChartWidth = Math.max(310, Math.min(isWide ? (contentWidth - 50) / 2 : contentWidth - 34, 560));
 
-  async function loadDashboard(month: string, syncFirst: boolean = false) {
+  async function loadDashboard(
+    month: string,
+    day: string | null,
+    syncFirst: boolean = false,
+  ) {
     setIsLoading(true);
     setErrorMessage('');
 
@@ -628,7 +643,7 @@ export function DashboardScreen() {
         await syncAppData();
       }
 
-      const data = await getDashboardAnalytics(month, selectedCategory);
+      const data = await getDashboardAnalytics(month, selectedCategory, day);
       setDashboardData(data);
     } catch (error) {
       setDashboardData(null);
@@ -643,8 +658,8 @@ export function DashboardScreen() {
       return;
     }
 
-    void loadDashboard(selectedMonth);
-  }, [selectedMonth, selectedCategory, isFocused]);
+    void loadDashboard(selectedMonth, selectedDay);
+  }, [selectedMonth, selectedCategory, selectedDay, isFocused]);
 
   useEffect(() => {
     if (!isFocused) {
@@ -682,19 +697,30 @@ export function DashboardScreen() {
   function setCurrentMonth() {
     const currentMonth = getCurrentMonthString();
     setSelectedMonth(currentMonth);
+    setSelectedDay(null);
     setIsMonthMenuOpen(false);
     setErrorMessage('');
   }
 
   function selectMonth(monthValue: string) {
     setSelectedMonth(monthValue);
+    // Ao trocar de mes, volta para o mes inteiro (o dia pode nao existir no novo mes).
+    setSelectedDay(null);
     setIsMonthMenuOpen(false);
     setErrorMessage('');
   }
 
   function selectCategory(category: string | null) {
     setSelectedCategory(category);
+    // A lista de dias com movimentacao depende da categoria; volta ao mes inteiro.
+    setSelectedDay(null);
     setIsCategoryMenuOpen(false);
+    setErrorMessage('');
+  }
+
+  function selectDay(dayValue: string | null) {
+    setSelectedDay(dayValue);
+    setIsDayMenuOpen(false);
     setErrorMessage('');
   }
 
@@ -763,7 +789,7 @@ export function DashboardScreen() {
 
   useEffect(() => {
     setSelectedAbcClass(null);
-  }, [selectedMonth, selectedMetric, viewMode, selectedCategory]);
+  }, [selectedMonth, selectedMetric, viewMode, selectedCategory, selectedDay]);
 
   async function handleGenerateAbcReport() {
     if (isGeneratingAbcReport) {
@@ -846,7 +872,7 @@ export function DashboardScreen() {
   ).length ?? 0;
   const leadingEntryName = topEntryItems[0]?.name ?? 'Sem entrada';
   const leadingExitName = topExitItems[0]?.name ?? 'Sem saída';
-  const dashboardChartKey = `${selectedMonth}-${selectedCategory ?? 'all'}-${effectiveViewMode}-${selectedMetric}`;
+  const dashboardChartKey = `${selectedMonth}-${selectedDay ?? 'month'}-${selectedCategory ?? 'all'}-${effectiveViewMode}-${selectedMetric}`;
 
   return (
     <ScreenShell>
@@ -856,7 +882,7 @@ export function DashboardScreen() {
           <RefreshControl
             refreshing={isLoading}
             onRefresh={() => {
-              void loadDashboard(selectedMonth, true);
+              void loadDashboard(selectedMonth, selectedDay, true);
             }}
           />
         }
@@ -879,7 +905,8 @@ export function DashboardScreen() {
         </MotionEntrance>
 
         <MotionEntrance delay={120}>
-          <View style={[styles.commandPanel, isWide ? styles.commandPanelWide : undefined]}>
+          <View style={styles.commandPanel}>
+            <View style={[styles.controlRow, styles.controlRowTop]}>
             <View style={styles.monthControl}>
               <Text style={styles.controlLabel}>Mês analisado</Text>
               <View style={styles.monthSelectRoot}>
@@ -887,6 +914,7 @@ export function DashboardScreen() {
                   style={styles.monthSelectTrigger}
                   onPress={() => {
                     setIsCategoryMenuOpen(false);
+                    setIsDayMenuOpen(false);
                     setIsMonthMenuOpen((previousState) => !previousState);
                   }}
                 >
@@ -894,7 +922,11 @@ export function DashboardScreen() {
                   <Text style={styles.monthSelectArrow}>{isMonthMenuOpen ? '^' : 'v'}</Text>
                 </Pressable>
                 {isMonthMenuOpen ? (
-                  <View style={styles.monthSelectMenu}>
+                  <ScrollView
+                    style={styles.monthSelectMenu}
+                    nestedScrollEnabled
+                    keyboardShouldPersistTaps="handled"
+                  >
                     {monthOptions.map((monthValue, index) => {
                       const isSelected = selectedMonth === monthValue;
 
@@ -919,12 +951,79 @@ export function DashboardScreen() {
                         </Pressable>
                       );
                     })}
-                  </View>
+                  </ScrollView>
                 ) : null}
               </View>
               <Pressable style={styles.currentMonthButton} onPress={setCurrentMonth}>
                 <Text style={styles.currentMonthButtonText}>Mês atual</Text>
               </Pressable>
+            </View>
+
+            <View style={styles.monthControl}>
+              <Text style={styles.controlLabel}>Dia</Text>
+              <View style={styles.monthSelectRoot}>
+                <Pressable
+                  style={styles.monthSelectTrigger}
+                  onPress={() => {
+                    setIsMonthMenuOpen(false);
+                    setIsCategoryMenuOpen(false);
+                    setIsDayMenuOpen((previousState) => !previousState);
+                  }}
+                >
+                  <Text style={styles.monthSelectTriggerText} numberOfLines={1}>
+                    {selectedDay ? formatDayLabel(selectedDay) : 'Todos os dias'}
+                  </Text>
+                  <Text style={styles.monthSelectArrow}>{isDayMenuOpen ? '^' : 'v'}</Text>
+                </Pressable>
+                {isDayMenuOpen ? (
+                  <ScrollView
+                    style={styles.monthSelectMenu}
+                    nestedScrollEnabled
+                    keyboardShouldPersistTaps="handled"
+                  >
+                    <Pressable
+                      style={[
+                        styles.monthSelectOption,
+                        styles.monthSelectOptionFirst,
+                        selectedDay === null ? styles.monthSelectOptionActive : undefined,
+                      ]}
+                      onPress={() => selectDay(null)}
+                    >
+                      <Text
+                        style={[
+                          styles.monthSelectOptionText,
+                          selectedDay === null ? styles.monthSelectOptionTextActive : undefined,
+                        ]}
+                      >
+                        Todos os dias
+                      </Text>
+                    </Pressable>
+                    {(dashboardData?.availableDays ?? []).map((dayValue) => {
+                      const isSelected = selectedDay === dayValue;
+
+                      return (
+                        <Pressable
+                          key={dayValue}
+                          style={[
+                            styles.monthSelectOption,
+                            isSelected ? styles.monthSelectOptionActive : undefined,
+                          ]}
+                          onPress={() => selectDay(dayValue)}
+                        >
+                          <Text
+                            style={[
+                              styles.monthSelectOptionText,
+                              isSelected ? styles.monthSelectOptionTextActive : undefined,
+                            ]}
+                          >
+                            {formatDayLabel(dayValue)}
+                          </Text>
+                        </Pressable>
+                      );
+                    })}
+                  </ScrollView>
+                ) : null}
+              </View>
             </View>
 
             <View style={styles.monthControl}>
@@ -934,6 +1033,7 @@ export function DashboardScreen() {
                   style={styles.monthSelectTrigger}
                   onPress={() => {
                     setIsMonthMenuOpen(false);
+                    setIsDayMenuOpen(false);
                     setIsCategoryMenuOpen((previousState) => !previousState);
                   }}
                 >
@@ -943,7 +1043,11 @@ export function DashboardScreen() {
                   <Text style={styles.monthSelectArrow}>{isCategoryMenuOpen ? '^' : 'v'}</Text>
                 </Pressable>
                 {isCategoryMenuOpen ? (
-                  <View style={styles.monthSelectMenu}>
+                  <ScrollView
+                    style={styles.monthSelectMenu}
+                    nestedScrollEnabled
+                    keyboardShouldPersistTaps="handled"
+                  >
                     <Pressable
                       style={[
                         styles.monthSelectOption,
@@ -984,11 +1088,13 @@ export function DashboardScreen() {
                         </Pressable>
                       );
                     })}
-                  </View>
+                  </ScrollView>
                 ) : null}
               </View>
             </View>
+            </View>
 
+            <View style={[styles.controlRow, styles.controlRowBottom]}>
             {selectedCategory === null ? (
               <ControlSegment
                 title="Agrupamento"
@@ -1013,6 +1119,7 @@ export function DashboardScreen() {
                 { label: 'Saída', value: 'exit' },
               ]}
             />
+            </View>
           </View>
         </MotionEntrance>
 
@@ -1289,9 +1396,20 @@ const styles = StyleSheet.create({
     gap: 14,
     ...tokens.shadow.card,
   },
-  commandPanelWide: {
+  controlRow: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     alignItems: 'flex-start',
+    gap: 14,
+    position: 'relative',
+  },
+  // A linha dos dropdowns fica acima da linha dos segmentos para os menus
+  // abertos aparecerem por cima.
+  controlRowTop: {
+    zIndex: 3,
+  },
+  controlRowBottom: {
+    zIndex: 1,
   },
   monthControl: {
     gap: 8,
@@ -1346,7 +1464,8 @@ const styles = StyleSheet.create({
     borderColor: '#C6A8DD',
     borderRadius: 14,
     backgroundColor: '#FCF9FF',
-    overflow: 'hidden',
+    // maxHeight limita a altura; o ScrollView cuida da rolagem quando ha muitos
+    // itens (ex.: 30 dias). Sem overflow:hidden para nao anular o scroll na web.
     maxHeight: 310,
   },
   monthSelectOption: {

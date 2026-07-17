@@ -2426,6 +2426,7 @@ export async function listMonthlyHistoryGrouped(month: string): Promise<PeriodHi
 export async function getDashboardAnalytics(
   month: string,
   category?: string | null,
+  day?: string | null,
 ): Promise<DashboardAnalyticsData> {
   if (!isValidMonthString(month)) {
     throw new Error('Mês inválido para dashboard.');
@@ -2437,7 +2438,15 @@ export async function getDashboardAnalytics(
     throw new Error('Mês inválido para dashboard.');
   }
 
-  const { startDate, endDate } = monthRange;
+  const { startDate: monthStart, endDate: monthEnd } = monthRange;
+
+  // Filtro opcional por dia: quando um dia valido do mes e informado, todo o
+  // dashboard (KPIs, Curva ABC, rankings e serie diaria) considera apenas
+  // aquele dia. Caso contrario, considera o mes inteiro.
+  const dayFilter =
+    day && isValidDateString(day) && day.startsWith(`${month}-`) ? day : null;
+  const rangeStart = dayFilter ?? monthStart;
+  const rangeEnd = dayFilter ?? monthEnd;
   // Filtro opcional por categoria: quando definido, todo o dashboard (KPIs,
   // itens da Curva ABC/rankings e serie diária) considera so essa categoria.
   const categoryFilter = category && category.trim().length > 0 ? category.trim() : null;
@@ -2489,8 +2498,8 @@ export async function getDashboardAnalytics(
       WHERE daily_stock_entries.is_deleted = 0
         AND daily_stock_entries.date BETWEEN ? AND ?${categoryClause};
     `,
-    startDate,
-    endDate,
+    rangeStart,
+    rangeEnd,
     ...categoryParams,
   );
 
@@ -2563,8 +2572,8 @@ export async function getDashboardAnalytics(
         ) DESC,
         stock_items.name COLLATE NOCASE ASC;
     `,
-    startDate,
-    endDate,
+    rangeStart,
+    rangeEnd,
     ...categoryParams,
   );
 
@@ -2610,10 +2619,27 @@ export async function getDashboardAnalytics(
       GROUP BY daily_stock_entries.date
       ORDER BY daily_stock_entries.date ASC;
     `,
-    startDate,
-    endDate,
+    rangeStart,
+    rangeEnd,
     ...categoryParams,
   );
+
+  // Dias do mes (inteiro) que possuem movimentacao, para o seletor de dia.
+  // Sempre usa o intervalo do mes, independente do dia filtrado.
+  const availableDayRows = await database.getAllAsync<{ date: string }>(
+    `
+      SELECT DISTINCT daily_stock_entries.date AS date
+      FROM daily_stock_entries
+      INNER JOIN stock_items ON stock_items.id = daily_stock_entries.item_id
+      WHERE daily_stock_entries.is_deleted = 0
+        AND daily_stock_entries.date BETWEEN ? AND ?${categoryClause}
+      ORDER BY daily_stock_entries.date ASC;
+    `,
+    monthStart,
+    monthEnd,
+    ...categoryParams,
+  );
+  const availableDays = availableDayRows.map((row) => row.date);
 
   const items: DashboardItemAnalyticsRow[] = itemRows
     .map((row) => {
@@ -2675,7 +2701,7 @@ export async function getDashboardAnalytics(
     });
   }
 
-  const dailySeries: DashboardDailySeriesPoint[] = buildDateRangeList(startDate, endDate).map((date) => {
+  const dailySeries: DashboardDailySeriesPoint[] = buildDateRangeList(rangeStart, rangeEnd).map((date) => {
     const dailyPoint = dailyByDate.get(date);
     const entryQuantity = dailyPoint?.entryQuantity ?? 0;
     const entryQuantityInBaseUnits = dailyPoint?.entryQuantityInBaseUnits ?? 0;
@@ -2711,8 +2737,10 @@ export async function getDashboardAnalytics(
 
   return {
     month,
-    startDate,
-    endDate,
+    selectedDay: dayFilter,
+    startDate: rangeStart,
+    endDate: rangeEnd,
+    availableDays,
     totals: {
       entryQuantity: totalEntryQuantity,
       entryQuantityInBaseUnits: totalEntryQuantityInBaseUnits,
