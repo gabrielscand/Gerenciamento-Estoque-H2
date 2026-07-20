@@ -20,6 +20,7 @@ import {
 } from '../utils/unit-conversion';
 import type {
   CreateStockItemInput,
+  DailyMovementReportItem,
   DashboardAnalyticsData,
   DashboardDailySeriesPoint,
   DashboardItemAnalyticsRow,
@@ -2756,4 +2757,99 @@ export async function getDashboardAnalytics(
     items,
     dailySeries,
   };
+}
+
+// Relatorio de movimentacao: Entrada e Saida por item, EXCLUINDO ajustes de
+// estoque ('adjustment'). Quando 'day' e um dia valido do mes, considera so
+// aquele dia; senao, o mes inteiro. Retorna apenas itens que tiveram entrada
+// e/ou saida no periodo.
+export async function getDailyMovementReport(
+  month: string,
+  category?: string | null,
+  day?: string | null,
+): Promise<DailyMovementReportItem[]> {
+  if (!isValidMonthString(month)) {
+    throw new Error('Mês inválido para relatório.');
+  }
+
+  const monthRange = getMonthDateRange(month);
+
+  if (!monthRange) {
+    throw new Error('Mês inválido para relatório.');
+  }
+
+  const { startDate: monthStart, endDate: monthEnd } = monthRange;
+  const dayFilter =
+    day && isValidDateString(day) && day.startsWith(`${month}-`) ? day : null;
+  const rangeStart = dayFilter ?? monthStart;
+  const rangeEnd = dayFilter ?? monthEnd;
+
+  const categoryFilter = category && category.trim().length > 0 ? category.trim() : null;
+  const categoryClause = categoryFilter ? ' AND TRIM(stock_items.category) = TRIM(?)' : '';
+  const categoryParams = categoryFilter ? [categoryFilter] : [];
+  const database = await getDatabase();
+
+  const rows = await database.getAllAsync<DashboardItemTotalsRow>(
+    `
+      SELECT
+        stock_items.id AS itemId,
+        stock_items.name AS name,
+        stock_items.unit AS unit,
+        measurement_units.conversion_factor AS conversionFactor,
+        stock_items.category AS category,
+        SUM(
+          CASE
+            WHEN daily_stock_entries.movement_type IN ('entry', 'initial', 'legacy_snapshot')
+              THEN daily_stock_entries.quantity
+            ELSE 0
+          END
+        ) AS entryQuantity,
+        SUM(
+          CASE
+            WHEN daily_stock_entries.movement_type IN ('entry', 'initial', 'legacy_snapshot')
+              THEN daily_stock_entries.quantity * COALESCE(measurement_units.conversion_factor, 1)
+            ELSE 0
+          END
+        ) AS entryQuantityInBaseUnits,
+        SUM(
+          CASE
+            WHEN daily_stock_entries.movement_type IN ('exit', 'consumption')
+              THEN daily_stock_entries.quantity
+            ELSE 0
+          END
+        ) AS exitQuantity,
+        SUM(
+          CASE
+            WHEN daily_stock_entries.movement_type IN ('exit', 'consumption')
+              THEN daily_stock_entries.quantity * COALESCE(measurement_units.conversion_factor, 1)
+            ELSE 0
+          END
+        ) AS exitQuantityInBaseUnits
+      FROM daily_stock_entries
+      INNER JOIN stock_items ON stock_items.id = daily_stock_entries.item_id
+      LEFT JOIN measurement_units
+        ON measurement_units.name_normalized = stock_items.unit
+       AND measurement_units.is_deleted = 0
+      WHERE daily_stock_entries.is_deleted = 0
+        AND daily_stock_entries.date BETWEEN ? AND ?${categoryClause}
+      GROUP BY stock_items.id, stock_items.name, stock_items.unit, stock_items.category, measurement_units.conversion_factor;
+    `,
+    rangeStart,
+    rangeEnd,
+    ...categoryParams,
+  );
+
+  return rows
+    .map((row) => ({
+      itemId: row.itemId,
+      name: row.name,
+      unit: row.unit,
+      conversionFactor: resolveConversionFactor(row.unit, row.conversionFactor),
+      category: normalizeCategory(row.category),
+      entryQuantity: roundQuantity(toSafeNumber(row.entryQuantity)),
+      entryQuantityInBaseUnits: roundQuantity(toSafeNumber(row.entryQuantityInBaseUnits)),
+      exitQuantity: roundQuantity(toSafeNumber(row.exitQuantity)),
+      exitQuantityInBaseUnits: roundQuantity(toSafeNumber(row.exitQuantityInBaseUnits)),
+    }))
+    .filter((item) => item.entryQuantityInBaseUnits > 0 || item.exitQuantityInBaseUnits > 0);
 }

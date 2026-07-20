@@ -321,6 +321,19 @@ export interface DashboardAnalyticsTotals {
   movementEntries: number;
 }
 
+// Item do relatorio de movimentacao (Entrada/Saida por dia, SEM ajuste).
+export interface DailyMovementReportItem {
+  itemId: number;
+  name: string;
+  unit: string;
+  conversionFactor: number;
+  category: string | null;
+  entryQuantity: number;
+  entryQuantityInBaseUnits: number;
+  exitQuantity: number;
+  exitQuantityInBaseUnits: number;
+}
+
 export interface DashboardAnalyticsData {
   month: string;
   // Dia selecionado dentro do mes (null = mes inteiro).

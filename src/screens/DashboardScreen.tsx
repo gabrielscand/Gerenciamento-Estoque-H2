@@ -25,7 +25,11 @@ import { useTopPopup } from '../components/TopPopupProvider';
 import { AppButton, HeroHeader, KpiTile, MotionEntrance, ScreenShell } from '../components/ui-kit';
 import { tokens } from '../theme/tokens';
 import { getCategoryLabel } from '../constants/categories';
-import { getDashboardAnalytics, listUsedItemCategories } from '../database/items.repository';
+import {
+  getDailyMovementReport,
+  getDashboardAnalytics,
+  listUsedItemCategories,
+} from '../database/items.repository';
 import { syncAppData } from '../database/sync.service';
 import type {
   DashboardAbcClass,
@@ -35,7 +39,8 @@ import type {
   DashboardItemAnalyticsRow,
 } from '../types/inventory';
 import { formatMonthLabel, getCurrentMonthString, getTodayLocalDateString } from '../utils/date';
-import { generateAbcReportPdf } from '../utils/abc-report';
+import { generateDailyMovementReportPdf } from '../utils/daily-movement-report';
+import { ReportDayPickerModal } from '../components/ReportDayPickerModal';
 import { formatOriginalAndBaseQuantity, isFardoConversionFactor } from '../utils/unit-conversion';
 
 function formatQuantity(value: number): string {
@@ -618,6 +623,7 @@ export function DashboardScreen() {
   const [isCategoryMenuOpen, setIsCategoryMenuOpen] = useState(false);
   const [selectedAbcClass, setSelectedAbcClass] = useState<DashboardAbcClass | null>(null);
   const [isGeneratingAbcReport, setIsGeneratingAbcReport] = useState(false);
+  const [isReportDayPickerOpen, setIsReportDayPickerOpen] = useState(false);
   const [activeChartInfo, setActiveChartInfo] = useState<DashboardChartInfoKey | null>(null);
   const [dashboardData, setDashboardData] = useState<DashboardAnalyticsData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -791,41 +797,44 @@ export function DashboardScreen() {
     setSelectedAbcClass(null);
   }, [selectedMonth, selectedMetric, viewMode, selectedCategory, selectedDay]);
 
-  async function handleGenerateAbcReport() {
+  async function handleGenerateDayReport(day: string | null) {
     if (isGeneratingAbcReport) {
       return;
     }
 
-    if (abcPoints.length === 0) {
-      showTopPopup({
-        type: 'warning',
-        message: 'Sem itens na Curva ABC para gerar o relatório.',
-        durationMs: 3200,
-      });
-      return;
-    }
-
+    setIsReportDayPickerOpen(false);
     setIsGeneratingAbcReport(true);
 
     try {
-      await generateAbcReportPdf(abcPoints, {
-        monthLabel: formatMonthLabel(selectedMonth),
-        metricLabel: getMetricLabel(selectedMetric),
-        viewLabel: effectiveViewMode === 'item' ? 'Por item' : 'Por categoria',
-      });
+      const items = await getDailyMovementReport(selectedMonth, selectedCategory, day);
+
+      if (items.length === 0) {
+        showTopPopup({
+          type: 'warning',
+          message: 'Sem entradas ou saídas no período selecionado.',
+          durationMs: 3200,
+        });
+        return;
+      }
+
+      const periodLabel = day
+        ? day.split('-').reverse().join('/')
+        : `Mês inteiro (${formatMonthLabel(selectedMonth)})`;
+
+      await generateDailyMovementReportPdf(items, { periodLabel });
 
       showTopPopup({
         type: 'success',
         message:
           Platform.OS === 'web'
-            ? 'Relatório da Curva ABC enviado para visualização/impressão.'
-            : 'Relatório da Curva ABC gerado com sucesso.',
+            ? 'Relatório enviado para visualização/impressão.'
+            : 'Relatório de movimentação gerado com sucesso.',
         durationMs: 3200,
       });
     } catch (error) {
       showTopPopup({
         type: 'error',
-        message: error instanceof Error ? error.message : 'Falha ao gerar relatório da Curva ABC.',
+        message: error instanceof Error ? error.message : 'Falha ao gerar relatório.',
         durationMs: 4200,
       });
     } finally {
@@ -1272,10 +1281,8 @@ export function DashboardScreen() {
                 <View style={styles.abcReportButtonWrap}>
                   <AppButton
                     label={isGeneratingAbcReport ? 'Gerando relatório...' : 'Gerar Relatório'}
-                    onPress={() => {
-                      void handleGenerateAbcReport();
-                    }}
-                    disabled={isGeneratingAbcReport || abcPoints.length === 0}
+                    onPress={() => setIsReportDayPickerOpen(true)}
+                    disabled={isGeneratingAbcReport}
                   />
                 </View>
 
@@ -1370,6 +1377,16 @@ export function DashboardScreen() {
           </View>
         </View>
       </Modal>
+
+      <ReportDayPickerModal
+        visible={isReportDayPickerOpen}
+        monthLabel={formatMonthLabel(selectedMonth)}
+        availableDays={dashboardData?.availableDays ?? []}
+        onClose={() => setIsReportDayPickerOpen(false)}
+        onConfirm={(day) => {
+          void handleGenerateDayReport(day);
+        }}
+      />
     </ScreenShell>
   );
 }
