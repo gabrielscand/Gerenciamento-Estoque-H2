@@ -36,7 +36,7 @@ import type { CatalogOption } from '../database/items.repository';
 import { SyncStatusCard } from '../components/SyncStatusCard';
 import { useTopPopup } from '../components/TopPopupProvider';
 import { syncAppData } from '../database/sync.service';
-import { HeroHeader, KpiTile, MotionEntrance, ScreenShell } from '../components/ui-kit';
+import { MotionEntrance, ScreenShell } from '../components/ui-kit';
 import { tokens } from '../theme/tokens';
 
 type AdminPanelScreenProps = {
@@ -226,6 +226,8 @@ export function AdminPanelScreen({ currentUser, onUsersChanged }: AdminPanelScre
   const [editingUnitFactor, setEditingUnitFactor] = useState('');
   const [isCategoriesEditorOpen, setIsCategoriesEditorOpen] = useState(false);
   const [isUnitsEditorOpen, setIsUnitsEditorOpen] = useState(false);
+  const [isNewUserSectionOpen, setIsNewUserSectionOpen] = useState(false);
+  const [isCatalogSectionOpen, setIsCatalogSectionOpen] = useState(false);
   const [editingUserId, setEditingUserId] = useState<number | null>(null);
   const [createForm, setCreateForm] = useState<UserFormState>(INITIAL_CREATE_FORM);
   const [editForm, setEditForm] = useState<UserFormState>(INITIAL_CREATE_FORM);
@@ -734,23 +736,40 @@ export function AdminPanelScreen({ currentUser, onUsersChanged }: AdminPanelScre
             <SyncStatusCard />
 
             <MotionEntrance delay={80}>
-              <HeroHeader
-                title="Painel ADM"
-                subtitle="Gestao de acessos e catalogo"
-                description="Controle usuários, permissões, categorias e unidades em um único fluxo."
-              >
-                <View style={styles.heroKpis}>
-                  <KpiTile label="Usuários ativos" value={String(users.length)} />
-                  <KpiTile label="Admins" value={String(adminCount)} />
-                  <KpiTile label="Categorias" value={String(categories.length)} />
-                  <KpiTile label="Unidades" value={String(units.length)} />
+              <View style={styles.compactHeader}>
+                <Text style={styles.compactTitle}>Painel ADM</Text>
+                <View style={styles.compactKpis}>
+                  <View style={styles.compactKpi}>
+                    <Text style={styles.compactKpiLabel}>Usuários ativos</Text>
+                    <Text style={styles.compactKpiValue}>{String(users.length)}</Text>
+                  </View>
+                  <View style={styles.compactKpi}>
+                    <Text style={styles.compactKpiLabel}>Admins</Text>
+                    <Text style={styles.compactKpiValue}>{String(adminCount)}</Text>
+                  </View>
+                  <View style={styles.compactKpi}>
+                    <Text style={styles.compactKpiLabel}>Categorias</Text>
+                    <Text style={styles.compactKpiValue}>{String(categories.length)}</Text>
+                  </View>
+                  <View style={styles.compactKpi}>
+                    <Text style={styles.compactKpiLabel}>Unidades</Text>
+                    <Text style={styles.compactKpiValue}>{String(units.length)}</Text>
+                  </View>
                 </View>
-              </HeroHeader>
+              </View>
             </MotionEntrance>
 
             <View style={styles.formCard}>
-              <Text style={styles.formTitle}>Novo usuário</Text>
+              <Pressable
+                style={styles.sectionToggle}
+                onPress={() => setIsNewUserSectionOpen((previousState) => !previousState)}
+              >
+                <Text style={styles.formTitle}>Novo usuário</Text>
+                <Text style={styles.sectionToggleArrow}>{isNewUserSectionOpen ? '^' : 'v'}</Text>
+              </Pressable>
 
+              {isNewUserSectionOpen ? (
+              <>
               <View style={styles.fieldGroup}>
                 <Text style={styles.label}>Usuário</Text>
                 <TextInput
@@ -825,10 +844,21 @@ export function AdminPanelScreen({ currentUser, onUsersChanged }: AdminPanelScre
                   <Text style={styles.submitButtonText}>Criar usuário</Text>
                 )}
               </Pressable>
+              </>
+              ) : null}
             </View>
 
             <View style={styles.formCard}>
-              <Text style={styles.formTitle}>Catalogo de itens</Text>
+              <Pressable
+                style={styles.sectionToggle}
+                onPress={() => setIsCatalogSectionOpen((previousState) => !previousState)}
+              >
+                <Text style={styles.formTitle}>Catálogo de itens</Text>
+                <Text style={styles.sectionToggleArrow}>{isCatalogSectionOpen ? '^' : 'v'}</Text>
+              </Pressable>
+
+              {isCatalogSectionOpen ? (
+              <>
               <Text style={styles.catalogHint}>
                 Crie novas categorias e unidades para aparecerem imediatamente na aba Itens.
               </Text>
@@ -1049,6 +1079,8 @@ export function AdminPanelScreen({ currentUser, onUsersChanged }: AdminPanelScre
                   )
                 ) : null}
               </View>
+              </>
+              ) : null}
             </View>
 
             <Text style={styles.listTitle}>Usuários cadastrados</Text>
@@ -1255,6 +1287,53 @@ const styles = StyleSheet.create({
   headerBlock: {
     gap: 12,
     marginBottom: 6,
+  },
+  compactHeader: {
+    gap: 10,
+  },
+  compactTitle: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: '#2A0834',
+  },
+  compactKpis: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  compactKpi: {
+    flex: 1,
+    minWidth: 96,
+    backgroundColor: '#F8F1FD',
+    borderWidth: 1,
+    borderColor: '#E4D3F2',
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+    gap: 2,
+  },
+  compactKpiLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#6F617A',
+    textTransform: 'uppercase',
+    letterSpacing: 0.3,
+  },
+  compactKpiValue: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: '#2A0834',
+  },
+  sectionToggle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  sectionToggleArrow: {
+    color: '#77158E',
+    fontSize: 14,
+    fontWeight: '700',
   },
   heroCard: {
     display: 'none',
