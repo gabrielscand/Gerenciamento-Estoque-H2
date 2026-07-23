@@ -3,16 +3,18 @@ import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 import { getCategoryLabel } from '../constants/categories';
 import type { DailyMovementReportItem } from '../types/inventory';
-import { getTodayLocalDateString } from './date';
 import { formatOriginalAndBaseQuantity } from './unit-conversion';
 
 type DailyMovementReportOptions = {
   periodLabel: string;
+  // Sufixo do nome do arquivo (ex.: o dia escolhido "2026-06-08" ou o mes "2026-06").
+  fileLabel: string;
 };
 
 type DailyMovementReportPayload = {
   generatedAt: Date;
   periodLabel: string;
+  fileLabel: string;
   items: DailyMovementReportItem[];
 };
 
@@ -244,8 +246,8 @@ function buildPdfHtml(payload: DailyMovementReportPayload): string {
   `;
 }
 
-function buildPdfFileName(referenceDate: Date): string {
-  return `movimentacao-${getTodayLocalDateString(referenceDate)}.pdf`;
+function buildPdfFileName(fileLabel: string): string {
+  return `movimentacao-${fileLabel}.pdf`;
 }
 
 async function generateWebPdf(payload: DailyMovementReportPayload): Promise<void> {
@@ -312,7 +314,7 @@ async function generateWebPdf(payload: DailyMovementReportPayload): Promise<void
     margin: { left: 40, right: 40 },
   });
 
-  doc.save(buildPdfFileName(payload.generatedAt));
+  doc.save(buildPdfFileName(payload.fileLabel));
 }
 
 export async function generateDailyMovementReportPdf(
@@ -322,6 +324,7 @@ export async function generateDailyMovementReportPdf(
   const payload: DailyMovementReportPayload = {
     generatedAt: new Date(),
     periodLabel: options.periodLabel,
+    fileLabel: options.fileLabel,
     items: sortItems(items),
   };
 

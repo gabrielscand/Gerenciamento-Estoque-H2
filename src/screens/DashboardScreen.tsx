@@ -820,8 +820,10 @@ export function DashboardScreen() {
       const periodLabel = day
         ? day.split('-').reverse().join('/')
         : `Mês inteiro (${formatMonthLabel(selectedMonth)})`;
+      // Nome do arquivo = dia escolhido (YYYY-MM-DD) ou o mes (YYYY-MM), nunca a data de hoje.
+      const fileLabel = day ?? selectedMonth;
 
-      await generateDailyMovementReportPdf(items, { periodLabel });
+      await generateDailyMovementReportPdf(items, { periodLabel, fileLabel });
 
       showTopPopup({
         type: 'success',

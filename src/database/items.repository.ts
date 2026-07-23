@@ -2462,8 +2462,6 @@ export async function getDashboardAnalytics(
           CASE
             WHEN movement_type IN ('entry', 'initial', 'legacy_snapshot')
               THEN quantity
-            WHEN movement_type = 'adjustment'
-              THEN quantity - COALESCE(previous_quantity, quantity)
             ELSE 0
           END
         ) AS totalEntryQuantity,
@@ -2471,8 +2469,6 @@ export async function getDashboardAnalytics(
           CASE
             WHEN movement_type IN ('entry', 'initial', 'legacy_snapshot')
               THEN quantity * COALESCE(measurement_units.conversion_factor, 1)
-            WHEN movement_type = 'adjustment'
-              THEN (quantity - COALESCE(previous_quantity, quantity)) * COALESCE(measurement_units.conversion_factor, 1)
             ELSE 0
           END
         ) AS totalEntryQuantityInBaseUnits,
@@ -2490,7 +2486,13 @@ export async function getDashboardAnalytics(
             ELSE 0
           END
         ) AS totalExitQuantityInBaseUnits,
-        COUNT(*) AS movementEntries
+        SUM(
+          CASE
+            WHEN movement_type IN ('entry', 'initial', 'legacy_snapshot', 'exit', 'consumption')
+              THEN 1
+            ELSE 0
+          END
+        ) AS movementEntries
       FROM daily_stock_entries
       INNER JOIN stock_items ON stock_items.id = daily_stock_entries.item_id
       LEFT JOIN measurement_units
@@ -2516,8 +2518,6 @@ export async function getDashboardAnalytics(
           CASE
             WHEN daily_stock_entries.movement_type IN ('entry', 'initial', 'legacy_snapshot')
               THEN daily_stock_entries.quantity
-            WHEN daily_stock_entries.movement_type = 'adjustment'
-              THEN daily_stock_entries.quantity - COALESCE(daily_stock_entries.previous_quantity, daily_stock_entries.quantity)
             ELSE 0
           END
         ) AS entryQuantity,
@@ -2525,8 +2525,6 @@ export async function getDashboardAnalytics(
           CASE
             WHEN daily_stock_entries.movement_type IN ('entry', 'initial', 'legacy_snapshot')
               THEN daily_stock_entries.quantity * COALESCE(measurement_units.conversion_factor, 1)
-            WHEN daily_stock_entries.movement_type = 'adjustment'
-              THEN (daily_stock_entries.quantity - COALESCE(daily_stock_entries.previous_quantity, daily_stock_entries.quantity)) * COALESCE(measurement_units.conversion_factor, 1)
             ELSE 0
           END
         ) AS entryQuantityInBaseUnits,
@@ -2558,8 +2556,6 @@ export async function getDashboardAnalytics(
             CASE
               WHEN daily_stock_entries.movement_type IN ('entry', 'initial', 'legacy_snapshot')
                 THEN daily_stock_entries.quantity * COALESCE(measurement_units.conversion_factor, 1)
-              WHEN daily_stock_entries.movement_type = 'adjustment'
-                THEN (daily_stock_entries.quantity - COALESCE(daily_stock_entries.previous_quantity, daily_stock_entries.quantity)) * COALESCE(measurement_units.conversion_factor, 1)
               ELSE 0
             END
           ) +
@@ -2633,6 +2629,7 @@ export async function getDashboardAnalytics(
       FROM daily_stock_entries
       INNER JOIN stock_items ON stock_items.id = daily_stock_entries.item_id
       WHERE daily_stock_entries.is_deleted = 0
+        AND daily_stock_entries.movement_type IN ('entry', 'initial', 'legacy_snapshot', 'exit', 'consumption')
         AND daily_stock_entries.date BETWEEN ? AND ?${categoryClause}
       ORDER BY daily_stock_entries.date ASC;
     `,
