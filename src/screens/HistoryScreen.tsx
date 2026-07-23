@@ -224,6 +224,16 @@ function getDailyMovementFilterLabel(filter: DailyMovementFilter): string {
   return 'Saída';
 }
 
+function getHistoryModeLabel(mode: HistoryMode): string {
+  if (mode === 'diário') {
+    return 'Diário';
+  }
+  if (mode === 'quinzenal') {
+    return 'Quinzenal';
+  }
+  return 'Mensal';
+}
+
 function getHistoryReportPeriodLabel(period: HistoryReportPeriod): string {
   if (period === 'diário') {
     return 'Diário';
@@ -274,6 +284,8 @@ export function HistoryScreen({ canManageHistoryActions = false }: HistoryScreen
   const [dailyMovementFilter, setDailyMovementFilter] = useState<DailyMovementFilter>('entry');
   const [selectedMonth, setSelectedMonth] = useState(initialMonth);
   const [isMonthMenuOpen, setIsMonthMenuOpen] = useState(false);
+  const [isModeMenuOpen, setIsModeMenuOpen] = useState(false);
+  const [isFilterMenuOpen, setIsFilterMenuOpen] = useState(false);
   const [dailyGroups, setDailyGroups] = useState<DailyHistoryGroup[]>([]);
   const [periodGroups, setPeriodGroups] = useState<PeriodHistoryGroup[]>([]);
   const [isReportPickerOpen, setIsReportPickerOpen] = useState(false);
@@ -496,8 +508,14 @@ export function HistoryScreen({ canManageHistoryActions = false }: HistoryScreen
 
   function selectMode(nextMode: HistoryMode) {
     setMode(nextMode);
+    setIsModeMenuOpen(false);
     setErrorMessage('');
     setSuccessMessage('');
+  }
+
+  function selectDailyFilter(nextFilter: DailyMovementFilter) {
+    setDailyMovementFilter(nextFilter);
+    setIsFilterMenuOpen(false);
   }
 
   function setCurrentMonth() {
@@ -864,211 +882,237 @@ export function HistoryScreen({ canManageHistoryActions = false }: HistoryScreen
             <SyncStatusCard />
 
             <MotionEntrance delay={80}>
-              <HeroHeader
-                title={heroText.title}
-                subtitle={`Visao: ${periodLabel}`}
-                description={heroText.description}
-              >
-                <View style={styles.heroKpis}>
-                  <KpiTile label="Registros" value={String(totalGroups)} />
-                  <KpiTile
-                    label="Filtro"
-                    value={isDailyMode ? getDailyMovementFilterLabel(dailyMovementFilter) : 'Completo'}
-                  />
-                  <KpiTile
-                    label="Mês"
-                    value={isDailyMode ? '--' : formatMonthLabel(selectedMonth)}
-                  />
+              <View style={styles.compactHeader}>
+                <Text style={styles.compactTitle}>{heroText.title}</Text>
+                <View style={styles.compactKpis}>
+                  <View style={styles.compactKpi}>
+                    <Text style={styles.compactKpiLabel}>Registros</Text>
+                    <Text style={styles.compactKpiValue}>{String(totalGroups)}</Text>
+                  </View>
+                  <View style={styles.compactKpi}>
+                    <Text style={styles.compactKpiLabel}>Filtro</Text>
+                    <Text style={styles.compactKpiValue} numberOfLines={1}>
+                      {isDailyMode ? getDailyMovementFilterLabel(dailyMovementFilter) : 'Completo'}
+                    </Text>
+                  </View>
+                  <View style={styles.compactKpi}>
+                    <Text style={styles.compactKpiLabel}>Mês</Text>
+                    <Text style={styles.compactKpiValue}>
+                      {isDailyMode ? '--' : formatMonthLabel(selectedMonth)}
+                    </Text>
+                  </View>
                 </View>
-              </HeroHeader>
+              </View>
             </MotionEntrance>
 
-            <View style={styles.modeSwitcher}>
-              <Pressable
-                style={[styles.modeButton, mode === 'diário' ? styles.modeButtonActive : undefined]}
-                onPress={() => selectMode('diário')}
-              >
-                <Text style={[styles.modeText, mode === 'diário' ? styles.modeTextActive : undefined]}>
-                  Diário
-                </Text>
-              </Pressable>
-              <Pressable
-                style={[styles.modeButton, mode === 'quinzenal' ? styles.modeButtonActive : undefined]}
-                onPress={() => selectMode('quinzenal')}
-              >
-                <Text style={[styles.modeText, mode === 'quinzenal' ? styles.modeTextActive : undefined]}>
-                  Quinzenal
-                </Text>
-              </Pressable>
-              <Pressable
-                style={[styles.modeButton, mode === 'mensal' ? styles.modeButtonActive : undefined]}
-                onPress={() => selectMode('mensal')}
-              >
-                <Text style={[styles.modeText, mode === 'mensal' ? styles.modeTextActive : undefined]}>
-                  Mensal
-                </Text>
-              </Pressable>
-            </View>
+            <View style={styles.controlPanel}>
+              <View style={styles.controlRow}>
+                <View style={styles.control}>
+                  <Text style={styles.controlLabel}>Modo</Text>
+                  <View style={styles.monthSelectRoot}>
+                    <Pressable
+                      style={styles.monthSelectTrigger}
+                      onPress={() => {
+                        setIsMonthMenuOpen(false);
+                        setIsFilterMenuOpen(false);
+                        setIsModeMenuOpen((previousState) => !previousState);
+                      }}
+                    >
+                      <Text style={styles.monthSelectTriggerText}>{getHistoryModeLabel(mode)}</Text>
+                      <Text style={styles.monthSelectArrow}>{isModeMenuOpen ? '^' : 'v'}</Text>
+                    </Pressable>
+                    {isModeMenuOpen ? (
+                      <ScrollView
+                        style={styles.monthSelectMenu}
+                        nestedScrollEnabled
+                        keyboardShouldPersistTaps="handled"
+                      >
+                        {(['diário', 'quinzenal', 'mensal'] as HistoryMode[]).map((modeOption) => {
+                          const isSelected = mode === modeOption;
 
-            <View style={styles.searchCard}>
-              <View style={styles.searchHeader}>
-                <Text style={styles.searchLabel}>Buscar item</Text>
-                {hasItemFilter ? (
-                  <Pressable style={styles.clearSearchButton} onPress={clearSelectedItems}>
-                    <Text style={styles.clearSearchButtonText}>Limpar</Text>
-                  </Pressable>
+                          return (
+                            <Pressable
+                              key={modeOption}
+                              style={[styles.monthSelectOption, isSelected ? styles.monthSelectOptionActive : undefined]}
+                              onPress={() => selectMode(modeOption)}
+                            >
+                              <Text
+                                style={[
+                                  styles.monthSelectOptionText,
+                                  isSelected ? styles.monthSelectOptionTextActive : undefined,
+                                ]}
+                              >
+                                {getHistoryModeLabel(modeOption)}
+                              </Text>
+                            </Pressable>
+                          );
+                        })}
+                      </ScrollView>
+                    ) : null}
+                  </View>
+                </View>
+
+                {isDailyMode ? (
+                  <View style={styles.control}>
+                    <Text style={styles.controlLabel}>Filtro</Text>
+                    <View style={styles.monthSelectRoot}>
+                      <Pressable
+                        style={styles.monthSelectTrigger}
+                        onPress={() => {
+                          setIsMonthMenuOpen(false);
+                          setIsModeMenuOpen(false);
+                          setIsFilterMenuOpen((previousState) => !previousState);
+                        }}
+                      >
+                        <Text style={styles.monthSelectTriggerText} numberOfLines={1}>
+                          {getDailyMovementFilterLabel(dailyMovementFilter)}
+                        </Text>
+                        <Text style={styles.monthSelectArrow}>{isFilterMenuOpen ? '^' : 'v'}</Text>
+                      </Pressable>
+                      {isFilterMenuOpen ? (
+                        <ScrollView
+                          style={styles.monthSelectMenu}
+                          nestedScrollEnabled
+                          keyboardShouldPersistTaps="handled"
+                        >
+                          {(['entry', 'exit', 'adjustment'] as DailyMovementFilter[]).map((filterOption) => {
+                            const isSelected = dailyMovementFilter === filterOption;
+
+                            return (
+                              <Pressable
+                                key={filterOption}
+                                style={[styles.monthSelectOption, isSelected ? styles.monthSelectOptionActive : undefined]}
+                                onPress={() => selectDailyFilter(filterOption)}
+                              >
+                                <Text
+                                  style={[
+                                    styles.monthSelectOptionText,
+                                    isSelected ? styles.monthSelectOptionTextActive : undefined,
+                                  ]}
+                                >
+                                  {getDailyMovementFilterLabel(filterOption)}
+                                </Text>
+                              </Pressable>
+                            );
+                          })}
+                        </ScrollView>
+                      ) : null}
+                    </View>
+                  </View>
+                ) : null}
+
+                {!isDailyMode ? (
+                  <View style={styles.control}>
+                    <Text style={styles.controlLabel}>Mês do relatório</Text>
+                    <View style={styles.monthSelectRoot}>
+                      <Pressable
+                        style={styles.monthSelectTrigger}
+                        onPress={() => {
+                          setIsModeMenuOpen(false);
+                          setIsFilterMenuOpen(false);
+                          setIsMonthMenuOpen((previousState) => !previousState);
+                        }}
+                      >
+                        <Text style={styles.monthSelectTriggerText}>{formatMonthLabel(selectedMonth)}</Text>
+                        <Text style={styles.monthSelectArrow}>{isMonthMenuOpen ? '^' : 'v'}</Text>
+                      </Pressable>
+                      {isMonthMenuOpen ? (
+                        <ScrollView
+                          style={styles.monthSelectMenu}
+                          nestedScrollEnabled
+                          keyboardShouldPersistTaps="handled"
+                        >
+                          {monthOptions.map((monthValue) => {
+                            const isSelected = selectedMonth === monthValue;
+
+                            return (
+                              <Pressable
+                                key={monthValue}
+                                style={[styles.monthSelectOption, isSelected ? styles.monthSelectOptionActive : undefined]}
+                                onPress={() => selectMonth(monthValue)}
+                              >
+                                <Text
+                                  style={[
+                                    styles.monthSelectOptionText,
+                                    isSelected ? styles.monthSelectOptionTextActive : undefined,
+                                  ]}
+                                >
+                                  {formatMonthLabel(monthValue)}
+                                </Text>
+                              </Pressable>
+                            );
+                          })}
+                        </ScrollView>
+                      ) : null}
+                    </View>
+                  </View>
                 ) : null}
               </View>
-              <TextInput
-                value={searchQuery}
-                onChangeText={setSearchQuery}
-                placeholder="Digite o nome do item"
-                style={styles.searchInput}
-              />
-              {searchSuggestions.length > 0 ? (
-                <View style={styles.searchSuggestionsContainer}>
-                  {searchSuggestions.map((suggestion, index) => (
-                    <Pressable
-                      key={`suggestion-${suggestion}`}
-                      style={[
-                        styles.searchSuggestionButton,
-                        index === searchSuggestions.length - 1 ? styles.searchSuggestionButtonLast : undefined,
-                      ]}
-                      onPress={() => addSelectedItem(suggestion)}
-                    >
-                      <Text style={styles.searchSuggestionText}>{suggestion}</Text>
+
+              <View style={styles.searchBlock}>
+                <View style={styles.searchHeader}>
+                  <Text style={styles.controlLabel}>Buscar item</Text>
+                  {hasItemFilter ? (
+                    <Pressable style={styles.clearSearchButton} onPress={clearSelectedItems}>
+                      <Text style={styles.clearSearchButtonText}>Limpar</Text>
                     </Pressable>
-                  ))}
+                  ) : null}
                 </View>
-              ) : null}
-              {hasItemFilter ? (
-                <View style={styles.selectedChipsRow}>
-                  {selectedItems.map((item) => (
-                    <Pressable
-                      key={`selected-${item}`}
-                      style={styles.selectedChip}
-                      onPress={() => removeSelectedItem(item)}
-                    >
-                      <Text style={styles.selectedChipText} numberOfLines={1}>
-                        {item}
-                      </Text>
-                      <Text style={styles.selectedChipRemove}>×</Text>
-                    </Pressable>
-                  ))}
+                <TextInput
+                  value={searchQuery}
+                  onChangeText={setSearchQuery}
+                  placeholder="Digite o nome do item"
+                  style={styles.searchInput}
+                />
+                {searchSuggestions.length > 0 ? (
+                  <View style={styles.searchSuggestionsContainer}>
+                    {searchSuggestions.map((suggestion, index) => (
+                      <Pressable
+                        key={`suggestion-${suggestion}`}
+                        style={[
+                          styles.searchSuggestionButton,
+                          index === searchSuggestions.length - 1 ? styles.searchSuggestionButtonLast : undefined,
+                        ]}
+                        onPress={() => addSelectedItem(suggestion)}
+                      >
+                        <Text style={styles.searchSuggestionText}>{suggestion}</Text>
+                      </Pressable>
+                    ))}
+                  </View>
+                ) : null}
+                {hasItemFilter ? (
+                  <View style={styles.selectedChipsRow}>
+                    {selectedItems.map((item) => (
+                      <Pressable
+                        key={`selected-${item}`}
+                        style={styles.selectedChip}
+                        onPress={() => removeSelectedItem(item)}
+                      >
+                        <Text style={styles.selectedChipText} numberOfLines={1}>
+                          {item}
+                        </Text>
+                        <Text style={styles.selectedChipRemove}>×</Text>
+                      </Pressable>
+                    ))}
+                  </View>
+                ) : null}
+              </View>
+
+              {!isDailyMode ? (
+                <View style={styles.periodActions}>
+                  <Pressable style={styles.monthButton} onPress={setCurrentMonth}>
+                    <Text style={styles.monthButtonText}>Mês atual</Text>
+                  </Pressable>
+                  <AppButton
+                    label={isGeneratingReport ? 'Gerando relatório...' : 'Gerar Relatório'}
+                    onPress={() => {
+                      setIsReportPickerOpen(true);
+                    }}
+                    disabled={isGeneratingReport}
+                  />
                 </View>
               ) : null}
             </View>
-
-            {isDailyMode ? (
-              <View style={styles.dailyFilterSwitcher}>
-                <Pressable
-                  style={[
-                    styles.dailyFilterButton,
-                    dailyMovementFilter === 'entry' ? styles.dailyFilterButtonActive : undefined,
-                  ]}
-                  onPress={() => setDailyMovementFilter('entry')}
-                >
-                  <Text
-                    style={[
-                      styles.dailyFilterText,
-                      dailyMovementFilter === 'entry' ? styles.dailyFilterTextActive : undefined,
-                    ]}
-                  >
-                    Entrada
-                  </Text>
-                </Pressable>
-                <Pressable
-                  style={[
-                    styles.dailyFilterButton,
-                    dailyMovementFilter === 'exit' ? styles.dailyFilterButtonActive : undefined,
-                  ]}
-                  onPress={() => setDailyMovementFilter('exit')}
-                >
-                  <Text
-                    style={[
-                      styles.dailyFilterText,
-                      dailyMovementFilter === 'exit' ? styles.dailyFilterTextActive : undefined,
-                    ]}
-                  >
-                    Saída
-                  </Text>
-                </Pressable>
-                <Pressable
-                  style={[
-                    styles.dailyFilterButton,
-                    dailyMovementFilter === 'adjustment' ? styles.dailyFilterButtonActive : undefined,
-                  ]}
-                  onPress={() => setDailyMovementFilter('adjustment')}
-                >
-                  <Text
-                    style={[
-                      styles.dailyFilterText,
-                      dailyMovementFilter === 'adjustment' ? styles.dailyFilterTextActive : undefined,
-                    ]}
-                  >
-                    Ajuste
-                  </Text>
-                </Pressable>
-              </View>
-            ) : null}
-
-            {!isDailyMode ? (
-              <View style={styles.monthCard}>
-                <Text style={styles.monthLabel}>Mês do relatório</Text>
-                <View style={styles.monthSelectRoot}>
-                  <Pressable
-                    style={styles.monthSelectTrigger}
-                    onPress={() => setIsMonthMenuOpen((previousState) => !previousState)}
-                  >
-                    <Text style={styles.monthSelectTriggerText}>{formatMonthLabel(selectedMonth)}</Text>
-                    <Text style={styles.monthSelectArrow}>{isMonthMenuOpen ? '^' : 'v'}</Text>
-                  </Pressable>
-                  {isMonthMenuOpen ? (
-                    <ScrollView
-                      style={styles.monthSelectMenu}
-                      nestedScrollEnabled
-                      keyboardShouldPersistTaps="handled"
-                    >
-                      {monthOptions.map((monthValue) => {
-                        const isSelected = selectedMonth === monthValue;
-
-                        return (
-                          <Pressable
-                            key={monthValue}
-                            style={[styles.monthSelectOption, isSelected ? styles.monthSelectOptionActive : undefined]}
-                            onPress={() => selectMonth(monthValue)}
-                          >
-                            <Text
-                              style={[
-                                styles.monthSelectOptionText,
-                                isSelected ? styles.monthSelectOptionTextActive : undefined,
-                              ]}
-                            >
-                              {formatMonthLabel(monthValue)}
-                            </Text>
-                          </Pressable>
-                        );
-                      })}
-                    </ScrollView>
-                  ) : null}
-                </View>
-                <Pressable style={styles.monthButton} onPress={setCurrentMonth}>
-                  <Text style={styles.monthButtonText}>Mês atual</Text>
-                </Pressable>
-              </View>
-            ) : null}
-
-            {!isDailyMode ? (
-              <View style={styles.reportButtonWrap}>
-                <AppButton
-                  label={isGeneratingReport ? 'Gerando relatório...' : 'Gerar Relatório'}
-                  onPress={() => {
-                    setIsReportPickerOpen(true);
-                  }}
-                  disabled={isGeneratingReport}
-                />
-              </View>
-            ) : null}
 
           </View>
         }
@@ -1655,6 +1699,75 @@ const styles = StyleSheet.create({
     marginBottom: 6,
     gap: 10,
   },
+  compactHeader: {
+    gap: 10,
+  },
+  compactTitle: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: '#2A0834',
+  },
+  compactKpis: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  compactKpi: {
+    flex: 1,
+    minWidth: 96,
+    backgroundColor: '#F8F1FD',
+    borderWidth: 1,
+    borderColor: '#E4D3F2',
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+    gap: 2,
+  },
+  compactKpiLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#6F617A',
+    textTransform: 'uppercase',
+    letterSpacing: 0.3,
+  },
+  compactKpiValue: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: '#2A0834',
+  },
+  controlPanel: {
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#D8C3EA',
+    borderRadius: 18,
+    padding: 14,
+    gap: 12,
+  },
+  controlRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'flex-start',
+    gap: 12,
+  },
+  control: {
+    flex: 1,
+    minWidth: 160,
+    gap: 6,
+    position: 'relative',
+  },
+  controlLabel: {
+    color: '#4A155A',
+    fontSize: 12,
+    fontWeight: '900',
+    letterSpacing: 0.4,
+    textTransform: 'uppercase',
+  },
+  searchBlock: {
+    gap: 8,
+  },
+  periodActions: {
+    gap: 10,
+  },
   heroCard: {
     display: 'none',
   },
@@ -1935,6 +2048,9 @@ const styles = StyleSheet.create({
   groupHeaderActions: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'flex-end',
+    flexWrap: 'wrap',
+    flexShrink: 1,
     gap: 8,
   },
   deleteDayButton: {
