@@ -231,6 +231,9 @@ function StockMovementScreen({ mode }: { mode: MovementMode }) {
   const [fieldErrors, setFieldErrors] = useState<QuantityErrorMap>({});
   const [cartItems, setCartItems] = useState<MovementCartItem[]>([]);
   const [isCartModalOpen, setIsCartModalOpen] = useState(false);
+  const [editingCartItemId, setEditingCartItemId] = useState<number | null>(null);
+  const [editingCartValue, setEditingCartValue] = useState('');
+  const [editingCartMode, setEditingCartMode] = useState<QuantityFieldMode>('fardo');
   const [pendingDuplicateAdd, setPendingDuplicateAdd] = useState<{
     item: StockMovementItem;
     quantity: number;
@@ -642,7 +645,64 @@ function StockMovementScreen({ mode }: { mode: MovementMode }) {
   }
 
   function removeFromCart(itemId: number) {
+    if (editingCartItemId === itemId) {
+      cancelEditCartItem();
+    }
     setCartItems((prev) => prev.filter((entry) => entry.itemId !== itemId));
+  }
+
+  function startEditCartItem(cartItem: MovementCartItem) {
+    setEditingCartItemId(cartItem.itemId);
+    setEditingCartMode('fardo');
+    setEditingCartValue(formatQuantity(cartItem.quantity));
+  }
+
+  function cancelEditCartItem() {
+    setEditingCartItemId(null);
+    setEditingCartValue('');
+  }
+
+  // Espelha o input de adicionar: em item de fardo, alterna entre digitar em
+  // fardos ou em unidades; o campo desabilitado mostra o valor convertido.
+  function setEditCartField(value: string, fieldMode: QuantityFieldMode) {
+    setEditingCartMode(fieldMode);
+    setEditingCartValue(value);
+  }
+
+  function saveEditCartItem(cartItem: MovementCartItem) {
+    const typed = parseDecimalInput(editingCartValue);
+
+    if (typed === null) {
+      showTopPopup({ type: 'error', message: 'Informe uma quantidade válida.', durationMs: 2600 });
+      return;
+    }
+
+    const quantity = toItemUnitQuantity(
+      { conversionFactor: cartItem.conversionFactor },
+      typed,
+      editingCartMode,
+    );
+
+    const item = items.find((entry) => entry.id === cartItem.itemId);
+
+    if (item) {
+      const error = getQuantityValidationError(item, quantity);
+      if (error) {
+        showTopPopup({ type: 'error', message: error, durationMs: 2600 });
+        return;
+      }
+    }
+
+    setCartItems((prev) =>
+      prev.map((entry) => (entry.itemId === cartItem.itemId ? { ...entry, quantity } : entry)),
+    );
+    cancelEditCartItem();
+    showTopPopup({ type: 'success', message: `${cartItem.name} atualizado.`, durationMs: 1900 });
+  }
+
+  function handleCloseCartModal() {
+    cancelEditCartItem();
+    setIsCartModalOpen(false);
   }
 
   // Alterna a marca (perda/ajuste) do item no carrinho. Clicar na mesma opção
@@ -658,6 +718,7 @@ function StockMovementScreen({ mode }: { mode: MovementMode }) {
   }
 
   function clearCart() {
+    cancelEditCartItem();
     setCartItems([]);
     showTopPopup({
       type: 'success',
@@ -777,6 +838,7 @@ function StockMovementScreen({ mode }: { mode: MovementMode }) {
         await saveStockExits(updates, selectedDate);
       }
 
+      cancelEditCartItem();
       setCartItems([]);
       setIsCartModalOpen(false);
       showTopPopup({
@@ -1175,10 +1237,10 @@ function StockMovementScreen({ mode }: { mode: MovementMode }) {
         transparent
         animationType="fade"
         visible={isCartModalOpen}
-        onRequestClose={() => setIsCartModalOpen(false)}
+        onRequestClose={handleCloseCartModal}
       >
         <View style={styles.modalBackdrop}>
-          <Pressable style={StyleSheet.absoluteFill} onPress={() => setIsCartModalOpen(false)} />
+          <Pressable style={StyleSheet.absoluteFill} onPress={handleCloseCartModal} />
           <View style={styles.modalCard}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Carrinho de {mode === 'entry' ? 'Entrada' : 'Saída'}</Text>
@@ -1190,18 +1252,80 @@ function StockMovementScreen({ mode }: { mode: MovementMode }) {
             ) : (
               <>
                 <ScrollView style={styles.cartList} contentContainerStyle={styles.cartListContent}>
-                  {cartItems.map((cartItem) => (
+                  {cartItems.map((cartItem) => {
+                    const isEditingThis = editingCartItemId === cartItem.itemId;
+                    const isFardoItem = isUnitInputItem({ conversionFactor: cartItem.conversionFactor });
+                    const editParsed = parseDecimalInput(editingCartValue);
+
+                    return (
                     <View key={`cart-${cartItem.itemId}`} style={styles.cartRow}>
                       <View style={styles.cartRowInfo}>
                         <Text style={styles.cartRowTitle}>{cartItem.name}</Text>
-                        <Text style={styles.cartRowMeta}>
-                          {formatOriginalAndBaseQuantity(
-                            cartItem.quantity,
-                            cartItem.unit,
-                            cartItem.conversionFactor,
-                            formatQuantity,
-                          )}
-                        </Text>
+                        {isEditingThis ? (
+                          isFardoItem ? (
+                            <View style={styles.dualInputRow}>
+                              <View style={styles.dualInputCol}>
+                                <Text style={styles.dualInputLabel}>
+                                  Fardos (de {formatQuantity(cartItem.conversionFactor)})
+                                </Text>
+                                <TextInput
+                                  value={
+                                    editingCartMode === 'fardo'
+                                      ? editingCartValue
+                                      : editParsed !== null
+                                        ? formatQuantity(editParsed)
+                                        : ''
+                                  }
+                                  onChangeText={(value) => setEditCartField(value, 'fardo')}
+                                  editable={editingCartMode !== 'unidade'}
+                                  placeholder="Ex.: 2"
+                                  keyboardType="decimal-pad"
+                                  style={[
+                                    styles.input,
+                                    editingCartMode === 'unidade' ? styles.inputDisabled : undefined,
+                                  ]}
+                                />
+                              </View>
+                              <View style={styles.dualInputCol}>
+                                <Text style={styles.dualInputLabel}>Unidades</Text>
+                                <TextInput
+                                  value={
+                                    editingCartMode === 'unidade'
+                                      ? editingCartValue
+                                      : editParsed !== null
+                                        ? formatQuantity(convertToBaseUnits(editParsed, cartItem.conversionFactor) ?? 0)
+                                        : ''
+                                  }
+                                  onChangeText={(value) => setEditCartField(value, 'unidade')}
+                                  editable={editingCartMode !== 'fardo'}
+                                  placeholder={`Ex.: ${formatQuantity(cartItem.conversionFactor)}`}
+                                  keyboardType="decimal-pad"
+                                  style={[
+                                    styles.input,
+                                    editingCartMode === 'fardo' ? styles.inputDisabled : undefined,
+                                  ]}
+                                />
+                              </View>
+                            </View>
+                          ) : (
+                            <TextInput
+                              value={editingCartValue}
+                              onChangeText={(value) => setEditCartField(value, editingCartMode)}
+                              placeholder="Novo valor"
+                              keyboardType="decimal-pad"
+                              style={styles.input}
+                            />
+                          )
+                        ) : (
+                          <Text style={styles.cartRowMeta}>
+                            {formatOriginalAndBaseQuantity(
+                              cartItem.quantity,
+                              cartItem.unit,
+                              cartItem.conversionFactor,
+                              formatQuantity,
+                            )}
+                          </Text>
+                        )}
                         {mode === 'exit' ? (
                           <View style={styles.cartReasonRow}>
                             <Pressable
@@ -1239,16 +1363,33 @@ function StockMovementScreen({ mode }: { mode: MovementMode }) {
                           </View>
                         ) : null}
                       </View>
-                      <Pressable
-                        style={styles.cartRemoveButton}
-                        onPress={() => {
-                          removeFromCart(cartItem.itemId);
-                        }}
-                      >
-                        <Text style={styles.cartRemoveButtonText}>Remover</Text>
-                      </Pressable>
+                      {isEditingThis ? (
+                        <View style={styles.cartRowActions}>
+                          <Pressable style={styles.cartSaveButton} onPress={() => saveEditCartItem(cartItem)}>
+                            <Text style={styles.cartSaveButtonText}>Salvar</Text>
+                          </Pressable>
+                          <Pressable style={styles.cartCancelButton} onPress={cancelEditCartItem}>
+                            <Text style={styles.cartCancelButtonText}>Cancelar</Text>
+                          </Pressable>
+                        </View>
+                      ) : (
+                        <View style={styles.cartRowActions}>
+                          <Pressable style={styles.cartEditButton} onPress={() => startEditCartItem(cartItem)}>
+                            <Text style={styles.cartEditButtonText}>Editar</Text>
+                          </Pressable>
+                          <Pressable
+                            style={styles.cartRemoveButton}
+                            onPress={() => {
+                              removeFromCart(cartItem.itemId);
+                            }}
+                          >
+                            <Text style={styles.cartRemoveButtonText}>Remover</Text>
+                          </Pressable>
+                        </View>
+                      )}
                     </View>
-                  ))}
+                    );
+                  })}
                 </ScrollView>
                 <Text style={styles.cartTotalText}>
                   Itens: {cartItems.length} | Total: {formatQuantity(cartTotalQuantityInBaseUnits)} und
@@ -1257,7 +1398,7 @@ function StockMovementScreen({ mode }: { mode: MovementMode }) {
             )}
 
             <View style={styles.modalActions}>
-              <Pressable style={styles.modalSecondaryButton} onPress={() => setIsCartModalOpen(false)}>
+              <Pressable style={styles.modalSecondaryButton} onPress={handleCloseCartModal}>
                 <Text style={styles.modalSecondaryButtonText}>Fechar</Text>
               </Pressable>
               <Pressable
@@ -1827,6 +1968,50 @@ const styles = StyleSheet.create({
   },
   cartRemoveButtonText: {
     color: '#A12020',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  cartRowActions: {
+    gap: 6,
+    alignItems: 'stretch',
+  },
+  cartEditButton: {
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#B690D2',
+    backgroundColor: '#F5EEFB',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    alignItems: 'center',
+  },
+  cartEditButtonText: {
+    color: '#77158E',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  cartSaveButton: {
+    borderRadius: 8,
+    backgroundColor: '#8C24A8',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    alignItems: 'center',
+  },
+  cartSaveButtonText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  cartCancelButton: {
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#D8CCE3',
+    backgroundColor: '#F5EEFB',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    alignItems: 'center',
+  },
+  cartCancelButtonText: {
+    color: '#77158E',
     fontSize: 12,
     fontWeight: '700',
   },
