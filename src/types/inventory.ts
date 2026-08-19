@@ -392,7 +392,7 @@ export interface DailyStockEntry {
 }
 
 export type HistoryReportPeriod = 'diário' | 'quinzenal' | 'mensal';
-export type HistoryReportMovementType = 'entry' | 'exit';
+export type HistoryReportMovementType = 'entry' | 'exit' | 'adjustment';
 
 export interface HistoryReportEntry {
   id: number;
@@ -415,6 +415,9 @@ export interface HistoryReportItemSummary {
   totalEntryQuantityInBaseUnits: number;
   totalExitQuantity: number;
   totalExitQuantityInBaseUnits: number;
+  // Saldo liquido dos ajustes (positivo = aumentou, negativo = diminuiu).
+  totalAdjustmentQuantity: number;
+  totalAdjustmentQuantityInBaseUnits: number;
   movementDates: string[];
   isTopEntry: boolean;
   isTopExit: boolean;

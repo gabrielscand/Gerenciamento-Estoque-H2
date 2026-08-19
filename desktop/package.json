@@ -1,0 +1,22 @@
+{
+  "name": "gerenciador-de-estoque-desktop",
+  "version": "1.0.0",
+  "description": "Gerenciador de Estoque - aplicativo desktop (Windows)",
+  "main": "main.js",
+  "author": "H2 Campinas",
+  "license": "UNLICENSED",
+  "private": true,
+  "scripts": {
+    "prepare-renderer": "node scripts/prepare.js",
+    "start": "electron .",
+    "dist": "electron-builder --win --publish never",
+    "publish": "electron-builder --win --publish always"
+  },
+  "devDependencies": {
+    "electron": "^33.2.0",
+    "electron-builder": "^25.1.8"
+  },
+  "dependencies": {
+    "electron-updater": "^6.3.9"
+  }
+}

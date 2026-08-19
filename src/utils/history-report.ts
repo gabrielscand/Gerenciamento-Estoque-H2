@@ -86,6 +86,18 @@ function formatOriginalAndBase(quantity: number, unit: string, _quantityInBaseUn
   return `${formatQuantity(quantity)} ${unit}`;
 }
 
+// Ajuste liquido com sinal: +2 (aumentou) / -2 (diminuiu) / "-" (sem ajuste).
+function formatAdjustment(quantity: number, unit: string): string {
+  if (!quantity) {
+    return '-';
+  }
+
+  const sinal = quantity > 0 ? '+' : '';
+  const base = `${sinal}${formatQuantity(quantity)}`;
+
+  return unit && unit.trim().length > 0 ? `${base} ${unit}` : base;
+}
+
 function escapeHtml(value: string): string {
   return value
     .replaceAll('&', '&amp;')
@@ -190,6 +202,10 @@ function getPeriodMeta(period: HistoryReportPeriod, selectedMonth: string | null
 }
 
 function getMovementLabel(movementType: HistoryReportEntry['movementType']): string {
+  if (movementType === 'adjustment') {
+    return 'Ajuste';
+  }
+
   return movementType === 'entry' ? 'Entrada' : 'Saída';
 }
 
@@ -231,6 +247,8 @@ function buildItemSummaries(entries: HistoryReportEntry[]): HistoryReportItemSum
       totalEntryQuantityInBaseUnits: number;
       totalExitQuantity: number;
       totalExitQuantityInBaseUnits: number;
+      totalAdjustmentQuantity: number;
+      totalAdjustmentQuantityInBaseUnits: number;
       movementDates: Set<string>;
     }
   >();
@@ -245,10 +263,15 @@ function buildItemSummaries(entries: HistoryReportEntry[]): HistoryReportItemSum
       totalEntryQuantityInBaseUnits: 0,
       totalExitQuantity: 0,
       totalExitQuantityInBaseUnits: 0,
+      totalAdjustmentQuantity: 0,
+      totalAdjustmentQuantityInBaseUnits: 0,
       movementDates: new Set<string>(),
     };
 
-    if (entry.movementType === 'entry') {
+    if (entry.movementType === 'adjustment') {
+      current.totalAdjustmentQuantity += entry.quantity;
+      current.totalAdjustmentQuantityInBaseUnits += entry.quantityInBaseUnits;
+    } else if (entry.movementType === 'entry') {
       current.totalEntryQuantity += entry.quantity;
       current.totalEntryQuantityInBaseUnits += entry.quantityInBaseUnits;
     } else {
@@ -280,6 +303,8 @@ function buildItemSummaries(entries: HistoryReportEntry[]): HistoryReportItemSum
       totalEntryQuantityInBaseUnits: item.totalEntryQuantityInBaseUnits,
       totalExitQuantity: item.totalExitQuantity,
       totalExitQuantityInBaseUnits: item.totalExitQuantityInBaseUnits,
+      totalAdjustmentQuantity: item.totalAdjustmentQuantity,
+      totalAdjustmentQuantityInBaseUnits: item.totalAdjustmentQuantityInBaseUnits,
       movementDates: Array.from(item.movementDates).sort((left, right) => right.localeCompare(left)),
       isTopEntry: maxEntry > 0 && item.totalEntryQuantityInBaseUnits === maxEntry,
       isTopExit: maxExit > 0 && item.totalExitQuantityInBaseUnits === maxExit,
@@ -329,7 +354,7 @@ function buildPdfHtml(payload: ReportSummaryPayload): string {
               <tr>
                 <td>${escapeHtml(formatDateLabel(entry.date))}</td>
                 <td><strong>${escapeHtml(entry.name)}</strong></td>
-                <td><span class="badge ${entry.movementType === 'entry' ? 'badge-entry' : 'badge-exit'}">${escapeHtml(getMovementLabel(entry.movementType))}</span></td>
+                <td><span class="badge ${entry.movementType === 'adjustment' ? 'badge-adjust' : entry.movementType === 'entry' ? 'badge-entry' : 'badge-exit'}">${escapeHtml(getMovementLabel(entry.movementType))}</span></td>
                 <td><strong>${escapeHtml(
                   formatOriginalAndBase(entry.quantity, entry.unit, entry.quantityInBaseUnits),
                 )}</strong></td>
@@ -369,6 +394,9 @@ function buildPdfHtml(payload: ReportSummaryPayload): string {
                     item.totalExitQuantityInBaseUnits,
                   ),
                 )}</td>
+                <td class="col-adjust">${escapeHtml(
+                  formatAdjustment(item.totalAdjustmentQuantity, item.unit),
+                )}</td>
                 <td class="col-dates">${escapeHtml(item.movementDates.map((date) => formatDateLabel(date)).join(', '))}</td>
                 <td>${highlightLabels.length > 0 ? `<span class="badge badge-highlight">${escapeHtml(highlightLabels.join(' / '))}</span>` : '-'}</td>
               </tr>
@@ -377,7 +405,7 @@ function buildPdfHtml(payload: ReportSummaryPayload): string {
           .join('')
       : `
         <tr>
-          <td colspan="5" class="empty-cell">Nenhum item movimentado neste período.</td>
+          <td colspan="6" class="empty-cell">Nenhum item movimentado neste período.</td>
         </tr>
       `;
 
@@ -527,7 +555,9 @@ function buildPdfHtml(payload: ReportSummaryPayload): string {
           }
           .badge-entry { background: #e8f5e9; color: #2e7d32; }
           .badge-exit { background: #ffebee; color: #c62828; }
+          .badge-adjust { background: #fff4e5; color: #7a4a12; }
           .badge-highlight { background: #fff3e0; color: #ef6c00; }
+          .col-adjust { font-weight: 600; color: #7a4a12; }
           .col-dates { line-height: 1.4; color: #666; font-size: 12px; }
         </style>
       </head>
@@ -599,6 +629,7 @@ function buildPdfHtml(payload: ReportSummaryPayload): string {
                 <th>Item</th>
                 <th>Total Entradas</th>
                 <th>Total Saídas</th>
+                <th>Ajuste</th>
                 <th>Datas com movimentação</th>
                 <th>Destaques</th>
               </tr>
@@ -761,24 +792,25 @@ async function generateWebPdf(payload: ReportSummaryPayload): Promise<void> {
           i.name,
           formatOriginalAndBase(i.totalEntryQuantity, i.unit, i.totalEntryQuantityInBaseUnits),
           formatOriginalAndBase(i.totalExitQuantity, i.unit, i.totalExitQuantityInBaseUnits),
+          formatAdjustment(i.totalAdjustmentQuantity, i.unit),
           i.movementDates.map(d => formatDateLabel(d)).join(', ') || '-',
           highlights.join(' / ') || '-'
         ];
       })
-    : [['-', 'Nenhum item movimentado neste período.', '-', '-', '-']];
+    : [['-', 'Nenhum item movimentado neste período.', '-', '-', '-', '-']];
 
   autoTable(doc, {
     startY: currentY,
     theme: 'striped',
-    head: [['Item', 'Total Entradas', 'Total Saídas', 'Datas com movimentação', 'Destaques']],
+    head: [['Item', 'Total Entradas', 'Total Saídas', 'Ajuste', 'Datas com movimentação', 'Destaques']],
     body: resBody,
     headStyles: { fillColor: [95, 17, 117], textColor: 255 },
     styles: { fontSize: 9, cellPadding: 6 },
     alternateRowStyles: { fillColor: [250, 245, 253] },
     margin: { left: 40, right: 40 },
-    columnStyles: { 3: { cellWidth: 120 } },
+    columnStyles: { 3: { halign: 'right' }, 4: { cellWidth: 120 } },
     didParseCell: function(data: any) {
-      if (data.section === 'body' && data.column.index === 4 && data.cell.raw !== '-') {
+      if (data.section === 'body' && data.column.index === 5 && data.cell.raw !== '-') {
          data.cell.styles.textColor = [239, 108, 0]; // Orange highlight
          data.cell.styles.fontStyle = 'bold';
       }

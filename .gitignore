@@ -42,3 +42,9 @@ yarn-error.*
 # generated native folders
 /ios
 /android
+
+# Desktop (Electron)
+desktop/node_modules/
+desktop/renderer/
+desktop/release/
+desktop/build/

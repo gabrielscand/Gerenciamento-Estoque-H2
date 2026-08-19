@@ -1,0 +1,41 @@
+appId: com.gabrielscand.estoqueh2.desktop
+productName: Gerenciador de Estoque
+copyright: H2 Campinas
+
+directories:
+  output: release
+  buildResources: build
+
+files:
+  - main.js
+  - package.json
+
+# O conteudo web vai como recurso, FORA do asar. Motivo: os assets do Expo ficam
+# em "assets/node_modules/..." e o electron-builder filtra pastas node_modules
+# dentro do app, o que removia o wa-sqlite.wasm (banco local) do pacote.
+extraResources:
+  - from: renderer
+    to: renderer
+
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+  icon: build/icon.png
+  artifactName: GerenciadorDeEstoque-Setup-${version}.${ext}
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: Gerenciador de Estoque
+  deleteAppDataOnUninstall: false
+
+publish:
+  provider: github
+  owner: gabrielscand
+  repo: Gerenciamento-Estoque-H2
+  releaseType: release

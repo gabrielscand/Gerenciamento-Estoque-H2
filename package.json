@@ -7,6 +7,10 @@
     "android": "expo start --android",
     "ios": "expo start --ios",
     "web": "expo start --web",
+    "desktop:prepare": "expo export --platform web && node desktop/scripts/prepare.js",
+    "desktop:dev": "npm --prefix desktop run start",
+    "desktop:build": "npm run desktop:prepare && npm --prefix desktop run dist",
+    "desktop:publish": "npm run desktop:prepare && npm --prefix desktop run publish",
     "build:android:preview": "eas build --platform android --profile preview",
     "update:preview": "eas update --channel preview",
     "update:production": "eas update --channel production"
