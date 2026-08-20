@@ -2490,8 +2490,6 @@ export async function getDashboardAnalytics(
           CASE
             WHEN movement_type IN ('entry', 'initial', 'legacy_snapshot')
               THEN quantity
-            WHEN movement_type = 'adjustment'
-              THEN MAX(quantity - COALESCE(previous_quantity, quantity), 0)
             ELSE 0
           END
         ) AS totalEntryQuantity,
@@ -2499,8 +2497,6 @@ export async function getDashboardAnalytics(
           CASE
             WHEN movement_type IN ('entry', 'initial', 'legacy_snapshot')
               THEN quantity * COALESCE(measurement_units.conversion_factor, 1)
-            WHEN movement_type = 'adjustment'
-              THEN MAX(quantity - COALESCE(previous_quantity, quantity), 0) * COALESCE(measurement_units.conversion_factor, 1)
             ELSE 0
           END
         ) AS totalEntryQuantityInBaseUnits,
@@ -2508,8 +2504,6 @@ export async function getDashboardAnalytics(
           CASE
             WHEN movement_type IN ('exit', 'consumption')
               THEN quantity
-            WHEN movement_type = 'adjustment'
-              THEN MAX(COALESCE(previous_quantity, quantity) - quantity, 0)
             ELSE 0
           END
         ) AS totalExitQuantity,
@@ -2517,17 +2511,12 @@ export async function getDashboardAnalytics(
           CASE
             WHEN movement_type IN ('exit', 'consumption')
               THEN quantity * COALESCE(measurement_units.conversion_factor, 1)
-            WHEN movement_type = 'adjustment'
-              THEN MAX(COALESCE(previous_quantity, quantity) - quantity, 0) * COALESCE(measurement_units.conversion_factor, 1)
             ELSE 0
           END
         ) AS totalExitQuantityInBaseUnits,
         SUM(
           CASE
             WHEN movement_type IN ('entry', 'initial', 'legacy_snapshot', 'exit', 'consumption')
-              THEN 1
-            WHEN movement_type = 'adjustment'
-             AND quantity <> COALESCE(previous_quantity, quantity)
               THEN 1
             ELSE 0
           END
@@ -2557,8 +2546,6 @@ export async function getDashboardAnalytics(
           CASE
             WHEN daily_stock_entries.movement_type IN ('entry', 'initial', 'legacy_snapshot')
               THEN daily_stock_entries.quantity
-            WHEN daily_stock_entries.movement_type = 'adjustment'
-              THEN MAX(daily_stock_entries.quantity - COALESCE(daily_stock_entries.previous_quantity, daily_stock_entries.quantity), 0)
             ELSE 0
           END
         ) AS entryQuantity,
@@ -2566,8 +2553,6 @@ export async function getDashboardAnalytics(
           CASE
             WHEN daily_stock_entries.movement_type IN ('entry', 'initial', 'legacy_snapshot')
               THEN daily_stock_entries.quantity * COALESCE(measurement_units.conversion_factor, 1)
-            WHEN daily_stock_entries.movement_type = 'adjustment'
-              THEN MAX(daily_stock_entries.quantity - COALESCE(daily_stock_entries.previous_quantity, daily_stock_entries.quantity), 0) * COALESCE(measurement_units.conversion_factor, 1)
             ELSE 0
           END
         ) AS entryQuantityInBaseUnits,
@@ -2575,8 +2560,6 @@ export async function getDashboardAnalytics(
           CASE
             WHEN daily_stock_entries.movement_type IN ('exit', 'consumption')
               THEN daily_stock_entries.quantity
-            WHEN daily_stock_entries.movement_type = 'adjustment'
-              THEN MAX(COALESCE(daily_stock_entries.previous_quantity, daily_stock_entries.quantity) - daily_stock_entries.quantity, 0)
             ELSE 0
           END
         ) AS exitQuantity,
@@ -2584,8 +2567,6 @@ export async function getDashboardAnalytics(
           CASE
             WHEN daily_stock_entries.movement_type IN ('exit', 'consumption')
               THEN daily_stock_entries.quantity * COALESCE(measurement_units.conversion_factor, 1)
-            WHEN daily_stock_entries.movement_type = 'adjustment'
-              THEN MAX(COALESCE(daily_stock_entries.previous_quantity, daily_stock_entries.quantity) - daily_stock_entries.quantity, 0) * COALESCE(measurement_units.conversion_factor, 1)
             ELSE 0
           END
         ) AS exitQuantityInBaseUnits
@@ -2603,8 +2584,6 @@ export async function getDashboardAnalytics(
             CASE
               WHEN daily_stock_entries.movement_type IN ('entry', 'initial', 'legacy_snapshot')
                 THEN daily_stock_entries.quantity * COALESCE(measurement_units.conversion_factor, 1)
-              WHEN daily_stock_entries.movement_type = 'adjustment'
-                THEN MAX(daily_stock_entries.quantity - COALESCE(daily_stock_entries.previous_quantity, daily_stock_entries.quantity), 0) * COALESCE(measurement_units.conversion_factor, 1)
               ELSE 0
             END
           ) +
@@ -2612,8 +2591,6 @@ export async function getDashboardAnalytics(
             CASE
               WHEN daily_stock_entries.movement_type IN ('exit', 'consumption')
                 THEN daily_stock_entries.quantity * COALESCE(measurement_units.conversion_factor, 1)
-              WHEN daily_stock_entries.movement_type = 'adjustment'
-                THEN MAX(COALESCE(daily_stock_entries.previous_quantity, daily_stock_entries.quantity) - daily_stock_entries.quantity, 0) * COALESCE(measurement_units.conversion_factor, 1)
               ELSE 0
             END
           )
@@ -2633,8 +2610,6 @@ export async function getDashboardAnalytics(
           CASE
             WHEN movement_type IN ('entry', 'initial', 'legacy_snapshot')
               THEN quantity
-            WHEN movement_type = 'adjustment'
-              THEN MAX(quantity - COALESCE(previous_quantity, quantity), 0)
             ELSE 0
           END
         ) AS entryQuantity,
@@ -2642,8 +2617,6 @@ export async function getDashboardAnalytics(
           CASE
             WHEN movement_type IN ('entry', 'initial', 'legacy_snapshot')
               THEN quantity * COALESCE(measurement_units.conversion_factor, 1)
-            WHEN movement_type = 'adjustment'
-              THEN MAX(quantity - COALESCE(previous_quantity, quantity), 0) * COALESCE(measurement_units.conversion_factor, 1)
             ELSE 0
           END
         ) AS entryQuantityInBaseUnits,
@@ -2651,8 +2624,6 @@ export async function getDashboardAnalytics(
           CASE
             WHEN movement_type IN ('exit', 'consumption')
               THEN quantity
-            WHEN movement_type = 'adjustment'
-              THEN MAX(COALESCE(previous_quantity, quantity) - quantity, 0)
             ELSE 0
           END
         ) AS exitQuantity,
@@ -2660,8 +2631,6 @@ export async function getDashboardAnalytics(
           CASE
             WHEN movement_type IN ('exit', 'consumption')
               THEN quantity * COALESCE(measurement_units.conversion_factor, 1)
-            WHEN movement_type = 'adjustment'
-              THEN MAX(COALESCE(previous_quantity, quantity) - quantity, 0) * COALESCE(measurement_units.conversion_factor, 1)
             ELSE 0
           END
         ) AS exitQuantityInBaseUnits
@@ -2688,13 +2657,7 @@ export async function getDashboardAnalytics(
       FROM daily_stock_entries
       INNER JOIN stock_items ON stock_items.id = daily_stock_entries.item_id
       WHERE daily_stock_entries.is_deleted = 0
-        AND (
-          daily_stock_entries.movement_type IN ('entry', 'initial', 'legacy_snapshot', 'exit', 'consumption')
-          OR (
-            daily_stock_entries.movement_type = 'adjustment'
-            AND daily_stock_entries.quantity <> COALESCE(daily_stock_entries.previous_quantity, daily_stock_entries.quantity)
-          )
-        )
+        AND daily_stock_entries.movement_type IN ('entry', 'initial', 'legacy_snapshot', 'exit', 'consumption')
         AND daily_stock_entries.date BETWEEN ? AND ?${categoryClause}
       ORDER BY daily_stock_entries.date ASC;
     `,
@@ -2708,13 +2671,9 @@ export async function getDashboardAnalytics(
     .map((row) => {
       const conversionFactor = resolveConversionFactor(row.unit, row.conversionFactor);
       const entryQuantity = roundQuantity(toSafeNumber(row.entryQuantity));
-      const entryQuantityInBaseUnits = roundQuantity(
-        toSafeNumber(row.entryQuantityInBaseUnits),
-      );
+      const entryQuantityInBaseUnits = roundQuantity(toSafeNumber(row.entryQuantityInBaseUnits));
       const exitQuantity = roundQuantity(toSafeNumber(row.exitQuantity));
-      const exitQuantityInBaseUnits = roundQuantity(
-        toSafeNumber(row.exitQuantityInBaseUnits),
-      );
+      const exitQuantityInBaseUnits = roundQuantity(toSafeNumber(row.exitQuantityInBaseUnits));
       const movementTotal = roundQuantity(entryQuantity + exitQuantity);
       const movementTotalInBaseUnits = roundQuantity(
         entryQuantityInBaseUnits + exitQuantityInBaseUnits,
@@ -2752,15 +2711,11 @@ export async function getDashboardAnalytics(
   >();
 
   for (const row of dailyRows) {
-    const entryQuantity = roundQuantity(toSafeNumber(row.entryQuantity));
-    const entryQuantityInBaseUnits = roundQuantity(toSafeNumber(row.entryQuantityInBaseUnits));
-    const exitQuantity = roundQuantity(toSafeNumber(row.exitQuantity));
-    const exitQuantityInBaseUnits = roundQuantity(toSafeNumber(row.exitQuantityInBaseUnits));
     dailyByDate.set(row.date, {
-      entryQuantity,
-      entryQuantityInBaseUnits,
-      exitQuantity,
-      exitQuantityInBaseUnits,
+      entryQuantity: roundQuantity(toSafeNumber(row.entryQuantity)),
+      entryQuantityInBaseUnits: roundQuantity(toSafeNumber(row.entryQuantityInBaseUnits)),
+      exitQuantity: roundQuantity(toSafeNumber(row.exitQuantity)),
+      exitQuantityInBaseUnits: roundQuantity(toSafeNumber(row.exitQuantityInBaseUnits)),
     });
   }
 

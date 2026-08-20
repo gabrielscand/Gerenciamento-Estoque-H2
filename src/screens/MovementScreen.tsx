@@ -453,7 +453,11 @@ function StockMovementScreen({ mode }: { mode: MovementMode }) {
     [cartItems],
   );
 
-  function getQuantityValidationError(item: StockMovementItem, quantity: number): string | null {
+  function getQuantityValidationError(
+    item: StockMovementItem,
+    quantity: number,
+    effectiveType: 'entry' | 'exit' = mode,
+  ): string | null {
     if (!Number.isFinite(quantity)) {
       return 'Informe uma quantidade válida.';
     }
@@ -462,7 +466,7 @@ function StockMovementScreen({ mode }: { mode: MovementMode }) {
       return 'A quantidade não pode ser negativa.';
     }
 
-    if (mode === 'exit') {
+    if (effectiveType === 'exit') {
       if (item.currentStockQuantity === null) {
         return 'Item sem estoque inicial. Registre entrada primeiro.';
       }
@@ -644,6 +648,13 @@ function StockMovementScreen({ mode }: { mode: MovementMode }) {
     });
   }
 
+  // Tipo efetivo do item no carrinho:
+  // - perda: sempre saida
+  // - ajuste (ou sem marca): segue a aba em que a pessoa esta
+  function getEffectiveType(cartItem: MovementCartItem): 'entry' | 'exit' {
+    return cartItem.reason === 'perda' ? 'exit' : mode;
+  }
+
   function removeFromCart(itemId: number) {
     if (editingCartItemId === itemId) {
       cancelEditCartItem();
@@ -776,7 +787,8 @@ function StockMovementScreen({ mode }: { mode: MovementMode }) {
     }
 
     const nextErrors: QuantityErrorMap = {};
-    const updates: DailyCountUpdateInput[] = [];
+    const entryUpdates: DailyCountUpdateInput[] = [];
+    const exitUpdates: DailyCountUpdateInput[] = [];
     const itemsById = new Map<number, StockMovementItem>(items.map((item) => [item.id, item]));
     let firstErrorMessage = '';
 
@@ -790,7 +802,8 @@ function StockMovementScreen({ mode }: { mode: MovementMode }) {
         continue;
       }
 
-      const quantityError = getQuantityValidationError(item, cartItem.quantity);
+      const effectiveType = getEffectiveType(cartItem);
+      const quantityError = getQuantityValidationError(item, cartItem.quantity, effectiveType);
       if (quantityError) {
         nextErrors[String(item.id)] = quantityError;
         if (!firstErrorMessage) {
@@ -799,7 +812,17 @@ function StockMovementScreen({ mode }: { mode: MovementMode }) {
         continue;
       }
 
-      updates.push({ itemId: item.id, quantity: cartItem.quantity, reason: cartItem.reason ?? null });
+      const update = {
+        itemId: item.id,
+        quantity: cartItem.quantity,
+        reason: cartItem.reason ?? null,
+      };
+
+      if (effectiveType === 'entry') {
+        entryUpdates.push(update);
+      } else {
+        exitUpdates.push(update);
+      }
     }
 
     if (Object.keys(nextErrors).length > 0) {
@@ -812,7 +835,7 @@ function StockMovementScreen({ mode }: { mode: MovementMode }) {
       return;
     }
 
-    if (updates.length === 0) {
+    if (entryUpdates.length === 0 && exitUpdates.length === 0) {
       showTopPopup({
         type: 'warning',
         message: 'Nenhum item válido no carrinho para finalizar.',
@@ -832,10 +855,12 @@ function StockMovementScreen({ mode }: { mode: MovementMode }) {
     setIsSaving(true);
 
     try {
-      if (mode === 'entry') {
-        await saveStockEntries(updates, selectedDate);
-      } else {
-        await saveStockExits(updates, selectedDate);
+      if (entryUpdates.length > 0) {
+        await saveStockEntries(entryUpdates, selectedDate);
+      }
+
+      if (exitUpdates.length > 0) {
+        await saveStockExits(exitUpdates, selectedDate);
       }
 
       cancelEditCartItem();
@@ -1326,42 +1351,40 @@ function StockMovementScreen({ mode }: { mode: MovementMode }) {
                             )}
                           </Text>
                         )}
-                        {mode === 'exit' ? (
-                          <View style={styles.cartReasonRow}>
-                            <Pressable
+                        <View style={styles.cartReasonRow}>
+                          <Pressable
+                            style={[
+                              styles.cartReasonButton,
+                              cartItem.reason === 'perda' ? styles.cartReasonButtonActive : undefined,
+                            ]}
+                            onPress={() => setCartItemReason(cartItem.itemId, 'perda')}
+                          >
+                            <Text
                               style={[
-                                styles.cartReasonButton,
-                                cartItem.reason === 'perda' ? styles.cartReasonButtonActive : undefined,
+                                styles.cartReasonText,
+                                cartItem.reason === 'perda' ? styles.cartReasonTextActive : undefined,
                               ]}
-                              onPress={() => setCartItemReason(cartItem.itemId, 'perda')}
                             >
-                              <Text
-                                style={[
-                                  styles.cartReasonText,
-                                  cartItem.reason === 'perda' ? styles.cartReasonTextActive : undefined,
-                                ]}
-                              >
-                                Perda
-                              </Text>
-                            </Pressable>
-                            <Pressable
+                              Perda
+                            </Text>
+                          </Pressable>
+                          <Pressable
+                            style={[
+                              styles.cartReasonButton,
+                              cartItem.reason === 'ajuste' ? styles.cartReasonButtonActive : undefined,
+                            ]}
+                            onPress={() => setCartItemReason(cartItem.itemId, 'ajuste')}
+                          >
+                            <Text
                               style={[
-                                styles.cartReasonButton,
-                                cartItem.reason === 'ajuste' ? styles.cartReasonButtonActive : undefined,
+                                styles.cartReasonText,
+                                cartItem.reason === 'ajuste' ? styles.cartReasonTextActive : undefined,
                               ]}
-                              onPress={() => setCartItemReason(cartItem.itemId, 'ajuste')}
                             >
-                              <Text
-                                style={[
-                                  styles.cartReasonText,
-                                  cartItem.reason === 'ajuste' ? styles.cartReasonTextActive : undefined,
-                                ]}
-                              >
-                                Ajuste
-                              </Text>
-                            </Pressable>
-                          </View>
-                        ) : null}
+                              Ajuste
+                            </Text>
+                          </Pressable>
+                        </View>
                       </View>
                       {isEditingThis ? (
                         <View style={styles.cartRowActions}>
